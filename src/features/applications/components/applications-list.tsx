@@ -166,7 +166,23 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
   };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text);
+    } else {
+      // Fallback for insecure HTTP contexts (like local network IP)
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand("copy");
+      } catch (err) {
+        console.error("Fallback copy failed", err);
+      }
+      document.body.removeChild(textarea);
+    }
     setCopied(true);
     toast.success("Link copied to clipboard!");
     setTimeout(() => setCopied(false), 2000);
@@ -304,15 +320,15 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
 
       {/* ─── Modal 1: Generate Link Form ─── */}
       <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
-        <DialogContent className="sm:max-w-[550px] rounded-2xl border border-border p-0 overflow-hidden bg-white dark:bg-card">
-          <DialogHeader className="px-6 py-5 bg-secondary dark:bg-secondary border-b border-border">
+        <DialogContent className="sm:max-w-[550px] max-h-[90vh] rounded-2xl border border-border p-0 flex flex-col overflow-hidden bg-white dark:bg-card">
+          <DialogHeader className="px-6 py-5 bg-secondary dark:bg-secondary border-b border-border shrink-0">
             <DialogTitle className="font-bold text-base font-heading">Generate Customer Link</DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground mt-1">
               Specify loan parameters below. A unique URL and QR code will be generated for the customer.
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleGenerateSubmit} className="p-6 space-y-4">
+          <form onSubmit={handleGenerateSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="principal" className={labelClass}>Loan Amount (₹)*</Label>

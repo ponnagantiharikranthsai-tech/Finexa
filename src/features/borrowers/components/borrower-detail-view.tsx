@@ -67,7 +67,7 @@ export function BorrowerDetailView({
           </div>
           <div>
             <p className="text-white/60 text-xs">Total Repaid</p>
-            <p className="font-semibold text-primary">₹{totalRepaid.toLocaleString("en-IN")}</p>
+            <p className="font-semibold text-white">₹{totalRepaid.toLocaleString("en-IN")}</p>
           </div>
         </div>
       </div>

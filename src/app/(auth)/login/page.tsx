@@ -49,7 +49,7 @@ export default function LoginPage() {
   ];
 
   return (
-    <div className="min-h-screen w-screen flex flex-col md:flex-row bg-[#0B0F19] relative overflow-hidden font-sans select-none z-10">
+    <div className="h-screen w-screen flex flex-col md:flex-row bg-[#0B0F19] relative overflow-hidden font-sans z-10">
       
       {/* ─── STYLING & BACKGROUND GLOW ─── */}
       <style jsx global>{`
@@ -122,7 +122,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex items-start sm:items-center justify-center p-6 md:p-12 pt-8 sm:pt-0 relative z-[1] overflow-y-auto">
+      <div className="flex-1 flex items-center justify-center p-6 md:p-12 relative z-[1] overflow-hidden">
         <div className="w-full max-w-sm">
 
           {/* Form Container */}
@@ -142,7 +142,7 @@ export default function LoginPage() {
               <span className="text-xs font-semibold text-[#D4AF37] tracking-wider uppercase">Welcome Back</span>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5 text-left mt-6">
+            <form onSubmit={handleSubmit} method="POST" className="space-y-5 text-left mt-6">
               {/* Global error */}
               {error && typeof error === "string" && (
                 <div className="rounded-xl bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive flex items-start gap-2">
@@ -211,7 +211,7 @@ export default function LoginPage() {
                       e.stopPropagation();
                       setShowPassword((prev) => !prev);
                     }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 h-10 w-10 flex items-center justify-center text-zinc-400 hover:text-white cursor-pointer select-none z-20 bg-transparent border-none outline-none focus:outline-none"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 h-10 w-10 flex items-center justify-center text-zinc-400 hover:text-white cursor-pointer z-20 bg-transparent border-none outline-none focus:outline-none"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>

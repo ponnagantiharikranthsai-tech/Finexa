@@ -28,22 +28,32 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: any) {
-          request.cookies.set({ name, value, ...options });
+          const isDev = process.env.NODE_ENV === "development";
+          const cookieOptions = {
+            ...options,
+            secure: isDev ? false : options.secure,
+          };
+          request.cookies.set({ name, value, ...cookieOptions });
           response = NextResponse.next({
             request: {
               headers: request.headers,
             },
           });
-          response.cookies.set({ name, value, ...options });
+          response.cookies.set({ name, value, ...cookieOptions });
         },
         remove(name: string, options: any) {
-          request.cookies.delete({ name, ...options });
+          const isDev = process.env.NODE_ENV === "development";
+          const cookieOptions = {
+            ...options,
+            secure: isDev ? false : options.secure,
+          };
+          request.cookies.delete({ name, ...cookieOptions });
           response = NextResponse.next({
             request: {
               headers: request.headers,
             },
           });
-          response.cookies.delete({ name, ...options });
+          response.cookies.delete({ name, ...cookieOptions });
         },
       },
     }
@@ -55,7 +65,13 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  const { data: { user } } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    user = session?.user || null;
+  } catch (error) {
+    // Cookie is invalid or expired
+  }
 
   if (!user) {
     return NextResponse.redirect(new URL("/login", request.url));

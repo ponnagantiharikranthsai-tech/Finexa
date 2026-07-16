@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db/client";
 import { loanApplicationsTable } from "@/db/schema";
-import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  // Mask connection string for safety
+  const rawUrl = process.env.DATABASE_URL || "";
+  let maskedUrl = "NOT_SET";
+  if (rawUrl) {
+    try {
+      const parsed = new URL(rawUrl);
+      parsed.password = "****";
+      maskedUrl = parsed.toString();
+    } catch {
+      maskedUrl = "INVALID_URL_FORMAT";
+    }
+  }
+
   try {
-    console.log("Running debug query...");
     const res = await db
       .select()
       .from(loanApplicationsTable)
@@ -15,26 +26,19 @@ export async function GET(req: NextRequest) {
     
     return NextResponse.json({
       success: true,
-      message: "Query succeeded!",
+      databaseUrl: maskedUrl,
+      message: "Database connection works perfectly!",
       data: res
     });
   } catch (err: any) {
     return NextResponse.json({
       success: false,
+      databaseUrl: maskedUrl,
       message: err.message || "Query failed",
       name: err.name,
-      query: err.query,
-      params: err.params,
-      // Print detailed Postgres error fields if available
-      code: err.code,
-      detail: err.detail,
-      hint: err.hint,
-      severity: err.severity,
-      stack: err.stack,
       cause: err.cause ? {
         message: err.cause.message,
-        code: err.cause.code,
-        stack: err.cause.stack
+        code: err.cause.code
       } : null
     }, { status: 500 });
   }

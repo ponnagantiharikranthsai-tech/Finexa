@@ -14,9 +14,7 @@ export async function middleware(request: NextRequest) {
   }
 
   let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
+    request,
   });
 
   // Fast path: skip Supabase auth call for clearly public routes
@@ -49,9 +47,7 @@ export async function middleware(request: NextRequest) {
           };
           request.cookies.set({ name, value, ...cookieOptions });
           response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
+            request,
           });
           response.cookies.set({ name, value, ...cookieOptions });
         },
@@ -63,9 +59,7 @@ export async function middleware(request: NextRequest) {
           };
           request.cookies.delete({ name, ...cookieOptions });
           response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
+            request,
           });
           response.cookies.delete({ name, ...cookieOptions });
         },

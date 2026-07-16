@@ -21,10 +21,11 @@ export async function createSupabaseServerClient() {
         set(name: string, value: string, options: any) {
           try {
             const isDev = process.env.NODE_ENV === "development";
+            const { maxAge, expires, ...restOptions } = options;
             cookieStore.set({
               name,
               value,
-              ...options,
+              ...restOptions,
               secure: isDev ? false : options.secure,
             });
           } catch (error) {

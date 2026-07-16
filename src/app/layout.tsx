@@ -16,6 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 import { RealtimeSyncProvider } from "@/components/realtime-sync-provider";
+import { SessionTimeoutProvider } from "@/components/session-timeout-provider";
 
 export const metadata: Metadata = {
   title: "FINEXA",
@@ -42,7 +43,9 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <RealtimeSyncProvider>
-            {children}
+            <SessionTimeoutProvider>
+              {children}
+            </SessionTimeoutProvider>
           </RealtimeSyncProvider>
           <Toaster position="top-right" />
         </ThemeProvider>

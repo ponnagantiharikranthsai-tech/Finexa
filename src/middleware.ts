@@ -41,8 +41,9 @@ export async function middleware(request: NextRequest) {
         },
         set(name: string, value: string, options: any) {
           const isDev = process.env.NODE_ENV === "development";
+          const { maxAge, expires, ...restOptions } = options;
           const cookieOptions = {
-            ...options,
+            ...restOptions,
             secure: isDev ? false : options.secure,
           };
           request.cookies.set({ name, value, ...cookieOptions });

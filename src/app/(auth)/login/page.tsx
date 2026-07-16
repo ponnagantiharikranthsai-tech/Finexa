@@ -31,6 +31,7 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (data.success) {
+        sessionStorage.setItem("session_active", "true");
         toast.success("Welcome back!");
         router.push("/home");
         router.refresh();

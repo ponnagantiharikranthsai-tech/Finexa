@@ -60,6 +60,30 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function calculateDurationText(startStr: string, dueStr: string, interestType: "monthly" | "daily"): string {
+  if (!startStr || !dueStr) return "";
+  
+  const parseDate = (dStr: string) => {
+    const [y, m, d] = dStr.split("-").map(Number);
+    return new Date(y!, m! - 1, d!);
+  };
+  
+  const start = parseDate(startStr);
+  const due = parseDate(dueStr);
+  
+  if (due <= start) return "0 Days";
+  
+  const totalDays = Math.ceil((due.getTime() - start.getTime()) / (1000 * 3600 * 24));
+  
+  if (interestType === "daily") {
+    return `${totalDays} ${totalDays === 1 ? "Day" : "Days"}`;
+  } else {
+    const totalMonths = Math.round(totalDays / 30.417);
+    const months = Math.max(1, totalMonths);
+    return `${months} ${months === 1 ? "Month" : "Months"}`;
+  }
+}
+
 export function ApplicationsList({ initialApps, total: initialTotal, totalPages: initialTotalPages }: ApplicationsListProps) {
   const [apps, setApps] = useState<ApplicationWithBorrower[]>(initialApps);
   const [search, setSearch] = useState("");
@@ -95,6 +119,12 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
       setDueDate(computedDue.toISOString().split("T")[0]!);
     }
   }, [startDate]);
+
+  // Auto-calculate Loan Duration when Start Date, Due Date, or Interest Type changes
+  useEffect(() => {
+    const computedDuration = calculateDurationText(startDate, dueDate, interestType);
+    setLoanDuration(computedDuration);
+  }, [startDate, dueDate, interestType]);
 
   // Refresh applications list
   const refreshApps = (currentSearch = search, currentStatus = status, currentPage = page) => {
@@ -191,6 +221,26 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
     setCopied(true);
     toast.success("Link copied to clipboard!");
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleNativeShare = async () => {
+    if (generatedLinkData) {
+      const shareMsg = getShareMessage(generatedLinkData.code, generatedLinkData.url, principal);
+      if (typeof navigator !== "undefined" && "share" in navigator) {
+        try {
+          await navigator.share({
+            title: "Finexa Loan Application Link",
+            text: shareMsg,
+            url: generatedLinkData.url,
+          });
+          toast.success("Shared successfully!");
+        } catch (err) {
+          console.error("Native share failed:", err);
+        }
+      } else {
+        copyToClipboard(generatedLinkData.url);
+      }
+    }
   };
 
   const getShareMessage = (code: string, url: string, amt: string) => {
@@ -374,16 +424,17 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="loanDuration" className={labelClass}>Duration (e.g. 30 Days)*</Label>
+               <div className="space-y-1.5">
+                <Label htmlFor="loanDuration" className={labelClass}>Duration*</Label>
                 <Input
                   id="loanDuration"
                   value={loanDuration}
-                  onChange={(e) => setLoanDuration(e.target.value)}
-                  required
-                  placeholder="30 Days"
-                  className={inputClass}
+                  readOnly
+                  disabled
+                  placeholder="Auto-calculating..."
+                  className={`${inputClass} bg-muted/40 cursor-not-allowed`}
                 />
+                <input type="hidden" name="loanDuration" value={loanDuration} />
               </div>
             </div>
 
@@ -468,7 +519,7 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
 
       {/* ─── Modal 2: Link Generated Success ─── */}
       <Dialog open={successOpen} onOpenChange={setSuccessOpen}>
-        <DialogContent className="sm:max-w-[480px] rounded-2xl border border-border p-6 text-center bg-white dark:bg-card">
+        <DialogContent className="w-[92vw] max-w-[420px] rounded-2xl border border-border p-5 text-center bg-white dark:bg-card max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-bold text-lg font-heading text-emerald-500 dark:text-emerald-400">
               Application Link Generated!
@@ -476,38 +527,67 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
           </DialogHeader>
 
           {generatedLinkData && (
-            <div className="space-y-5 pt-4">
+            <div className="space-y-4 pt-3">
               {/* QR Code Container */}
-              <div className="flex flex-col items-center justify-center p-4 bg-secondary/30 dark:bg-secondary/20 border border-border rounded-xl">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
-                    generatedLinkData.url
-                  )}`}
-                  alt="Application Link QR Code"
-                  className="h-44 w-44 object-contain rounded-lg border bg-white p-1"
-                />
-                <p className="text-[10px] text-muted-foreground mt-2 uppercase tracking-widest font-bold">
+              <div className="flex flex-col items-center justify-center p-3 bg-secondary/35 dark:bg-secondary/20 border border-border rounded-xl mx-auto w-full">
+                <div className="bg-white p-1.5 rounded-lg border flex items-center justify-center">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
+                      generatedLinkData.url
+                    )}`}
+                    alt="Application Link QR Code"
+                    className="h-32 w-32 sm:h-36 sm:w-36 object-contain"
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1.5 uppercase tracking-widest font-bold">
                   Borrower QR Code
                 </p>
               </div>
 
-              {/* URL Display */}
-              <div className="flex items-center gap-2 bg-secondary dark:bg-secondary/60 p-3 rounded-xl border border-border">
-                <span className="text-xs font-mono font-medium truncate flex-1 text-left text-foreground">
-                  {generatedLinkData.url}
-                </span>
+              {/* URL Display with rounded input and Copy button */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-secondary dark:bg-secondary/60 p-2 rounded-xl border border-border">
+                <input
+                  type="text"
+                  readOnly
+                  value={generatedLinkData.url}
+                  onClick={(e) => {
+                    (e.target as HTMLInputElement).select();
+                    copyToClipboard(generatedLinkData.url);
+                  }}
+                  className="flex-1 bg-transparent border-0 ring-0 focus:ring-0 text-xs font-mono font-medium py-1 px-2 text-left text-foreground select-all outline-none overflow-hidden text-ellipsis whitespace-nowrap min-w-0"
+                />
                 <Button
                   size="sm"
-                  variant="ghost"
                   onClick={() => copyToClipboard(generatedLinkData.url)}
-                  className="h-8 w-8 p-0 rounded-lg shrink-0 text-primary"
+                  className="h-8 rounded-lg shrink-0 px-3 font-bold text-[10px] uppercase tracking-wider bg-primary text-white hover:bg-primary/90 flex items-center justify-center gap-1 shadow-sm w-full sm:w-auto"
                 >
-                  {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                  {copied ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-400" />
+                      <span>Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" />
+                      <span>Copy</span>
+                    </>
+                  )}
                 </Button>
               </div>
 
+              {/* Share via Device (Native Share Sheet) */}
+              {typeof window !== "undefined" && typeof navigator !== "undefined" && "share" in navigator && (
+                <Button
+                  onClick={handleNativeShare}
+                  className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 font-bold text-xs uppercase tracking-wider transition-all"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Share via Device
+                </Button>
+              )}
+
               {/* Sharing Grid */}
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {/* WhatsApp */}
                 <a
                   href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
@@ -515,9 +595,9 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
                   )}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-500 transition-colors"
+                  className="flex items-center justify-center gap-2 sm:flex-col sm:gap-1 p-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-500 transition-colors w-full"
                 >
-                  <Share2 className="h-5 w-5 mb-1" />
+                  <Share2 className="h-4 w-4 sm:mb-0.5" />
                   <span className="text-[10px] font-bold uppercase tracking-wider">WhatsApp</span>
                 </a>
 
@@ -526,9 +606,9 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
                   href={`sms:?body=${encodeURIComponent(
                     getShareMessage(generatedLinkData.code, generatedLinkData.url, principal)
                   )}`}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 text-blue-500 transition-colors"
+                  className="flex items-center justify-center gap-2 sm:flex-col sm:gap-1 p-2.5 rounded-xl border border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 text-blue-500 transition-colors w-full"
                 >
-                  <Phone className="h-5 w-5 mb-1" />
+                  <Phone className="h-4 w-4 sm:mb-0.5" />
                   <span className="text-[10px] font-bold uppercase tracking-wider">SMS</span>
                 </a>
 
@@ -537,9 +617,9 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
                   href={`mailto:?subject=${encodeURIComponent("Finexa Loan Application Link")}&body=${encodeURIComponent(
                     getShareMessage(generatedLinkData.code, generatedLinkData.url, principal)
                   )}`}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 text-amber-500 transition-colors"
+                  className="flex items-center justify-center gap-2 sm:flex-col sm:gap-1 p-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 text-amber-500 transition-colors w-full"
                 >
-                  <Mail className="h-5 w-5 mb-1" />
+                  <Mail className="h-4 w-4 sm:mb-0.5" />
                   <span className="text-[10px] font-bold uppercase tracking-wider">Email</span>
                 </a>
               </div>

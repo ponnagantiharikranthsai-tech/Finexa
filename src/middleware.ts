@@ -67,8 +67,8 @@ export async function middleware(request: NextRequest) {
 
   let user = null;
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    user = session?.user || null;
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+    user = supabaseUser || null;
   } catch (error) {
     // Cookie is invalid or expired
   }
@@ -81,6 +81,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/home", request.url));
   }
 
+  // Stamp verified user ID into request header so Server Actions skip re-auth
+  response.headers.set("x-user-id", user.id);
   return response;
 }
 

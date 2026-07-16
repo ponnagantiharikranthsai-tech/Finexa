@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getBorrowerByIdAction } from "@/features/borrowers/actions/get-borrower-by-id.action";
 import { db } from "@/db/client";
 import { loansTable, paymentsTable } from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { BorrowerDetailView } from "@/features/borrowers/components/borrower-detail-view";
 import { calculatePeriods, calculateMonthlyInterest, calculateOutstandingBalance } from "@/domain/interest-calculator";
 
@@ -14,7 +14,12 @@ interface PageProps {
 
 export default async function BorrowerDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const res = await getBorrowerByIdAction(id);
+
+  // Run borrower fetch + loans fetch in parallel (was sequential)
+  const [res, loans] = await Promise.all([
+    getBorrowerByIdAction(id),
+    db.select().from(loansTable).where(eq(loansTable.borrowerId, id)),
+  ]);
 
   if (!res.success || !res.data) {
     redirect("/borrowers");
@@ -22,49 +27,49 @@ export default async function BorrowerDetailPage({ params }: PageProps) {
 
   const borrower = res.data;
 
-  // Load borrower's loans
-  const loans = await db
-    .select()
-    .from(loansTable)
-    .where(eq(loansTable.borrowerId, id));
+  // FIX: Single batched payment query instead of N queries in a loop
+  const loanIds = loans.map((l) => l.loanId);
+  const paymentSums = loanIds.length > 0
+    ? await db
+        .select({ loanId: paymentsTable.loanId, sum: sql<number>`sum(amount)` })
+        .from(paymentsTable)
+        .where(inArray(paymentsTable.loanId, loanIds))
+        .groupBy(paymentsTable.loanId)
+    : [];
 
-  // Computations
+  const paymentMap = new Map<string, number>();
+  for (const p of paymentSums) {
+    paymentMap.set(p.loanId, Number(p.sum || 0));
+  }
+
+  // All calculations now done in JS with the already-fetched data
   let totalBorrowed = 0;
   let totalRepaid = 0;
   let outstandingBalance = 0;
 
   for (const loan of loans) {
     totalBorrowed += Number(loan.principal);
-
-    // Sum payments
-    const paymentsRes = await db
-      .select({ sum: sql<number>`sum(amount)` })
-      .from(paymentsTable)
-      .where(eq(paymentsTable.loanId, loan.loanId));
-
-    const totalPayments = Number(paymentsRes[0]?.sum || 0);
+    const totalPayments = paymentMap.get(loan.loanId) || 0;
     totalRepaid += totalPayments;
 
-    // Sum outstanding balance dynamically using calculator
     const periods = calculatePeriods(loan.dateGiven, loan.dueDate);
     const monthlyInterest = calculateMonthlyInterest(Number(loan.principal), Number(loan.interestRate));
     const totalInterest = periods * monthlyInterest;
-    
-    const outstanding = calculateOutstandingBalance(
+
+    outstandingBalance += calculateOutstandingBalance(
       Number(loan.principal),
       totalInterest,
       Number(loan.penaltyAmount || 0),
       totalPayments
     );
-    outstandingBalance += outstanding;
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Borrower Profile file</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Borrower Profile</h1>
         <p className="text-sm text-muted-foreground">
-          Personal identification file, lifetime payment ledger, and legal audit file.
+          Personal identification, lifetime payment ledger, and legal audit trail.
         </p>
       </div>
 
@@ -78,3 +83,4 @@ export default async function BorrowerDetailPage({ params }: PageProps) {
     </div>
   );
 }
+

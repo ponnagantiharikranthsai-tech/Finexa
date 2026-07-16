@@ -270,16 +270,17 @@ export class LoanRepository {
     const formattedToday = today.toISOString().split("T")[0];
     const formattedSevenDays = sevenDaysFromNow.toISOString().split("T")[0];
 
-    const [
-      activeRes, 
-      overdueRes, 
-      dueSoonRes, 
-      borrowersRes, 
-      totalLentRes, 
-      totalCollectedRes, 
-      todaysCollectedRes, 
-      dueTodayRes
-    ] = await Promise.all([
+  const [
+    activeRes, 
+    overdueRes, 
+    dueSoonRes, 
+    borrowersRes, 
+    totalLentRes, 
+    totalCollectedRes, 
+    todaysCollectedRes, 
+    dueTodayRes,
+    allActiveLoans,
+  ] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
         .from(loansTable)
@@ -319,13 +320,12 @@ export class LoanRepository {
             eq(loansTable.dueDate, formattedToday)
           )
         ),
+      // Previously ran AFTER the Promise.all — now batched concurrently
+      db
+        .select()
+        .from(loansTable)
+        .where(inArray(loansTable.status, ["active", "overdue", "extended"])),
     ]);
-
-    // Calculate total outstanding balance by loading all non-closed loans in bulk
-    const allActiveLoans = await db
-      .select()
-      .from(loansTable)
-      .where(inArray(loansTable.status, ["active", "overdue", "extended"]));
 
     const outstandingBalancesMap = await this.getOutstandingBalancesForLoans(allActiveLoans);
     let totalOutstanding = 0;

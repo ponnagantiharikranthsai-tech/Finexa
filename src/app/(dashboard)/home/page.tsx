@@ -14,11 +14,11 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
 
-  // 1. Loading Screen Timeline
+  // Brief logo splash — reduced from 2200ms to 600ms
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 2200);
+    }, 600);
     return () => clearTimeout(timer);
   }, []);
 

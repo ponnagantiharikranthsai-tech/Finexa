@@ -3,6 +3,7 @@
 import { generateLinkSchema } from "../schemas/generate-link.schema";
 import { applicationRepository } from "../repository/application.repository";
 import { requireAuth } from "@/lib/auth";
+import { headers } from "next/headers";
 import { auditLog } from "@/lib/audit-log";
 import type { ActionResult } from "@/types/api.types";
 
@@ -69,7 +70,11 @@ export async function generateLinkAction(
       status: "active",
     });
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    // Dynamically resolve application URL from request headers
+    const headerStore = await headers();
+    const host = headerStore.get("host") || "localhost:3000";
+    const protocol = host.includes("localhost") ? "http" : "https";
+    const appUrl = `${protocol}://${host}`;
     const secureUrl = `${appUrl}/apply/${code}`;
 
     await auditLog("application_link_generated", "loan_application", app.applicationId, {

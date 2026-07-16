@@ -1,5 +1,5 @@
 import { db } from "@/db/client";
-import { loansTable, borrowersTable, paymentsTable, type Loan, type InsertLoan, type LoanStatus, type Borrower } from "@/db/schema";
+import { loansTable, borrowersTable, paymentsTable, loanApplicationsTable, type Loan, type InsertLoan, type LoanStatus, type Borrower } from "@/db/schema";
 import { eq, or, like, sql, and, inArray, asc, desc } from "drizzle-orm";
 import { PaginatedResult } from "@/types/api.types";
 import { calculatePeriods, calculateMonthlyInterest, calculateOutstandingBalance } from "@/domain/interest-calculator";
@@ -344,6 +344,26 @@ export class LoanRepository {
       todaysCollections: Number(todaysCollectedRes[0]?.sum || 0),
       dueTodayCount: Number(dueTodayRes[0]?.count || 0),
     };
+  }
+
+  async deleteById(id: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // 1. Delete payments associated with this loan
+      await tx
+        .delete(paymentsTable)
+        .where(eq(paymentsTable.loanId, id));
+
+      // 2. Set loanId to null on loan applications referencing this loan
+      await tx
+        .update(loanApplicationsTable)
+        .set({ loanId: null })
+        .where(eq(loanApplicationsTable.loanId, id));
+
+      // 3. Delete the loan
+      await tx
+        .delete(loansTable)
+        .where(eq(loansTable.loanId, id));
+    });
   }
 }
 

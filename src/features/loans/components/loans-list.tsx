@@ -14,7 +14,8 @@ import { getLoansAction } from "../actions/get-loans.action";
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "../actions/extend-loan.action";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
-import { Search, Plus, Send, Landmark, Calendar, RefreshCw, CreditCard, ChevronRight } from "lucide-react";
+import { deleteLoanAction } from "../actions/delete-loan.action";
+import { Search, Plus, Send, Landmark, Calendar, RefreshCw, CreditCard, ChevronRight, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { LoanWithBorrower } from "../repository/loan.repository";
 import { calculateMonthlyInterest } from "@/domain/interest-calculator";
@@ -144,6 +145,26 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
         refreshLoans(); router.refresh();
       } else {
         toast.error(typeof res.error === "string" ? res.error : "Failed to send reminder");
+      }
+    });
+  };
+
+  const handleDeleteLoan = async (loanId: string, borrowerName: string) => {
+    if (!confirm(`Are you sure you want to delete the loan for ${borrowerName}? This will permanently delete the loan and all associated repayments. This action cannot be undone.`)) {
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const res = await deleteLoanAction(loanId);
+        if (res.success) {
+          toast.success("Loan deleted successfully!");
+          refreshLoans();
+          router.refresh();
+        } else {
+          toast.error(typeof res.error === "string" ? res.error : "Failed to delete loan.");
+        }
+      } catch (err: any) {
+        toast.error(err.message || "An unexpected error occurred.");
       }
     });
   };
@@ -281,6 +302,14 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
                     Details <ChevronRight className="h-3.5 w-3.5" />
                   </button>
                 </Link>
+                <button
+                  onClick={() => handleDeleteLoan(loan.loanId, loan.borrower.name)}
+                  disabled={isPending}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200 flex items-center justify-center shrink-0"
+                  title="Delete Loan"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             </div>
           ))
@@ -360,6 +389,14 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
                           View <ChevronRight className="h-3.5 w-3.5" />
                         </button>
                       </Link>
+                      <button
+                        onClick={() => handleDeleteLoan(loan.loanId, loan.borrower.name)}
+                        disabled={isPending}
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
+                        title="Delete Loan"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </TableCell>
                 </TableRow>

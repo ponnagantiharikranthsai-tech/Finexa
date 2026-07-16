@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { updateBorrowerAction } from "@/features/borrowers/actions/update-borrower.action";
-
+import { useRouter } from "next/navigation";
+import { DeleteBorrowerButton } from "@/features/borrowers/components/delete-borrower-button";
 interface BorrowerDetailViewProps {
   borrower: BorrowerDetailResult;
   loans: Loan[];
@@ -44,6 +45,7 @@ export function BorrowerDetailView({
   const [showSensitive, setShowSensitive] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const router = useRouter();
 
   const [name, setName] = useState(borrower.name);
   const [mobile, setMobile] = useState(borrower.mobile);
@@ -158,6 +160,12 @@ export function BorrowerDetailView({
                   <Edit className="h-3.5 w-3.5" />
                   Edit Details
                 </button>
+                <DeleteBorrowerButton
+                  borrowerId={borrower.borrowerId}
+                  borrowerName={borrower.name}
+                  showText={true}
+                  onSuccess={() => router.push("/borrowers")}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 p-5 text-sm">

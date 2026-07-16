@@ -5,6 +5,7 @@ import { db } from "@/db/client";
 import { loansTable, paymentsTable } from "@/db/schema";
 import { inArray, eq, sql } from "drizzle-orm";
 import { calculatePeriods, calculateMonthlyInterest, calculateOutstandingBalance } from "@/domain/interest-calculator";
+import { DeleteBorrowerButton } from "@/features/borrowers/components/delete-borrower-button";
 
 export const revalidate = 0;
 
@@ -246,8 +247,11 @@ export default async function BorrowersPage() {
 
                   {/* Bottom Row: Call to Action */}
                   <div className="flex items-center justify-between pt-4 mt-2 border-t border-white/[0.03]">
-                    <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">View Ledger</span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">View Ledger</span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                    </div>
+                    <DeleteBorrowerButton borrowerId={b.borrowerId} borrowerName={b.name} />
                   </div>
                 </div>
               </Link>

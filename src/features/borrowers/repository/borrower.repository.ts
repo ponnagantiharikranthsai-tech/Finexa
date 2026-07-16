@@ -1,6 +1,6 @@
 import { db } from "@/db/client";
-import { borrowersTable, type Borrower, type InsertBorrower } from "@/db/schema";
-import { eq, or, like, sql } from "drizzle-orm";
+import { borrowersTable, loansTable, paymentsTable, loanApplicationsTable, type Borrower, type InsertBorrower } from "@/db/schema";
+import { eq, or, like, sql, inArray } from "drizzle-orm";
 import { PaginatedResult } from "@/types/api.types";
 
 export type BorrowerFilters = {
@@ -103,6 +103,40 @@ export class BorrowerRepository {
       .update(borrowersTable)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(borrowersTable.borrowerId, id));
+  }
+
+  async deleteById(id: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      const loans = await tx
+        .select()
+        .from(loansTable)
+        .where(eq(loansTable.borrowerId, id));
+      const loanIds = loans.map((l) => l.loanId);
+
+      if (loanIds.length > 0) {
+        await tx
+          .delete(paymentsTable)
+          .where(inArray(paymentsTable.loanId, loanIds));
+
+        await tx
+          .update(loanApplicationsTable)
+          .set({ loanId: null, borrowerId: null })
+          .where(inArray(loanApplicationsTable.loanId, loanIds));
+      }
+
+      await tx
+        .update(loanApplicationsTable)
+        .set({ borrowerId: null })
+        .where(eq(loanApplicationsTable.borrowerId, id));
+
+      await tx
+        .delete(loansTable)
+        .where(eq(loansTable.borrowerId, id));
+
+      await tx
+        .delete(borrowersTable)
+        .where(eq(borrowersTable.borrowerId, id));
+    });
   }
 }
 

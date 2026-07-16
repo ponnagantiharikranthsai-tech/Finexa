@@ -19,9 +19,23 @@ export async function middleware(request: NextRequest) {
     },
   });
 
+  // Fast path: skip Supabase auth call for clearly public routes
+  const isPublicPath = pathname === "/" || pathname === "/login" || pathname.startsWith("/apply/");
+  if (isPublicPath) {
+    return response;
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("Supabase environment variables are missing in middleware!");
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         get(name: string) {
@@ -58,12 +72,6 @@ export async function middleware(request: NextRequest) {
       },
     }
   );
-
-  // Fast path: skip Supabase auth call for clearly public routes
-  const isPublicPath = pathname === "/" || pathname === "/login" || pathname.startsWith("/apply/");
-  if (isPublicPath) {
-    return response;
-  }
 
   let user = null;
   try {

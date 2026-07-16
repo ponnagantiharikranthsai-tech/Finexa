@@ -32,6 +32,7 @@ export default function NewLoanPage() {
   const [interestType, setInterestType]   = useState<"monthly" | "daily">("monthly");
   const [interestRate, setInterestRate]   = useState("20");
   const [dateGiven, setDateGiven]         = useState(new Date().toISOString().split("T")[0]!);
+  const [dueDate, setDueDate]             = useState("");
 
   const [matchedBorrower, setMatchedBorrower] = useState<BorrowerLookupResult | null>(null);
 
@@ -48,6 +49,14 @@ export default function NewLoanPage() {
       return () => clearTimeout(handler);
     }
   }, [mobile]);
+
+  // Sync auto-calculated due date when dateGiven changes
+  useEffect(() => {
+    if (dateGiven) {
+      const computedDue = calculateDueDate(new Date(dateGiven));
+      setDueDate(computedDue.toISOString().split("T")[0]!);
+    }
+  }, [dateGiven]);
 
   useEffect(() => {
     if (state?.success) {
@@ -82,8 +91,7 @@ export default function NewLoanPage() {
   const numericRate      = Number(interestRate || 0);
   const monthlyInterest  = calculateMonthlyInterest(numericPrincipal, numericRate);
   const dailyInterest    = monthlyInterest / 30;
-  const previewDueDate   = dateGiven ? calculateDueDate(new Date(dateGiven)) : new Date();
-  const formattedDueDate = previewDueDate.toISOString().split("T")[0]!;
+  const formattedDueDate = dueDate || (dateGiven ? calculateDueDate(new Date(dateGiven)).toISOString().split("T")[0]! : "");
   const totalDue         = numericPrincipal + monthlyInterest;
 
   const inputClass = "h-11 rounded-xl border-border focus:ring-2 focus:ring-primary/20 focus:border-primary";
@@ -228,7 +236,7 @@ export default function NewLoanPage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="interestRate" className={labelClass}>Rate (₹ per ₹1k / month)*</Label>
                   <Input id="interestRate" name="interestRate" type="number" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} required className={inputClass} />
@@ -243,6 +251,10 @@ export default function NewLoanPage() {
                     </SelectContent>
                   </Select>
                   <input type="hidden" name="interestType" value={interestType} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="dueDate" className={labelClass}>Due Date*</Label>
+                  <Input id="dueDate" name="dueDate" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required className={inputClass} />
                 </div>
               </div>
             </div>

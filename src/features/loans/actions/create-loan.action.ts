@@ -65,9 +65,7 @@ export async function createLoanAction(
       return { success: false, error: "Borrower not found." };
     }
 
-    const dateGivenDate = new Date(parsed.data.dateGiven);
-    const dueDateDate = calculateDueDate(dateGivenDate);
-    const dueDateStr = dueDateDate.toISOString().split("T")[0]!;
+    const dueDateStr = parsed.data.dueDate;
 
     const monthlyInterest = calculateMonthlyInterest(parsed.data.principal, parsed.data.interestRate);
 

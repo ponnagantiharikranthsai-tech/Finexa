@@ -8,7 +8,7 @@ export const generateLinkSchema = z.object({
   dueDate: z.string().date("Invalid date format (must be YYYY-MM-DD)"),
   loanDuration: z.string().min(1, "Duration is required"),
   notes: z.string().optional().or(z.literal("")),
-  expiryDays: z.coerce.number().int().positive().optional().or(z.literal("")),
+  expiryDays: z.coerce.number().int().nonnegative().optional().or(z.literal("")),
 });
 
 export type GenerateLinkInput = z.infer<typeof generateLinkSchema>;

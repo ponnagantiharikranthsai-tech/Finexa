@@ -146,7 +146,12 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
         setNotes("");
         refreshApps();
       } else {
-        toast.error(typeof res.error === "string" ? res.error : "Failed to generate link");
+        const errMsg = typeof res.error === "string"
+          ? res.error
+          : Object.entries(res.error)
+              .map(([field, msgs]) => `${field}: ${(msgs as string[]).join(", ")}`)
+              .join("; ");
+        toast.error(errMsg || "Failed to generate link");
       }
     });
   };

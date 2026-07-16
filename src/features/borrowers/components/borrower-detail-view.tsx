@@ -2,9 +2,15 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Eye, EyeOff, ArrowLeft, ChevronRight } from "lucide-react";
+import { Eye, EyeOff, ArrowLeft, ChevronRight, Edit } from "lucide-react";
 import type { BorrowerDetailResult } from "@/features/borrowers/actions/get-borrower-by-id.action";
 import type { Loan } from "@/db/schema";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { updateBorrowerAction } from "@/features/borrowers/actions/update-borrower.action";
 
 interface BorrowerDetailViewProps {
   borrower: BorrowerDetailResult;
@@ -36,6 +42,57 @@ export function BorrowerDetailView({
   outstandingBalance,
 }: BorrowerDetailViewProps) {
   const [showSensitive, setShowSensitive] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+
+  const [name, setName] = useState(borrower.name);
+  const [mobile, setMobile] = useState(borrower.mobile);
+  const [email, setEmail] = useState(borrower.email || "");
+  const [pan, setPan] = useState(borrower.panDecrypted);
+  const [aadhaar, setAadhaar] = useState(borrower.aadhaarDecrypted);
+  const [locationUrl, setLocationUrl] = useState(borrower.locationUrl || "");
+
+  React.useEffect(() => {
+    setName(borrower.name);
+    setMobile(borrower.mobile);
+    setEmail(borrower.email || "");
+    setPan(borrower.panDecrypted);
+    setAadhaar(borrower.aadhaarDecrypted);
+    setLocationUrl(borrower.locationUrl || "");
+  }, [borrower]);
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsPending(true);
+
+    const fd = new FormData();
+    fd.append("borrowerId", borrower.borrowerId);
+    fd.append("name", name);
+    fd.append("mobile", mobile);
+    fd.append("email", email);
+    fd.append("pan", pan.toUpperCase());
+    fd.append("aadhaar", aadhaar);
+    fd.append("locationUrl", locationUrl);
+
+    try {
+      const res = await updateBorrowerAction(null, fd);
+      if (res.success) {
+        toast.success("Borrower updated successfully!");
+        setEditOpen(false);
+      } else {
+        if (res.error && typeof res.error === "object") {
+          const errors = Object.values(res.error).flat().join(", ");
+          toast.error(errors || "Failed to update borrower.");
+        } else {
+          toast.error((res.error as string) || "Failed to update borrower.");
+        }
+      }
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred.");
+    } finally {
+      setIsPending(false);
+    }
+  };
 
   const maskPan     = (pan: string)     => showSensitive ? pan     : `•••••${pan.slice(-5)}`;
   const maskAadhaar = (aadhaar: string) => showSensitive ? aadhaar : `••••••••${aadhaar.slice(-4)}`;
@@ -86,13 +143,22 @@ export function BorrowerDetailView({
                   <p className="text-xs text-muted-foreground">KYC & Identity Verification</p>
                 </div>
               </div>
-              <button
-                onClick={() => setShowSensitive(!showSensitive)}
-                className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-secondary dark:hover:bg-secondary"
-              >
-                {showSensitive ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                {showSensitive ? "Hide" : "Reveal"} ID
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowSensitive(!showSensitive)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-secondary dark:hover:bg-secondary"
+                >
+                  {showSensitive ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  {showSensitive ? "Hide" : "Reveal"} ID
+                </button>
+                <button
+                  onClick={() => setEditOpen(true)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-secondary dark:hover:bg-secondary"
+                >
+                  <Edit className="h-3.5 w-3.5" />
+                  Edit Details
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 p-5 text-sm">
               {[
@@ -213,6 +279,101 @@ export function BorrowerDetailView({
           </div>
         </div>
       </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="rounded-2xl max-w-md fx-glass-card border-border/50">
+          <DialogHeader>
+            <DialogTitle className="font-extrabold text-lg">Edit Borrower Details</DialogTitle>
+            <DialogDescription>
+              Update KYC and contact details for <strong>{borrower.name}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Full Name*</Label>
+              <Input
+                type="text"
+                placeholder="Full Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mobile Number*</Label>
+              <Input
+                type="tel"
+                placeholder="Mobile Number"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
+                required
+                className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email Address*</Label>
+              <Input
+                type="email"
+                placeholder="Email Address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">PAN Card Number*</Label>
+              <Input
+                type="text"
+                placeholder="PAN Number"
+                value={pan}
+                onChange={(e) => setPan(e.target.value.toUpperCase())}
+                required
+                className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Aadhaar Card Number*</Label>
+              <Input
+                type="text"
+                placeholder="Aadhaar Number"
+                value={aadhaar}
+                onChange={(e) => setAadhaar(e.target.value)}
+                required
+                className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Location URL (optional)</Label>
+              <Input
+                type="text"
+                placeholder="Google Maps link"
+                value={locationUrl}
+                onChange={(e) => setLocationUrl(e.target.value)}
+                className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
+              />
+            </div>
+            <DialogFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditOpen(false)}
+                className="rounded-xl border-border"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isPending}
+                className="rounded-xl fx-brand-gradient border-0 text-white fx-cta-glow fx-pressable"
+              >
+                {isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

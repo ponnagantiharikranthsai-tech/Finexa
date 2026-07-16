@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import React, { useState, useTransition, useEffect, useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { createLoanAction } from "@/features/loans/actions/create-loan.action";

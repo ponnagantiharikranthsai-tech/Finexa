@@ -13,9 +13,18 @@ import { jsPDF } from "jspdf";
 import type { ActionResult } from "@/types/api.types";
 import { decrypt } from "@/lib/encryption";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+let supabaseAdminInstance: ReturnType<typeof createClient> | null = null;
+
+function getSupabaseAdmin() {
+  if (supabaseAdminInstance) return supabaseAdminInstance;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error("Missing Supabase environment variables for Admin Client.");
+  }
+  supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceKey);
+  return supabaseAdminInstance;
+}
 
 export async function verifyApplicationAction(
   applicationId: string,
@@ -238,7 +247,8 @@ export async function verifyApplicationAction(
     // Upload PDF to Supabase Storage
     const uploadId = Math.random().toString(36).substring(2, 15);
     const pdfPath = `borrowers/${uploadId}/loan_agreement_${loan.loanId}.pdf`;
-    const { error: pdfError } = await supabaseAdmin.storage
+    const adminClient = getSupabaseAdmin();
+    const { error: pdfError } = await adminClient.storage
       .from("borrower-documents")
       .upload(pdfPath, pdfBuffer, {
         contentType: "application/pdf",
@@ -249,7 +259,7 @@ export async function verifyApplicationAction(
       throw new Error(`PDF upload failed: ${pdfError.message}`);
     }
 
-    const { data: { publicUrl: pdfUrl } } = supabaseAdmin.storage
+    const { data: { publicUrl: pdfUrl } } = adminClient.storage
       .from("borrower-documents")
       .getPublicUrl(pdfPath);
 

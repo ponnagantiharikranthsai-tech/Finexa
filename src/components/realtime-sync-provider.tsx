@@ -7,10 +7,19 @@ import { toast } from "sonner";
 import { submitLoanApplicationAction } from "@/features/applications/actions/submit-application.action";
 import { Wifi, WifiOff } from "lucide-react";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+let supabase: ReturnType<typeof createClient> | null = null;
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+function getSupabaseClient() {
+  if (supabase) return supabase;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn("Supabase environment variables are missing.");
+    return null;
+  }
+  supabase = createClient(supabaseUrl, supabaseAnonKey);
+  return supabase;
+}
 
 export function RealtimeSyncProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -88,7 +97,10 @@ export function RealtimeSyncProvider({ children }: { children: React.ReactNode }
     window.addEventListener("offline", handleOffline);
 
     // 3. Supabase Realtime Database Subscriptions
-    const channel = supabase
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    const channel = client
       .channel("finexa-realtime-db")
       .on(
         "postgres_changes",
@@ -129,7 +141,7 @@ export function RealtimeSyncProvider({ children }: { children: React.ReactNode }
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
-      supabase.removeChannel(channel);
+      client.removeChannel(channel);
     };
   }, [router]);
 

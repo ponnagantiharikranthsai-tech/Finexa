@@ -62,7 +62,8 @@ export async function updateBorrowerAction(
     revalidatePath("/borrowers");
 
     return { success: true, data: { success: true } };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to update borrower" };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : "Failed to update borrower";
+    return { success: false, error: errorMsg };
   }
 }

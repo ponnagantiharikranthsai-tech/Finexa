@@ -38,8 +38,9 @@ export function DeleteBorrowerButton({ borrowerId, borrowerName, onSuccess, show
         } else {
           toast.error(typeof res.error === "string" ? res.error : "Failed to delete borrower.");
         }
-      } catch (err: any) {
-        toast.error(err.message || "An unexpected error occurred.");
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : "An unexpected error occurred.";
+        toast.error(errorMsg);
       }
     });
   };

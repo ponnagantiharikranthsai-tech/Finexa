@@ -24,7 +24,8 @@ export async function deleteBorrowerAction(
     revalidatePath("/borrowers");
 
     return { success: true, data: { success: true } };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to delete borrower" };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : "Failed to delete borrower";
+    return { success: false, error: errorMsg };
   }
 }

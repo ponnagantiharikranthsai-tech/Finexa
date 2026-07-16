@@ -163,8 +163,9 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
         } else {
           toast.error(typeof res.error === "string" ? res.error : "Failed to delete loan.");
         }
-      } catch (err: any) {
-        toast.error(err.message || "An unexpected error occurred.");
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : "An unexpected error occurred.";
+        toast.error(errorMsg);
       }
     });
   };

@@ -89,8 +89,9 @@ export function BorrowerDetailView({
           toast.error((res.error as string) || "Failed to update borrower.");
         }
       }
-    } catch (err: any) {
-      toast.error(err.message || "An unexpected error occurred.");
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      toast.error(errorMsg);
     } finally {
       setIsPending(false);
     }

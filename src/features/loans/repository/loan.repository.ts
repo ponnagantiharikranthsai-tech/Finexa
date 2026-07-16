@@ -115,7 +115,7 @@ export class LoanRepository {
     const { page, pageSize } = pagination;
     const offset = (page - 1) * pageSize;
 
-    let conditions = [];
+    const conditions = [];
     if (status) {
       conditions.push(eq(loansTable.status, status));
     }

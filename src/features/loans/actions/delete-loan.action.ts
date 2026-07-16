@@ -31,7 +31,8 @@ export async function deleteLoanAction(
       success: true,
       data: { success: true },
     };
-  } catch (err: any) {
-    return { success: false, error: err.message || "Failed to delete loan" };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : "Failed to delete loan";
+    return { success: false, error: errorMsg };
   }
 }

@@ -244,7 +244,35 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
   };
 
   const getShareMessage = (code: string, url: string, amt: string) => {
-    return `Dear Customer, please complete your Finexa loan details for Rs. ${Number(amt).toLocaleString("en-IN")} using this secure link: ${url}\n\nReference Code: ${code}. Thank you!`;
+    return `📋 FINEXA Loan Application
+
+Dear Customer,
+
+Please complete your loan application by following the steps below:
+
+1. Open the application link provided below.
+
+2. Fill in all required details carefully.
+
+3. Enter your information exactly as it appears on your official documents.
+
+4. Ensure your mobile number, Aadhaar number, PAN number, and address are correct.
+
+5. Review all information before submitting the form.
+
+6. After successful submission, take a screenshot of the confirmation page.
+
+7. Send the screenshot to your loan officer/owner for verification.
+
+8. Your loan application will be processed only after verification of the submitted details.
+
+9. Providing incorrect or false information may lead to rejection of your application.
+
+10. If you face any issues while filling out the form, contact your loan officer immediately.
+
+🔗 Loan Application Link: ${url}
+
+Thank you for choosing FINEXA – Smart Loan Management.`;
   };
 
   const inputClass = "h-11 rounded-xl border-border focus:ring-2 focus:ring-primary/20 focus:border-primary";
@@ -575,54 +603,17 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
                 </Button>
               </div>
 
-              {/* Share via Device (Native Share Sheet) */}
-              {typeof window !== "undefined" && typeof navigator !== "undefined" && "share" in navigator && (
-                <Button
-                  onClick={handleNativeShare}
-                  className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 font-bold text-xs uppercase tracking-wider transition-all"
-                >
-                  <Share2 className="h-4 w-4" />
-                  Share via Device
-                </Button>
-              )}
-
-              {/* Sharing Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {/* WhatsApp */}
-                <a
-                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                    getShareMessage(generatedLinkData.code, generatedLinkData.url, principal)
-                  )}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-center gap-2 sm:flex-col sm:gap-1 p-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-500 transition-colors w-full"
-                >
-                  <Share2 className="h-4 w-4 sm:mb-0.5" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">WhatsApp</span>
-                </a>
-
-                {/* SMS */}
-                <a
-                  href={`sms:?body=${encodeURIComponent(
-                    getShareMessage(generatedLinkData.code, generatedLinkData.url, principal)
-                  )}`}
-                  className="flex items-center justify-center gap-2 sm:flex-col sm:gap-1 p-2.5 rounded-xl border border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 text-blue-500 transition-colors w-full"
-                >
-                  <Phone className="h-4 w-4 sm:mb-0.5" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">SMS</span>
-                </a>
-
-                {/* Email */}
-                <a
-                  href={`mailto:?subject=${encodeURIComponent("Finexa Loan Application Link")}&body=${encodeURIComponent(
-                    getShareMessage(generatedLinkData.code, generatedLinkData.url, principal)
-                  )}`}
-                  className="flex items-center justify-center gap-2 sm:flex-col sm:gap-1 p-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 text-amber-500 transition-colors w-full"
-                >
-                  <Mail className="h-4 w-4 sm:mb-0.5" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Email</span>
-                </a>
-              </div>
+              {/* Share via Device (Native Share Sheet or Copy Message Fallback) */}
+              <Button
+                onClick={handleNativeShare}
+                className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 font-bold text-xs uppercase tracking-wider transition-all"
+              >
+                <Share2 className="h-4 w-4" />
+                {typeof window !== "undefined" && typeof navigator !== "undefined" && "share" in navigator 
+                  ? "Share via Device" 
+                  : "Copy Share Message"
+                }
+              </Button>
 
               <div className="pt-2">
                 <Button

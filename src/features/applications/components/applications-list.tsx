@@ -27,7 +27,8 @@ import {
   Phone,
   Mail,
   FileSignature,
-  FileDown
+  FileDown,
+  MessageSquare
 } from "lucide-react";
 import type { ApplicationWithBorrower } from "../repository/application.repository";
 import { calculateDueDate } from "@/domain/due-date-calculator";
@@ -223,6 +224,34 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleWhatsAppShare = () => {
+    if (!generatedLinkData) return;
+    const msg = getShareMessage(generatedLinkData.code, generatedLinkData.url, principal);
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
+  };
+
+  const handleSMSShare = () => {
+    if (!generatedLinkData) return;
+    const msg = getShareMessage(generatedLinkData.code, generatedLinkData.url, principal);
+    const url = `sms:?body=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
+  };
+
+  const handleEmailShare = () => {
+    if (!generatedLinkData) return;
+    const msg = getShareMessage(generatedLinkData.code, generatedLinkData.url, principal);
+    const url = `mailto:?subject=${encodeURIComponent("FINEXA Loan Application")}&body=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
+  };
+
+  const handleCopyMessage = () => {
+    if (!generatedLinkData) return;
+    const msg = getShareMessage(generatedLinkData.code, generatedLinkData.url, principal);
+    copyToClipboard(msg);
+    toast.success("Full share message copied!");
+  };
+
   const handleNativeShare = async () => {
     if (generatedLinkData) {
       const shareMsg = getShareMessage(generatedLinkData.code, generatedLinkData.url, principal);
@@ -231,48 +260,34 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
           await navigator.share({
             title: "Finexa Loan Application Link",
             text: shareMsg,
-            url: generatedLinkData.url,
           });
           toast.success("Shared successfully!");
         } catch (err) {
           console.error("Native share failed:", err);
         }
       } else {
-        copyToClipboard(generatedLinkData.url);
+        handleCopyMessage();
       }
     }
   };
 
   const getShareMessage = (code: string, url: string, amt: string) => {
-    return `📋 FINEXA Loan Application
+    return `📋 **FINEXA Loan Application**
 
 Dear Customer,
 
-Please complete your loan application by following the steps below:
+Please complete your loan application by following these steps:
 
-1. Open the application link provided below.
+1. Open the loan application using the secure link below.
+2. Fill in all required information accurately as per your official documents.
+3. Review your details carefully and submit the application.
+4. After submission, take a screenshot of the confirmation page and send it to your loan officer for verification.
+5. Your application will be reviewed after successful verification. Providing incorrect information may result in rejection.
 
-2. Fill in all required details carefully.
+🔗 **Loan Application Link:**
+${url}
 
-3. Enter your information exactly as it appears on your official documents.
-
-4. Ensure your mobile number, Aadhaar number, PAN number, and address are correct.
-
-5. Review all information before submitting the form.
-
-6. After successful submission, take a screenshot of the confirmation page.
-
-7. Send the screenshot to your loan officer/owner for verification.
-
-8. Your loan application will be processed only after verification of the submitted details.
-
-9. Providing incorrect or false information may lead to rejection of your application.
-
-10. If you face any issues while filling out the form, contact your loan officer immediately.
-
-🔗 Loan Application Link: ${url}
-
-Thank you for choosing FINEXA – Smart Loan Management.`;
+Thank you for choosing **FINEXA – Smart Loan Management.**`;
   };
 
   const inputClass = "h-11 rounded-xl border-border focus:ring-2 focus:ring-primary/20 focus:border-primary";
@@ -603,7 +618,45 @@ Thank you for choosing FINEXA – Smart Loan Management.`;
                 </Button>
               </div>
 
-              {/* Share via Device (Native Share Sheet or Copy Message Fallback) */}
+              {/* Quick Share Options */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  onClick={handleWhatsAppShare}
+                  className="rounded-xl border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center gap-1.5 h-10"
+                >
+                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.953 3.71 1.458 5.704 1.459h.008c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                  </svg>
+                  <span>WhatsApp</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleSMSShare}
+                  className="rounded-xl border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold text-xs flex items-center gap-1.5 h-10"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  <span>SMS</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleEmailShare}
+                  className="rounded-xl border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-xs flex items-center gap-1.5 h-10"
+                >
+                  <Mail className="h-4 w-4" />
+                  <span>Email</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleCopyMessage}
+                  className="rounded-xl border-border bg-secondary/35 hover:bg-secondary/70 font-bold text-xs flex items-center gap-1.5 h-10"
+                >
+                  <Copy className="h-4 w-4" />
+                  <span>Copy Msg</span>
+                </Button>
+              </div>
+
+              {/* Share via Device (Native Share Sheet) */}
               <Button
                 onClick={handleNativeShare}
                 className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 font-bold text-xs uppercase tracking-wider transition-all"

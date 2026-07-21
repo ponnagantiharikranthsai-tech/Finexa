@@ -32,34 +32,66 @@ interface LoanManagementListProps {
   initialLoans: LoanManagementDetailResult[];
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    submitted: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
-    active:    "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
-    overdue:   "bg-red-500/10 text-red-400 border border-red-500/20",
-    extended:  "bg-blue-500/10 text-blue-400 border border-blue-500/20",
-    closed:    "bg-muted/50 text-muted-foreground border border-border/50",
-  };
-  const label = status === "submitted" ? "Submitted" : status;
+function getCardStatus(status: string, outstanding: number, dueDate: string) {
+  const todayStr = new Date().toISOString().split("T")[0]!;
+  const today = new Date(todayStr);
+
+  const isPaid = outstanding <= 0 || status === "closed";
+  const isDueToday = dueDate === todayStr;
+  const isOverdue = status === "overdue" || (new Date(dueDate) < today && !isPaid);
+
+  if (isPaid) return "paid";
+  if (isDueToday) return "due_today";
+  if (isOverdue) return "overdue";
+  return "active";
+}
+
+function StatusBadge({ status, outstanding, dueDate }: { status: string; outstanding: number; dueDate: string }) {
+  const dynamicStatus = getCardStatus(status, outstanding, dueDate);
+
+  const config = {
+    active: {
+      badge: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+      label: "Active",
+      icon: <Clock className="h-3 w-3" />
+    },
+    due_today: {
+      badge: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+      label: "Due Today",
+      icon: <Clock className="h-3 w-3 animate-[pulse_1.5s_infinite]" />
+    },
+    overdue: {
+      badge: "bg-red-500/10 text-red-400 border border-red-500/20",
+      label: "Overdue",
+      icon: <AlertTriangle className="h-3 w-3" />
+    },
+    paid: {
+      badge: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+      label: "Paid",
+      icon: <Check className="h-3 w-3" />
+    }
+  }[dynamicStatus];
+
   return (
-    <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${map[status] ?? ""}`}>
-      {label}
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${config.badge}`}>
+      {config.icon}
+      {config.label}
     </span>
   );
 }
 
 function getCardGlow(status: string) {
   if (status === "overdue") {
-    return "bg-red-500/[0.02] hover:bg-red-500/[0.04] border-red-500/20 shadow-[0_0_15px_-3px_rgba(239,68,68,0.2)] hover:shadow-[0_0_25px_0_rgba(239,68,68,0.3)]";
+    return "bg-red-500/[0.03] hover:bg-red-500/[0.05] border-red-500/25 shadow-[0_0_15px_-3px_rgba(239,68,68,0.25)] hover:shadow-[0_0_25px_0_rgba(239,68,68,0.35)]";
   }
-  if (status === "extended") {
-    return "bg-blue-500/[0.02] hover:bg-blue-500/[0.04] border-blue-500/20 shadow-[0_0_15px_-3px_rgba(59,130,246,0.15)] hover:shadow-[0_0_25px_0_rgba(59,130,246,0.25)]";
+  if (status === "due_today") {
+    return "bg-blue-500/[0.03] hover:bg-blue-500/[0.05] border-blue-500/25 shadow-[0_0_15px_-3px_rgba(59,130,246,0.25)] hover:shadow-[0_0_25px_0_rgba(59,130,246,0.35)] animate-[pulse_4s_infinite_ease-in-out]";
   }
-  if (status === "closed") {
-    return "bg-muted-foreground/[0.01] border-border/40 opacity-75 hover:opacity-100 transition-opacity";
+  if (status === "paid") {
+    return "bg-emerald-500/[0.02] hover:bg-emerald-500/[0.04] border-emerald-500/15 shadow-[0_0_12px_-3px_rgba(16,185,129,0.12)] hover:shadow-[0_0_20px_0_rgba(16,185,129,0.2)]";
   }
-  // Active / Submitted
-  return "bg-emerald-500/[0.02] hover:bg-emerald-500/[0.04] border-emerald-500/15 shadow-[0_0_15px_-3px_rgba(16,185,129,0.12)] hover:shadow-[0_0_25px_0_rgba(16,185,129,0.22)]";
+  // active
+  return "bg-amber-500/[0.02] hover:bg-amber-500/[0.04] border-amber-500/20 shadow-[0_0_15px_-3px_rgba(212,175,55,0.15)] hover:shadow-[0_0_22px_0_rgba(212,175,55,0.22)]";
 }
 
 export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
@@ -503,7 +535,8 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       ) : (
         <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {filteredLoans.map((loan) => {
-            const cardBg = getCardGlow(loan.status);
+            const dynamicStatus = getCardStatus(loan.status, loan.outstandingBalance, loan.dueDate);
+            const cardBg = getCardGlow(dynamicStatus);
             const duration = getDuration(loan.dateGiven, loan.dueDate, loan.interestType);
             const isSettled = loan.outstandingBalance <= 0 || loan.status === "closed";
 
@@ -525,36 +558,49 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                       </div>
                     </div>
 
-                    <StatusBadge status={loan.status} />
+                    <StatusBadge status={loan.status} outstanding={loan.outstandingBalance} dueDate={loan.dueDate} />
                   </div>
 
                   {/* Loan Details Grid */}
                   <div className="grid grid-cols-2 gap-3 bg-black/15 dark:bg-black/35 p-3.5 rounded-xl border border-white/[0.02] text-left text-xs">
                     <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Loan Principal</p>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Loan Amount</p>
                       <p className="font-extrabold text-foreground mt-0.5">₹{Number(loan.principal).toLocaleString("en-IN")}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Outstanding</p>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Outstanding Amount</p>
                       <p className={`font-extrabold mt-0.5 ${loan.outstandingBalance > 0 ? "text-primary" : "text-emerald-400"}`}>
                         ₹{loan.outstandingBalance.toLocaleString("en-IN")}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Interest Rate</p>
-                      <p className="font-semibold text-foreground mt-0.5 capitalize">
-                        ₹{Number(loan.interestRate)}/{loan.interestType === "monthly" ? "mo" : "day"}
-                      </p>
-                    </div>
-                    <div>
                       <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Due Date</p>
-                      <p className={`font-semibold mt-0.5 ${loan.status === "overdue" ? "text-red-400 font-bold" : "text-foreground"}`}>
+                      <p className="font-semibold text-foreground mt-0.5">
                         {new Date(loan.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                       </p>
                     </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Timeline</p>
+                      <p className={`font-semibold mt-0.5 ${
+                        dynamicStatus === "overdue" ? "text-red-400 font-bold" :
+                        dynamicStatus === "due_today" ? "text-blue-400 font-bold" :
+                        dynamicStatus === "paid" ? "text-emerald-400" :
+                        "text-amber-400"
+                      }`}>
+                        {dynamicStatus === "overdue" && `${differenceInDays(today, new Date(loan.dueDate))} Days Overdue`}
+                        {dynamicStatus === "due_today" && "Due Today"}
+                        {dynamicStatus === "active" && `${differenceInDays(new Date(loan.dueDate), today)} Days Left`}
+                        {dynamicStatus === "paid" && "Settled"}
+                      </p>
+                    </div>
                     <div className="col-span-2 border-t border-white/[0.04] pt-2 mt-0.5 flex justify-between text-[10px] text-muted-foreground">
-                      <span>Start: {new Date(loan.dateGiven).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
-                      <span>Duration: {duration}</span>
+                      <span>Rate: ₹{Number(loan.interestRate)}/{loan.interestType === "monthly" ? "mo" : "day"}</span>
+                      <span>Payment Status: <strong className="capitalize">{
+                        dynamicStatus === "paid" ? "Paid" :
+                        dynamicStatus === "due_today" ? "Payment Pending" :
+                        dynamicStatus === "overdue" ? "Overdue" :
+                        "Active"
+                      }</strong></span>
                     </div>
                   </div>
                 </div>
@@ -827,7 +873,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
           <DialogHeader className="border-b border-border/40 pb-4">
             <DialogTitle className="text-xl font-black tracking-tight flex items-center justify-between">
               <span>Detailed Audit File</span>
-              {selectedLoan?.status && <StatusBadge status={selectedLoan.status} />}
+              {selectedLoan && <StatusBadge status={selectedLoan.status} outstanding={selectedLoan.outstandingBalance} dueDate={selectedLoan.dueDate} />}
             </DialogTitle>
             <DialogDescription>
               Verify KYC, loan limits, payment logs, and reminder dispatch audit trail.

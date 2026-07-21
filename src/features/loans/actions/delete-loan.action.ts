@@ -33,7 +33,10 @@ export async function deleteLoanAction(
       data: { success: true },
     };
   } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : "Failed to delete loan";
-    return { success: false, error: errorMsg };
+    console.error("Delete loan error:", err);
+    return {
+      success: false,
+      error: "Unable to delete loan. Please try again or contact the administrator."
+    };
   }
 }

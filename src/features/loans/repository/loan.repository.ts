@@ -1,5 +1,5 @@
 import { db } from "@/db/client";
-import { loansTable, borrowersTable, paymentsTable, loanApplicationsTable, type Loan, type InsertLoan, type LoanStatus, type Borrower } from "@/db/schema";
+import { loansTable, borrowersTable, paymentsTable, loanApplicationsTable, notificationsLogTable, auditLogTable, type Loan, type InsertLoan, type LoanStatus, type Borrower } from "@/db/schema";
 import { eq, or, like, sql, and, inArray, asc, desc } from "drizzle-orm";
 import { PaginatedResult } from "@/types/api.types";
 import { calculatePeriods, calculateMonthlyInterest, calculateOutstandingBalance } from "@/domain/interest-calculator";
@@ -385,13 +385,24 @@ export class LoanRepository {
         .delete(paymentsTable)
         .where(eq(paymentsTable.loanId, id));
 
-      // 2. Set loanId to null on loan applications referencing this loan
+      // 2. Delete notification/reminder logs associated with this loan
+      await tx
+        .delete(notificationsLogTable)
+        .where(eq(notificationsLogTable.loanId, id));
+
+      // 3. Untie references in audit log
+      await tx
+        .update(auditLogTable)
+        .set({ loanId: null })
+        .where(eq(auditLogTable.loanId, id));
+
+      // 4. Set loanId to null on loan applications referencing this loan
       await tx
         .update(loanApplicationsTable)
         .set({ loanId: null })
         .where(eq(loanApplicationsTable.loanId, id));
 
-      // 3. Delete the loan
+      // 5. Finally delete the loan record
       await tx
         .delete(loansTable)
         .where(eq(loansTable.loanId, id));

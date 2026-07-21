@@ -60,6 +60,7 @@ export async function updateBorrowerAction(
 
     revalidatePath(`/borrowers/${borrowerId}`);
     revalidatePath("/borrowers");
+    revalidatePath("/loan-management");
 
     return { success: true, data: { success: true } };
   } catch (err) {

@@ -61,7 +61,7 @@ export default function NewLoanPage() {
   useEffect(() => {
     if (state?.success) {
       toast.success("Loan created successfully!");
-      router.push("/loans");
+      router.push("/loan-management");
       router.refresh();
     } else if (state && !state.success) {
       toast.error(typeof state.error === "string" ? state.error : "Validation errors found");
@@ -101,7 +101,7 @@ export default function NewLoanPage() {
     <div className="max-w-4xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3 text-left">
-        <Link href="/loans">
+        <Link href="/loan-management">
           <button className="flex items-center justify-center h-10 w-10 rounded-xl bg-secondary border border-border text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-4 w-4" />
           </button>

@@ -26,6 +26,7 @@ export async function deleteLoanAction(
 
     revalidatePath("/loans");
     revalidatePath("/borrowers");
+    revalidatePath("/loan-management");
 
     return {
       success: true,

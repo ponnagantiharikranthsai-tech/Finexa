@@ -346,6 +346,38 @@ export class LoanRepository {
     };
   }
 
+  async findAllManagement(): Promise<LoanWithBorrower[]> {
+    const rawLoans = await db
+      .select({
+        loan: loansTable,
+        borrower: borrowersTable,
+      })
+      .from(loansTable)
+      .leftJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
+      .orderBy(desc(loansTable.createdAt));
+
+    const loansOnly = rawLoans.map(item => item.loan);
+    const outstandingBalancesMap = await this.getOutstandingBalancesForLoans(loansOnly);
+
+    const data: LoanWithBorrower[] = [];
+    for (const item of rawLoans) {
+      if (item.borrower) {
+        const outstandingBalance = outstandingBalancesMap.get(item.loan.loanId) || 0;
+        const monthlyInterestAmount = calculateMonthlyInterest(
+          Number(item.loan.principal),
+          Number(item.loan.interestRate)
+        );
+        data.push({
+          ...item.loan,
+          borrower: item.borrower,
+          outstandingBalance,
+          monthlyInterestAmount,
+        });
+      }
+    }
+    return data;
+  }
+
   async deleteById(id: string): Promise<void> {
     await db.transaction(async (tx) => {
       // 1. Delete payments associated with this loan

@@ -22,6 +22,7 @@ export async function deleteBorrowerAction(
     await auditLog("borrower_deleted", "borrower", borrowerId, { name: existing.name, mobile: existing.mobile });
 
     revalidatePath("/borrowers");
+    revalidatePath("/loan-management");
 
     return { success: true, data: { success: true } };
   } catch (err) {

@@ -36,18 +36,11 @@ export default function HomePage() {
 
   const navCards = [
     {
-      label: "Loans",
-      desc: "Manage profiles & repayment schedules",
-      href: "/loans",
+      label: "Loan Management",
+      desc: "Manage profiles, KYC records & repayment schedules",
+      href: "/loan-management",
       icon: CreditCard,
       accent: "group-hover:text-emerald-400"
-    },
-    {
-      label: "Borrowers",
-      desc: "Manage KYC records & loan histories",
-      href: "/borrowers",
-      icon: Users,
-      accent: "group-hover:text-sky-400"
     },
     {
       label: "Applications",
@@ -188,7 +181,7 @@ export default function HomePage() {
 
       {/* ─── 2. FOUR PREMIUM NAVIGATION CARDS ─── */}
       <div className="w-full max-w-4xl px-6 relative z-10 mt-8">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
           {navCards.map((card) => {
             const Icon = card.icon;
             return (

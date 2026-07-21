@@ -26,7 +26,10 @@ export async function deleteBorrowerAction(
 
     return { success: true, data: { success: true } };
   } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : "Failed to delete borrower";
-    return { success: false, error: errorMsg };
+    console.error("Delete borrower error:", err);
+    return {
+      success: false,
+      error: "Unable to delete borrower. Please try again or contact the administrator."
+    };
   }
 }

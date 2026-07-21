@@ -427,7 +427,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     startTransition(async () => {
       const res = await deleteBorrowerAction(borrowerId);
       if (res.success) {
-        toast.success("Borrower and all loans deleted successfully.");
+        toast.success("Borrower profile deleted successfully.");
         setDetailsOpen(false);
         router.refresh();
       } else {
@@ -1163,11 +1163,16 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                 <span className="text-muted-foreground">Loan File ID: <code className="font-mono text-[10px]">{selectedLoan.loanId}</code></span>
                 <button
                   type="button"
+                  disabled={isPending}
                   onClick={() => handleDeleteBorrower(selectedLoan.borrowerId, selectedLoan.borrower.name)}
-                  className="flex items-center justify-center gap-1 px-3 py-2 border border-red-500/20 text-red-400 bg-red-500/[0.02] hover:bg-red-500/10 rounded-xl transition-all duration-200"
+                  className="flex items-center justify-center gap-1.5 px-3.5 py-2 border border-red-500/20 text-red-400 bg-red-500/[0.02] hover:bg-red-500/10 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  <span>Delete Borrower Profile Entirely</span>
+                  {isPending ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
+                  <span>{isPending ? "Deleting borrower profile..." : "Delete Borrower Profile Entirely"}</span>
                 </button>
               </div>
             </div>

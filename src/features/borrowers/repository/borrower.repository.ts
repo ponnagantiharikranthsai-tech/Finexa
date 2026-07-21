@@ -1,5 +1,5 @@
 import { db } from "@/db/client";
-import { borrowersTable, loansTable, paymentsTable, loanApplicationsTable, type Borrower, type InsertBorrower } from "@/db/schema";
+import { borrowersTable, loansTable, paymentsTable, loanApplicationsTable, notificationsLogTable, auditLogTable, type Borrower, type InsertBorrower } from "@/db/schema";
 import { eq, or, like, sql, inArray } from "drizzle-orm";
 import { PaginatedResult } from "@/types/api.types";
 
@@ -107,6 +107,7 @@ export class BorrowerRepository {
 
   async deleteById(id: string): Promise<void> {
     await db.transaction(async (tx) => {
+      // Find all loans for the borrower
       const loans = await tx
         .select()
         .from(loansTable)
@@ -114,25 +115,51 @@ export class BorrowerRepository {
       const loanIds = loans.map((l) => l.loanId);
 
       if (loanIds.length > 0) {
+        // Step 1: Delete all repayment records related to the borrower's loans
         await tx
           .delete(paymentsTable)
           .where(inArray(paymentsTable.loanId, loanIds));
 
+        // Step 2 & 3: Delete all reminders and notification logs related to the borrower's loans
         await tx
-          .update(loanApplicationsTable)
-          .set({ loanId: null, borrowerId: null })
-          .where(inArray(loanApplicationsTable.loanId, loanIds));
+          .delete(notificationsLogTable)
+          .where(inArray(notificationsLogTable.loanId, loanIds));
+
+        // Untie audit log records
+        await tx
+          .update(auditLogTable)
+          .set({ loanId: null })
+          .where(inArray(auditLogTable.loanId, loanIds));
       }
 
+      // Step 4: Delete all internal notes (explicitly nulling out before deleting parent row)
       await tx
-        .update(loanApplicationsTable)
-        .set({ borrowerId: null })
-        .where(eq(loanApplicationsTable.borrowerId, id));
+        .update(borrowersTable)
+        .set({ internalNotes: null, internalNotesUpdatedAt: null })
+        .where(eq(borrowersTable.borrowerId, id));
 
+      // Step 5: Delete all applications associated with this borrower or their loans
+      if (loanIds.length > 0) {
+        await tx
+          .delete(loanApplicationsTable)
+          .where(
+            or(
+              eq(loanApplicationsTable.borrowerId, id),
+              inArray(loanApplicationsTable.loanId, loanIds)
+            )
+          );
+      } else {
+        await tx
+          .delete(loanApplicationsTable)
+          .where(eq(loanApplicationsTable.borrowerId, id));
+      }
+
+      // Step 6: Delete all loan records linked to this borrower
       await tx
         .delete(loansTable)
         .where(eq(loansTable.borrowerId, id));
 
+      // Step 7: Finally delete the borrower record itself
       await tx
         .delete(borrowersTable)
         .where(eq(borrowersTable.borrowerId, id));

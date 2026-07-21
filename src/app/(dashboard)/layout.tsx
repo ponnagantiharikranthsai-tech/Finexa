@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { logoutAction } from "@/features/auth/actions/logout.action";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -38,6 +38,15 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    router.prefetch("/home");
+    router.prefetch("/loan-management");
+    router.prefetch("/capital-management");
+    router.prefetch("/applications");
+    router.prefetch("/reports");
+  }, [router]);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [isLoggingOut, startTransition] = useTransition();
 

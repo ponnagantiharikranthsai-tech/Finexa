@@ -49,6 +49,8 @@ export const loanApplicationsTable = pgTable("loan_applications", {
 }, (table) => [
   index("idx_loan_applications_code").on(table.applicationCode),
   index("idx_loan_applications_status").on(table.status),
+  index("idx_loan_applications_borrower_id").on(table.borrowerId),
+  index("idx_loan_applications_loan_id").on(table.loanId),
 ]);
 
 export type LoanApplication = typeof loanApplicationsTable.$inferSelect;

@@ -42,6 +42,9 @@ export const borrowersTable = pgTable("borrowers", {
     .default(sql`now()`),
 }, (table) => [
   index("idx_borrowers_aadhaar").on(table.aadhaarEncrypted),
+  index("idx_borrowers_name").on(table.name),
+  index("idx_borrowers_mobile").on(table.mobile),
+  index("idx_borrowers_pan").on(table.panEncrypted),
 ]);
 
 export type Borrower = typeof borrowersTable.$inferSelect;

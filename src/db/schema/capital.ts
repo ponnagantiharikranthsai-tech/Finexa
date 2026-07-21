@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, numeric, date, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, numeric, date, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 export const funderStatusEnum = pgEnum("funder_status", [
@@ -26,7 +26,10 @@ export const fundersTable = pgTable("funders", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .default(sql`now()`),
-});
+}, (table) => [
+  index("idx_funders_status").on(table.status),
+  index("idx_funders_mobile").on(table.mobile),
+]);
 
 export const capitalReturnsTable = pgTable("capital_returns", {
   returnId: uuid("return_id")
@@ -44,4 +47,6 @@ export const capitalReturnsTable = pgTable("capital_returns", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .default(sql`now()`),
-});
+}, (table) => [
+  index("idx_capital_returns_funder_id").on(table.funderId),
+]);

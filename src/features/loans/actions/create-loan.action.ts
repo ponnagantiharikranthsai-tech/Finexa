@@ -83,6 +83,7 @@ export async function createLoanAction(
     if (borrowerObj.email) {
       try {
         await emailService.sendLoanCreatedEmail({
+          loanId: loan.loanId,
           borrowerName: borrowerObj.name,
           borrowerEmail: borrowerObj.email,
           principal: Number(loan.principal),

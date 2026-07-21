@@ -43,6 +43,7 @@ export async function sendReminderAction(
     if (loan.borrower.email) {
       try {
         await emailService.sendReminderEmail({
+          loanId: loan.loanId,
           borrowerName: loan.borrower.name,
           borrowerEmail: loan.borrower.email,
           principal: Number(loan.principal),
@@ -59,6 +60,7 @@ export async function sendReminderAction(
           status: "sent",
         });
       } catch (e: any) {
+        console.error("Reminder email failed:", e);
         await notificationLogRepository.insert({
           loanId: loan.loanId,
           channel: "email",
@@ -66,6 +68,7 @@ export async function sendReminderAction(
           status: "failed",
           errorMessage: e.message || "Failed to send email",
         });
+        return { success: false, error: "Unable to send email. Please try again later." };
       }
     }
 

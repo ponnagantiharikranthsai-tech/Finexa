@@ -30,6 +30,9 @@ export const borrowersTable = pgTable("borrowers", {
 
   locationUrl: text("location_url"),
 
+  internalNotes: text("internal_notes"),
+  internalNotesUpdatedAt: timestamp("internal_notes_updated_at", { withTimezone: true }),
+
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .default(sql`now()`),

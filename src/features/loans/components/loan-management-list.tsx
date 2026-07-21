@@ -18,6 +18,7 @@ import { deleteBorrowerAction } from "@/features/borrowers/actions/delete-borrow
 import { updateBorrowerAction } from "@/features/borrowers/actions/update-borrower.action";
 import { getExtraLoanDetailsAction } from "@/features/loans/actions/get-extra-loan-details.action";
 import { deletePaymentAction } from "@/features/payments/actions/delete-payment.action";
+import { saveInternalNotesAction } from "@/features/borrowers/actions/save-internal-notes.action";
 import {
   Search, Plus, Send, Landmark, Calendar, RefreshCw, CreditCard, ChevronRight,
   Trash2, Users, Mail, FileText, MapPin, User, Eye, EyeOff, Edit, Clock,
@@ -112,6 +113,8 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   const [reminderOpen, setReminderOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [notesText, setNotesText] = useState("");
+  const [originalNotesText, setOriginalNotesText] = useState("");
 
   // Form inputs
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -137,6 +140,15 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   useEffect(() => {
     setLoans(initialLoans);
   }, [initialLoans]);
+
+  useEffect(() => {
+    if (selectedLoan) {
+      const updated = loans.find(l => l.loanId === selectedLoan.loanId);
+      if (updated) {
+        setSelectedLoan(updated);
+      }
+    }
+  }, [loans]);
 
   // Deep linking triggers
   useEffect(() => {
@@ -249,8 +261,29 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     });
 
   // ── Handlers ────────────────────────────────────────────────────────────────
+  const handleSaveNotes = async (borrowerId: string, textToSave: string) => {
+    if (textToSave === originalNotesText) return;
+
+    const res = await saveInternalNotesAction(borrowerId, textToSave);
+    if (res.success) {
+      setOriginalNotesText(textToSave);
+      toast.success("Notes saved successfully.");
+    } else {
+      toast.error(res.error || "Failed to save notes.");
+    }
+  };
+
+  const handleDetailsClose = () => {
+    if (selectedLoan && notesText !== originalNotesText) {
+      handleSaveNotes(selectedLoan.borrowerId, notesText);
+    }
+    setDetailsOpen(false);
+  };
+
   const handleViewDetails = async (loan: LoanManagementDetailResult) => {
     setSelectedLoan(loan);
+    setNotesText((loan.borrower as any).internalNotes || "");
+    setOriginalNotesText((loan.borrower as any).internalNotes || "");
     setDetailsOpen(true);
     setDetailsLoading(true);
     setExtraDetails(null);
@@ -868,7 +901,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       </Dialog>
 
       {/* ── View Details Modal (Master On-Demand Details) ───────────────────── */}
-      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+      <Dialog open={detailsOpen} onOpenChange={(open) => { if (!open) handleDetailsClose(); else setDetailsOpen(true); }}>
         <DialogContent className="rounded-2xl max-w-2xl max-h-[85vh] overflow-y-auto fx-glass-card border-border/50 bg-white dark:bg-card p-6">
           <DialogHeader className="border-b border-border/40 pb-4">
             <DialogTitle className="text-xl font-black tracking-tight flex items-center justify-between">
@@ -1073,7 +1106,59 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                 </div>
               </div>
 
-              {/* ── Section 4: Audit / Destructive actions ───────────────────── */}
+              {/* ── Section 4: Internal Notes ─────────────────────────────────── */}
+              <div className="space-y-3.5 border-t border-border/40 pt-4">
+                <h3 className="font-bold text-base text-primary flex items-center gap-1.5">
+                  <FileText className="h-4.5 w-4.5" /> 📝 Internal Notes
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Private notes visible only to the administrator. These notes are used to record conversations, payment promises, reminders, observations, and other loan-related information.
+                </p>
+                <div className="space-y-3">
+                  <textarea
+                    rows={20}
+                    maxLength={5500}
+                    placeholder={`Example:\nCustomer requested 5 more days.\nInterest paid on 20 July 2026.\nPromised to clear principal next month.\nVisited customer's home.\nReminder sent via WhatsApp.`}
+                    value={notesText}
+                    onChange={(e) => setNotesText(e.target.value)}
+                    onBlur={() => handleSaveNotes(selectedLoan.borrowerId, notesText)}
+                    className="w-full rounded-2xl bg-black/15 dark:bg-black/35 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary p-4 text-sm font-medium transition-all"
+                  />
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+                      {(selectedLoan.borrower as any).internalNotesUpdatedAt ? (
+                        <>
+                          <span><strong>Last Updated:</strong> {new Date((selectedLoan.borrower as any).internalNotesUpdatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} at {new Date((selectedLoan.borrower as any).internalNotesUpdatedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
+                          <span><strong>Updated By:</strong> Admin</span>
+                        </>
+                      ) : (
+                        <span><strong>Last Updated:</strong> Never</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={() => handleSaveNotes(selectedLoan.borrowerId, notesText)}
+                        className="h-9 px-4 rounded-xl text-xs font-bold fx-brand-gradient border-0 text-white fx-cta-glow px-4"
+                      >
+                        Save Notes
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          setNotesText("");
+                          await handleSaveNotes(selectedLoan.borrowerId, "");
+                        }}
+                        className="h-9 px-4 rounded-xl text-xs font-bold border-border"
+                      >
+                        Clear Notes
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Section 5: Audit / Destructive actions ───────────────────── */}
               <div className="border-t border-border/40 pt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs">
                 <span className="text-muted-foreground">Loan File ID: <code className="font-mono text-[10px]">{selectedLoan.loanId}</code></span>
                 <button
@@ -1089,7 +1174,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
           )}
 
           <div className="border-t border-border/40 pt-4 mt-6 flex justify-end">
-            <Button variant="outline" onClick={() => setDetailsOpen(false)} className="rounded-xl border-border">
+            <Button variant="outline" onClick={handleDetailsClose} className="rounded-xl border-border">
               Close Audit File
             </Button>
           </div>

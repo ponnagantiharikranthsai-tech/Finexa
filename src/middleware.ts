@@ -14,10 +14,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
+  let supabaseResponse = NextResponse.next({
+    request,
   });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -25,7 +23,7 @@ export async function middleware(request: NextRequest) {
 
   if (!supabaseUrl || !supabaseAnonKey) {
     console.error("Supabase environment variables missing in middleware!");
-    return response;
+    return supabaseResponse;
   }
 
   const supabase = createServerClient(
@@ -37,14 +35,12 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          response = NextResponse.next({
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          supabaseResponse = NextResponse.next({
             request,
           });
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, options)
           );
         },
       },
@@ -56,7 +52,7 @@ export async function middleware(request: NextRequest) {
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
     user = supabaseUser || null;
   } catch (error) {
-    // Cookie is invalid or expired
+    user = null;
   }
 
   const isPublicPath = pathname === "/" || pathname === "/login" || pathname.startsWith("/apply/");
@@ -65,28 +61,36 @@ export async function middleware(request: NextRequest) {
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    return NextResponse.redirect(url);
+    const redirectResponse = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((c) => redirectResponse.cookies.set(c.name, c.value, c));
+    return redirectResponse;
   }
 
   // 3. Authenticated user attempting to access /login or / -> Redirect to /home
   if (user && (pathname === "/login" || pathname === "/")) {
     const url = request.nextUrl.clone();
     url.pathname = "/home";
-    return NextResponse.redirect(url);
+    const redirectResponse = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((c) => redirectResponse.cookies.set(c.name, c.value, c));
+    return redirectResponse;
   }
 
-  // 4. If user is authenticated, forward x-user-id in request headers to downstream Server Components & Server Actions
+  // 4. If user is authenticated, forward x-user-id header while preserving cookies
   if (user) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-user-id", user.id);
-    response = NextResponse.next({
+    const finalResponse = NextResponse.next({
       request: {
         headers: requestHeaders,
       },
     });
+    supabaseResponse.cookies.getAll().forEach((c) => {
+      finalResponse.cookies.set(c.name, c.value, c);
+    });
+    return finalResponse;
   }
 
-  return response;
+  return supabaseResponse;
 }
 
 export const config = {

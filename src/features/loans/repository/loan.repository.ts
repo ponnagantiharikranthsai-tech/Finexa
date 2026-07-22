@@ -1,8 +1,9 @@
 import { db } from "@/db/client";
-import { loansTable, borrowersTable, paymentsTable, loanApplicationsTable, notificationsLogTable, auditLogTable, type Loan, type InsertLoan, type LoanStatus, type Borrower } from "@/db/schema";
+import { loansTable, borrowersTable, paymentsTable, loanApplicationsTable, notificationsLogTable, auditLogTable, penaltyLedgerTable, type Loan, type InsertLoan, type LoanStatus, type Borrower, type PenaltyLedger } from "@/db/schema";
 import { eq, or, like, sql, and, inArray, asc, desc } from "drizzle-orm";
 import { PaginatedResult } from "@/types/api.types";
 import { calculatePeriods, calculateMonthlyInterest, calculateOutstandingBalance } from "@/domain/interest-calculator";
+import { calculateAccruedPenalty } from "@/domain/penalty-calculator";
 
 export type LoanWithBorrower = Loan & {
   borrower: Borrower;
@@ -54,11 +55,20 @@ export class LoanRepository {
       const periods = calculatePeriods(loan.dateGiven, loan.dueDate);
       const monthlyInterest = calculateMonthlyInterest(Number(loan.principal), Number(loan.interestRate));
       const totalInterest = periods * monthlyInterest;
-      
+
+      const penaltyInfo = calculateAccruedPenalty({
+        principal: Number(loan.principal),
+        dueDate: loan.dueDate,
+        status: loan.status,
+        penaltyType: (loan as any).penaltyType || "fixed",
+        penaltyRate: Number((loan as any).penaltyRate || 50),
+        manualPenaltyAmount: Number(loan.penaltyAmount || 0),
+      });
+
       const balance = calculateOutstandingBalance(
         Number(loan.principal),
         totalInterest,
-        Number(loan.penaltyAmount || 0),
+        penaltyInfo.totalPenalty,
         totalPayments
       );
       balanceMap.set(loan.loanId, balance);
@@ -407,6 +417,60 @@ export class LoanRepository {
         .delete(loansTable)
         .where(eq(loansTable.loanId, id));
     });
+  }
+
+  async updatePenaltySettings(
+    loanId: string,
+    penaltyType: "fixed" | "percentage",
+    penaltyRate: number,
+    adminName?: string
+  ): Promise<void> {
+    const [loan] = await db.select().from(loansTable).where(eq(loansTable.loanId, loanId)).limit(1);
+    if (!loan) throw new Error("Loan not found");
+
+    const currentBalanceMap = await this.getOutstandingBalancesForLoans([loan]);
+    const balanceBefore = currentBalanceMap.get(loanId) || 0;
+
+    await db
+      .update(loansTable)
+      .set({
+        penaltyType,
+        penaltyRate: penaltyRate.toString(),
+        updatedAt: new Date(),
+      })
+      .where(eq(loansTable.loanId, loanId));
+
+    const updatedLoan = { ...loan, penaltyType, penaltyRate: penaltyRate.toString() };
+    const updatedBalanceMap = await this.getOutstandingBalancesForLoans([updatedLoan]);
+    const balanceAfter = updatedBalanceMap.get(loanId) || 0;
+
+    const penaltyInfo = calculateAccruedPenalty({
+      principal: Number(loan.principal),
+      dueDate: loan.dueDate,
+      status: loan.status,
+      penaltyType,
+      penaltyRate,
+      manualPenaltyAmount: Number(loan.penaltyAmount || 0),
+    });
+
+    await db.insert(penaltyLedgerTable).values({
+      loanId,
+      calculationDate: new Date().toISOString().split("T")[0]!,
+      daysOverdue: penaltyInfo.daysOverdue.toString(),
+      penaltyAdded: penaltyInfo.totalPenalty.toString(),
+      outstandingBefore: balanceBefore.toString(),
+      outstandingAfter: balanceAfter.toString(),
+      adminName: adminName || "Administrator",
+      remarks: `Penalty rule updated to ${penaltyType === "fixed" ? `₹${penaltyRate}/day` : `${penaltyRate}%/day`}`,
+    });
+  }
+
+  async getPenaltyLedger(loanId: string): Promise<PenaltyLedger[]> {
+    return await db
+      .select()
+      .from(penaltyLedgerTable)
+      .where(eq(penaltyLedgerTable.loanId, loanId))
+      .orderBy(desc(penaltyLedgerTable.createdAt));
   }
 }
 

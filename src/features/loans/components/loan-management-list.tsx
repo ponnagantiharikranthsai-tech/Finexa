@@ -19,13 +19,17 @@ import { updateBorrowerAction } from "@/features/borrowers/actions/update-borrow
 import { getExtraLoanDetailsAction } from "@/features/loans/actions/get-extra-loan-details.action";
 import { deletePaymentAction } from "@/features/payments/actions/delete-payment.action";
 import { saveInternalNotesAction } from "@/features/borrowers/actions/save-internal-notes.action";
+import { updatePenaltySettingsAction } from "../actions/update-penalty-settings.action";
+import { getPenaltyLedgerAction } from "../actions/get-penalty-ledger.action";
+import { calculateAccruedPenalty } from "@/domain/penalty-calculator";
 import {
   Search, Plus, Send, Landmark, Calendar, RefreshCw, CreditCard, ChevronRight,
   Trash2, Users, Mail, FileText, MapPin, User, Eye, EyeOff, Edit, Clock,
-  AlertTriangle, Check, CheckCircle2, XCircle, ChevronDown, ListFilter, X
+  AlertTriangle, Check, CheckCircle2, XCircle, ChevronDown, ListFilter, X,
+  ShieldAlert, Settings, Percent, DollarSign, History
 } from "lucide-react";
 import type { LoanManagementDetailResult } from "../actions/get-loan-management-data.action";
-import type { Payment, NotificationLog } from "@/db/schema";
+import type { Payment, NotificationLog, PenaltyLedger } from "@/db/schema";
 import { calculatePeriods, calculateMonthlyInterest } from "@/domain/interest-calculator";
 import { differenceInDays } from "date-fns";
 
@@ -134,6 +138,12 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   const [extraDetails, setExtraDetails] = useState<{ payments: Payment[]; notifications: NotificationLog[] } | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [showSensitive, setShowSensitive] = useState(false);
+
+  // Penalty settings state
+  const [penaltyTypeInput, setPenaltyTypeInput] = useState<"fixed" | "percentage">("fixed");
+  const [penaltyRateInput, setPenaltyRateInput] = useState("50");
+  const [penaltyLedger, setPenaltyLedger] = useState<PenaltyLedger[]>([]);
+  const [isUpdatingPenalty, setIsUpdatingPenalty] = useState(false);
 
   // Sync state with parent props when page dynamic refresh happens
   useEffect(() => {
@@ -283,20 +293,55 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     setSelectedLoan(loan);
     setNotesText((loan.borrower as any).internalNotes || "");
     setOriginalNotesText((loan.borrower as any).internalNotes || "");
+    setPenaltyTypeInput(((loan as any).penaltyType as "fixed" | "percentage") || "fixed");
+    setPenaltyRateInput(((loan as any).penaltyRate || 50).toString());
     setDetailsOpen(true);
     setDetailsLoading(true);
     setExtraDetails(null);
+    setPenaltyLedger([]);
     setShowSensitive(false);
 
     startTransition(async () => {
-      const res = await getExtraLoanDetailsAction(loan.loanId);
+      const [res, ledgerRes] = await Promise.all([
+        getExtraLoanDetailsAction(loan.loanId),
+        getPenaltyLedgerAction(loan.loanId),
+      ]);
       if (res.success && res.data) {
         setExtraDetails(res.data);
       } else {
         toast.error("Failed to load payment history ledger.");
       }
+      if (ledgerRes.success && ledgerRes.data) {
+        setPenaltyLedger(ledgerRes.data);
+      }
       setDetailsLoading(false);
     });
+  };
+
+  const handleUpdatePenaltySettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLoan) return;
+
+    const rate = Number(penaltyRateInput);
+    if (isNaN(rate) || rate < 0) {
+      toast.error("Please enter a valid non-negative penalty rate.");
+      return;
+    }
+
+    setIsUpdatingPenalty(true);
+    const res = await updatePenaltySettingsAction(selectedLoan.loanId, penaltyTypeInput, rate);
+    setIsUpdatingPenalty(false);
+
+    if (res.success) {
+      toast.success(`Penalty rule updated to ${penaltyTypeInput === "fixed" ? `₹${rate}/day` : `${rate}%/day`}`);
+      const ledgerRes = await getPenaltyLedgerAction(selectedLoan.loanId);
+      if (ledgerRes.success && ledgerRes.data) {
+        setPenaltyLedger(ledgerRes.data);
+      }
+      router.refresh();
+    } else {
+      toast.error(typeof res.error === "string" ? res.error : "Failed to update penalty settings");
+    }
   };
 
   const handleEditOpen = (loan: LoanManagementDetailResult, e: React.MouseEvent) => {
@@ -556,6 +601,15 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
             const duration = getDuration(loan.dateGiven, loan.dueDate, loan.interestType);
             const isSettled = loan.outstandingBalance <= 0 || loan.status === "closed";
 
+            const accruedPenalty = calculateAccruedPenalty({
+              principal: Number(loan.principal),
+              dueDate: loan.dueDate,
+              status: loan.status,
+              penaltyType: (loan as any).penaltyType || "fixed",
+              penaltyRate: Number((loan as any).penaltyRate || 50),
+              manualPenaltyAmount: Number(loan.penaltyAmount || 0),
+            });
+
             return (
               <div
                 key={loan.loanId}
@@ -574,7 +628,15 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                       </div>
                     </div>
 
-                    <StatusBadge status={loan.status} outstanding={loan.outstandingBalance} dueDate={loan.dueDate} />
+                    <div className="flex flex-col items-end gap-1">
+                      <StatusBadge status={loan.status} outstanding={loan.outstandingBalance} dueDate={loan.dueDate} />
+                      {accruedPenalty.isPenaltyActive && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20">
+                          <AlertTriangle className="h-3 w-3" />
+                          PENALTY ACTIVE
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Loan Details Grid */}
@@ -590,12 +652,18 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                       </p>
                     </div>
                     <div>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Penalty</p>
+                      <p className={`font-extrabold mt-0.5 ${accruedPenalty.totalPenalty > 0 ? "text-red-400 font-bold" : "text-emerald-400"}`}>
+                        ₹{accruedPenalty.totalPenalty.toLocaleString("en-IN")}
+                      </p>
+                    </div>
+                    <div>
                       <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Due Date</p>
                       <p className="font-semibold text-foreground mt-0.5">
                         {new Date(loan.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                       </p>
                     </div>
-                    <div>
+                    <div className="col-span-2">
                       <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Timeline</p>
                       <p className={`font-semibold mt-0.5 ${
                         dynamicStatus === "overdue" ? "text-red-400 font-bold" :
@@ -1022,6 +1090,165 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                   </div>
                 </div>
               </div>
+
+              {/* ── Section 2B: Penalty Details & Settings ───────────────── */}
+              {selectedLoan && (() => {
+                const penaltyInfo = calculateAccruedPenalty({
+                  principal: Number(selectedLoan.principal),
+                  dueDate: selectedLoan.dueDate,
+                  status: selectedLoan.status,
+                  penaltyType: (selectedLoan as any).penaltyType || "fixed",
+                  penaltyRate: Number((selectedLoan as any).penaltyRate || 50),
+                  manualPenaltyAmount: Number(selectedLoan.penaltyAmount || 0),
+                });
+                const totalInterest = getInterestAmount(selectedLoan);
+                const totalPayable = Number(selectedLoan.principal) + totalInterest + penaltyInfo.totalPenalty;
+
+                return (
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-base text-primary flex items-center gap-1.5 border-b border-border/40 pb-2">
+                      <ShieldAlert className="h-4 w-4 text-red-400" /> Penalty Details &amp; Settings
+                    </h3>
+
+                    {/* Penalty Overview Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-red-500/[0.03] dark:bg-red-500/[0.05] p-4 rounded-xl border border-red-500/20">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Penalty Status</span>
+                        <p className="font-bold text-xs mt-0.5">
+                          {penaltyInfo.isPenaltyActive ? (
+                            <span className="text-red-400 font-extrabold uppercase">● Active (Overdue)</span>
+                          ) : (
+                            <span className="text-emerald-400 font-semibold">● Inactive</span>
+                          )}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Penalty Type</span>
+                        <p className="font-semibold text-foreground mt-0.5 capitalize">
+                          {penaltyInfo.penaltyType} ({penaltyInfo.penaltyType === "fixed" ? `₹${penaltyInfo.penaltyRate}/day` : `${penaltyInfo.penaltyRate}%/day`})
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Days Overdue</span>
+                        <p className={`font-bold mt-0.5 ${penaltyInfo.daysOverdue > 0 ? "text-red-400 font-extrabold" : "text-foreground"}`}>
+                          {penaltyInfo.daysOverdue} Days
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Penalty</span>
+                        <p className={`font-extrabold mt-0.5 ${penaltyInfo.totalPenalty > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                          ₹{penaltyInfo.totalPenalty.toLocaleString("en-IN")}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Penalty Started On</span>
+                        <p className="font-semibold text-foreground mt-0.5">{selectedLoan.dueDate}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Daily Charge</span>
+                        <p className="font-semibold text-foreground mt-0.5">
+                          ₹{penaltyInfo.dailyPenalty.toLocaleString("en-IN")}/day
+                        </p>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Amount Payable</span>
+                        <p className="font-black text-primary text-sm mt-0.5">
+                          ₹{totalPayable.toLocaleString("en-IN")}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Penalty Settings Admin Control */}
+                    <form onSubmit={handleUpdatePenaltySettings} className="p-4 rounded-xl bg-accent/20 dark:bg-secondary/15 border border-border/40 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                          <Settings className="h-3.5 w-3.5 text-primary" /> Penalty Rule Configuration
+                        </h4>
+                        <span className="text-[10px] text-muted-foreground">Admin Only</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold uppercase text-muted-foreground">Calculation Mode</Label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setPenaltyTypeInput("fixed")}
+                              className={`flex-1 h-9 rounded-lg text-xs font-bold border transition-all ${
+                                penaltyTypeInput === "fixed"
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-transparent text-muted-foreground border-border hover:bg-accent/40"
+                              }`}
+                            >
+                              Fixed (₹)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPenaltyTypeInput("percentage")}
+                              className={`flex-1 h-9 rounded-lg text-xs font-bold border transition-all ${
+                                penaltyTypeInput === "percentage"
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-transparent text-muted-foreground border-border hover:bg-accent/40"
+                              }`}
+                            >
+                              Percent (%)
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold uppercase text-muted-foreground">
+                            {penaltyTypeInput === "fixed" ? "Daily Amount (₹/day)" : "Daily Rate (%/day)"}
+                          </Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={penaltyRateInput}
+                            onChange={(e) => setPenaltyRateInput(e.target.value)}
+                            placeholder={penaltyTypeInput === "fixed" ? "50" : "1.0"}
+                            className="h-9 rounded-lg text-xs bg-transparent border-border"
+                            required
+                          />
+                        </div>
+
+                        <Button
+                          type="submit"
+                          disabled={isUpdatingPenalty}
+                          className="h-9 rounded-lg text-xs font-bold fx-brand-gradient border-0 text-white fx-pressable"
+                        >
+                          {isUpdatingPenalty ? "Saving..." : "Update Rule"}
+                        </Button>
+                      </div>
+                    </form>
+
+                    {/* Penalty Ledger History */}
+                    <div className="space-y-2.5">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                        <History className="h-3.5 w-3.5 text-primary" /> Penalty Audit Ledger
+                      </h4>
+                      {penaltyLedger.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-2">No historical penalty changes logged yet.</p>
+                      ) : (
+                        <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                          {penaltyLedger.map((row) => (
+                            <div key={row.ledgerId} className="p-2.5 rounded-lg bg-black/20 border border-border/30 text-xs flex justify-between items-center">
+                              <div>
+                                <p className="font-semibold text-foreground">{row.remarks || "Penalty Updated"}</p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {row.calculationDate} • {row.adminName || "Admin"} • {row.daysOverdue} Days Overdue
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-bold text-red-400 text-xs">₹{Number(row.penaltyAdded).toLocaleString("en-IN")}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* ── Section 3: Ledger ────────────────────────────────────────── */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

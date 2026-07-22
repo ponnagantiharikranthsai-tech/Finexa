@@ -514,6 +514,37 @@ export default function ReportsPage() {
             </div>
           </div>
 
+          {/* 4B. PENALTY MANAGEMENT ANALYTICS */}
+          {report.penalty && (
+            <div className="p-6 rounded-2xl bg-[#141923]/60 border border-white/5 text-left print-card space-y-4">
+              <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#FFD700] flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-red-400" /> Penalty Management Overview
+                </h4>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+                  Late Fee Ledger
+                </span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                {[
+                  { label: "Today's Penalty", val: report.penalty.todaysPenaltyCollected, format: "currency", color: "text-emerald-400" },
+                  { label: "Monthly Penalty", val: report.penalty.monthlyPenaltyCollected, format: "currency", color: "text-emerald-400" },
+                  { label: "Total Collected", val: report.penalty.totalPenaltyCollected, format: "currency", color: "text-emerald-400" },
+                  { label: "Outstanding Penalty", val: report.penalty.outstandingPenalty, format: "currency", color: "text-red-400" },
+                  { label: "Active Penalties", val: report.penalty.borrowersWithActivePenalties, format: "number", color: "text-amber-400" },
+                  { label: "Total Penalty Income", val: report.penalty.totalPenaltyIncome, format: "currency", color: "text-[#FFD700]" },
+                ].map((item, idx) => (
+                  <div key={idx} className="p-3.5 rounded-xl bg-black/35 border border-white/5 space-y-1">
+                    <p className="text-[9px] uppercase font-bold text-zinc-400 print-muted">{item.label}</p>
+                    <p className={`text-sm font-black ${item.color} print-text`}>
+                      <AnimatedCounter value={Number(item.val) || 0} isCurrency={item.format === "currency"} />
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* 5. CHARTS GRIDS */}
           <div className="grid md:grid-cols-2 gap-6 text-left no-print">
             

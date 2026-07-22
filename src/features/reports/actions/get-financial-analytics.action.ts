@@ -5,6 +5,7 @@ import { loansTable, borrowersTable, paymentsTable } from "@/db/schema";
 import { loanRepository } from "@/features/loans/repository/loan.repository";
 import { requireAuth } from "@/lib/auth";
 import type { ActionResult } from "@/types/api.types";
+import { calculateAccruedPenalty } from "@/domain/penalty-calculator";
 import { sql } from "drizzle-orm";
 
 export type FinancialAnalyticsData = {
@@ -49,6 +50,14 @@ export type FinancialAnalyticsData = {
     remainingPrincipal: number;
     totalExpectedCollection: number;
     netProfit: number;
+  };
+  penalty: {
+    todaysPenaltyCollected: number;
+    monthlyPenaltyCollected: number;
+    totalPenaltyCollected: number;
+    outstandingPenalty: number;
+    borrowersWithActivePenalties: number;
+    totalPenaltyIncome: number;
   };
   charts: {
     dailyLending: { date: string; amount: number }[];
@@ -309,6 +318,34 @@ export async function getFinancialAnalyticsAction(
       { status: "Submitted", count: statusCounts["submitted"] || 0, color: "#6366F1" },
     ];
 
+    // ─── 8. PENALTY REPORT ANALYTICS ───
+    const todaysPenaltyCollected = allPayments
+      .filter((p) => p.paymentDate === todayStr && p.paymentType === "penalty")
+      .reduce((sum, p) => sum + Number(p.amount), 0);
+
+    const monthlyPenaltyCollected = allPayments
+      .filter((p) => p.paymentDate >= thisMonthStartStr && p.paymentDate <= thisMonthEndStr && p.paymentType === "penalty")
+      .reduce((sum, p) => sum + Number(p.amount), 0);
+
+    let outstandingPenalty = 0;
+    const activePenaltyBorrowersSet = new Set<string>();
+
+    for (const loan of nonClosedLoans) {
+      const pInfo = calculateAccruedPenalty({
+        principal: Number(loan.principal),
+        dueDate: loan.dueDate,
+        status: loan.status,
+        penaltyType: (loan as any).penaltyType || "fixed",
+        penaltyRate: Number((loan as any).penaltyRate || 50),
+        manualPenaltyAmount: Number(loan.penaltyAmount || 0),
+      });
+
+      if (pInfo.totalPenalty > 0) {
+        outstandingPenalty += pInfo.totalPenalty;
+        activePenaltyBorrowersSet.add(loan.borrowerId);
+      }
+    }
+
     return {
       success: true,
       data: {
@@ -353,6 +390,14 @@ export async function getFinancialAnalyticsAction(
           remainingPrincipal,
           totalExpectedCollection,
           netProfit,
+        },
+        penalty: {
+          todaysPenaltyCollected,
+          monthlyPenaltyCollected,
+          totalPenaltyCollected: totalPenaltiesCollected,
+          outstandingPenalty: Math.round(outstandingPenalty * 100) / 100,
+          borrowersWithActivePenalties: activePenaltyBorrowersSet.size,
+          totalPenaltyIncome: totalPenaltiesCollected,
         },
         charts: {
           dailyLending,

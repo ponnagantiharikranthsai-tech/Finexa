@@ -103,7 +103,6 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
-  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   // Dialog States
@@ -482,114 +481,30 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
         {/* Filters & Sorting */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Status Filter Popover / Mobile Sheet */}
-          <div className="relative">
-            <button
-              onClick={() => setFilterPanelOpen(!filterPanelOpen)}
-              className="flex items-center gap-2 h-11 px-4 rounded-xl border border-border bg-transparent text-sm font-semibold hover:bg-accent/40 transition-colors"
-            >
-              <ListFilter className="h-4 w-4 text-primary" />
-              <span>Status: <strong className="capitalize text-primary">{statusFilter.replace("_", " ")}</strong></span>
-              <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-            </button>
-
-            {filterPanelOpen && (
-              <>
-                {/* Backdrop Overlay */}
-                <div
-                  className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm sm:bg-transparent sm:backdrop-blur-none"
-                  onClick={() => setFilterPanelOpen(false)}
-                />
-
-                {/* Desktop Dropdown (sm+) */}
-                <div className="hidden sm:block absolute right-0 mt-2 w-56 bg-white dark:bg-[#111827] border border-border/80 shadow-2xl rounded-2xl z-50 p-2 max-h-[60vh] overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/40 mb-1">
-                    Filter Loans
-                  </div>
-                  {[
-                    { id: "all", label: "All Loans" },
-                    { id: "active", label: "Active Loans" },
-                    { id: "due_today", label: "Due Today" },
-                    { id: "upcoming_due", label: "Upcoming Due" },
-                    { id: "overdue", label: "Overdue Loans" },
-                    { id: "completed", label: "Completed Loans" },
-                    { id: "paid", label: "Paid Loans" },
-                    { id: "unpaid", label: "Unpaid Loans" }
-                  ].map((f) => {
-                    const isSelected = statusFilter === f.id;
-                    return (
-                      <button
-                        key={f.id}
-                        onClick={() => {
-                          setStatusFilter(f.id);
-                          setFilterPanelOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-2.5 text-xs font-semibold rounded-xl flex items-center justify-between transition-colors ${
-                          isSelected
-                            ? "bg-primary/15 text-primary border border-primary/30"
-                            : "hover:bg-accent/40 text-foreground"
-                        }`}
-                      >
-                        <span>{f.label}</span>
-                        {isSelected && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Mobile Bottom Sheet (< sm / < 640px) */}
-                <div
-                  className="sm:hidden fixed inset-x-0 bottom-0 z-50 bg-white dark:bg-[#111827] border-t border-border/80 shadow-2xl rounded-t-3xl p-4 space-y-3 max-h-[65vh] flex flex-col animate-in slide-in-from-bottom duration-250"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="flex items-center justify-between border-b border-border/40 pb-3">
-                    <div className="flex items-center gap-2">
-                      <ListFilter className="h-4 w-4 text-primary" />
-                      <h3 className="text-sm font-bold text-foreground">Filter Loans by Status</h3>
-                    </div>
-                    <button
-                      onClick={() => setFilterPanelOpen(false)}
-                      className="h-8 w-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <div className="overflow-y-auto space-y-1.5 pr-1 flex-1 max-h-[55vh]">
-                    {[
-                      { id: "all", label: "All Loans" },
-                      { id: "active", label: "Active Loans" },
-                      { id: "due_today", label: "Due Today" },
-                      { id: "upcoming_due", label: "Upcoming Due" },
-                      { id: "overdue", label: "Overdue Loans" },
-                      { id: "completed", label: "Completed Loans" },
-                      { id: "paid", label: "Paid Loans" },
-                      { id: "unpaid", label: "Unpaid Loans" }
-                    ].map((f) => {
-                      const isSelected = statusFilter === f.id;
-                      return (
-                        <button
-                          key={f.id}
-                          onClick={() => {
-                            setStatusFilter(f.id);
-                            setFilterPanelOpen(false);
-                          }}
-                          className={`w-full text-left px-4 py-3 text-sm font-semibold rounded-xl flex items-center justify-between transition-all min-h-[48px] ${
-                            isSelected
-                              ? "bg-primary/15 text-primary border border-primary/30 shadow-sm"
-                              : "text-foreground hover:bg-accent/50 active:bg-accent/70"
-                          }`}
-                        >
-                          <span>{f.label}</span>
-                          {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+          {/* Status Filter Dropdown */}
+          <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val || "all")}>
+            <SelectTrigger className="h-11 min-w-[140px] px-4 rounded-xl border border-border bg-transparent text-sm font-semibold hover:bg-accent/40 transition-colors">
+              <div className="flex items-center gap-2">
+                <ListFilter className="h-4 w-4 text-primary shrink-0" />
+                <span>
+                  Status: <strong className="capitalize text-primary">{statusFilter.replace("_", " ")}</strong>
+                </span>
+              </div>
+            </SelectTrigger>
+            <SelectContent align="start" className="rounded-2xl border border-border bg-white dark:bg-[#111827] z-[100] min-w-56 p-1.5 max-h-[60vh] shadow-2xl">
+              <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/40 mb-1">
+                Filter Loans
+              </div>
+              <SelectItem value="all">All Loans</SelectItem>
+              <SelectItem value="active">Active Loans</SelectItem>
+              <SelectItem value="due_today">Due Today</SelectItem>
+              <SelectItem value="upcoming_due">Upcoming Due</SelectItem>
+              <SelectItem value="overdue">Overdue Loans</SelectItem>
+              <SelectItem value="completed">Completed Loans</SelectItem>
+              <SelectItem value="paid">Paid Loans</SelectItem>
+              <SelectItem value="unpaid">Unpaid Loans</SelectItem>
+            </SelectContent>
+          </Select>
 
           {/* Sort dropdown */}
           <Select value={sortBy} onValueChange={(val) => setSortBy(val || "newest")}>

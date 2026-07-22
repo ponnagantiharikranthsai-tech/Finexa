@@ -22,7 +22,7 @@ import { saveInternalNotesAction } from "@/features/borrowers/actions/save-inter
 import {
   Search, Plus, Send, Landmark, Calendar, RefreshCw, CreditCard, ChevronRight,
   Trash2, Users, Mail, FileText, MapPin, User, Eye, EyeOff, Edit, Clock,
-  AlertTriangle, Check, CheckCircle2, XCircle, ChevronDown, ListFilter
+  AlertTriangle, Check, CheckCircle2, XCircle, ChevronDown, ListFilter, X
 } from "lucide-react";
 import type { LoanManagementDetailResult } from "../actions/get-loan-management-data.action";
 import type { Payment, NotificationLog } from "@/db/schema";
@@ -482,7 +482,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
         {/* Filters & Sorting */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Status Filter Popover/Trigger */}
+          {/* Status Filter Popover / Mobile Sheet */}
           <div className="relative">
             <button
               onClick={() => setFilterPanelOpen(!filterPanelOpen)}
@@ -495,9 +495,17 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
             {filterPanelOpen && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setFilterPanelOpen(false)} />
-                <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-card border border-border shadow-xl rounded-xl z-50 p-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Filter Loans</div>
+                {/* Backdrop Overlay */}
+                <div
+                  className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm sm:bg-transparent sm:backdrop-blur-none"
+                  onClick={() => setFilterPanelOpen(false)}
+                />
+
+                {/* Desktop Dropdown (sm+) */}
+                <div className="hidden sm:block absolute right-0 mt-2 w-56 bg-white dark:bg-[#111827] border border-border/80 shadow-2xl rounded-2xl z-50 p-2 max-h-[60vh] overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/40 mb-1">
+                    Filter Loans
+                  </div>
                   {[
                     { id: "all", label: "All Loans" },
                     { id: "active", label: "Active Loans" },
@@ -507,17 +515,77 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                     { id: "completed", label: "Completed Loans" },
                     { id: "paid", label: "Paid Loans" },
                     { id: "unpaid", label: "Unpaid Loans" }
-                  ].map((f) => (
+                  ].map((f) => {
+                    const isSelected = statusFilter === f.id;
+                    return (
+                      <button
+                        key={f.id}
+                        onClick={() => {
+                          setStatusFilter(f.id);
+                          setFilterPanelOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2.5 text-xs font-semibold rounded-xl flex items-center justify-between transition-colors ${
+                          isSelected
+                            ? "bg-primary/15 text-primary border border-primary/30"
+                            : "hover:bg-accent/40 text-foreground"
+                        }`}
+                      >
+                        <span>{f.label}</span>
+                        {isSelected && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Mobile Bottom Sheet (< sm / < 640px) */}
+                <div
+                  className="sm:hidden fixed inset-x-0 bottom-0 z-50 bg-white dark:bg-[#111827] border-t border-border/80 shadow-2xl rounded-t-3xl p-4 space-y-3 max-h-[65vh] flex flex-col animate-in slide-in-from-bottom duration-250"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between border-b border-border/40 pb-3">
+                    <div className="flex items-center gap-2">
+                      <ListFilter className="h-4 w-4 text-primary" />
+                      <h3 className="text-sm font-bold text-foreground">Filter Loans by Status</h3>
+                    </div>
                     <button
-                      key={f.id}
-                      onClick={() => { setStatusFilter(f.id); setFilterPanelOpen(false); }}
-                      className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
-                        statusFilter === f.id ? "bg-primary/10 text-primary" : "hover:bg-accent/40"
-                      }`}
+                      onClick={() => setFilterPanelOpen(false)}
+                      className="h-8 w-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
                     >
-                      {f.label}
+                      <X className="h-4 w-4" />
                     </button>
-                  ))}
+                  </div>
+
+                  <div className="overflow-y-auto space-y-1.5 pr-1 flex-1 max-h-[55vh]">
+                    {[
+                      { id: "all", label: "All Loans" },
+                      { id: "active", label: "Active Loans" },
+                      { id: "due_today", label: "Due Today" },
+                      { id: "upcoming_due", label: "Upcoming Due" },
+                      { id: "overdue", label: "Overdue Loans" },
+                      { id: "completed", label: "Completed Loans" },
+                      { id: "paid", label: "Paid Loans" },
+                      { id: "unpaid", label: "Unpaid Loans" }
+                    ].map((f) => {
+                      const isSelected = statusFilter === f.id;
+                      return (
+                        <button
+                          key={f.id}
+                          onClick={() => {
+                            setStatusFilter(f.id);
+                            setFilterPanelOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-3 text-sm font-semibold rounded-xl flex items-center justify-between transition-all min-h-[48px] ${
+                            isSelected
+                              ? "bg-primary/15 text-primary border border-primary/30 shadow-sm"
+                              : "text-foreground hover:bg-accent/50 active:bg-accent/70"
+                          }`}
+                        >
+                          <span>{f.label}</span>
+                          {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </>
             )}

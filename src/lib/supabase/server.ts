@@ -15,34 +15,17 @@ export async function createSupabaseServerClient() {
     supabaseAnonKey,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
+        getAll() {
+          return cookieStore.getAll();
         },
-        set(name: string, value: string, options: any) {
+        setAll(cookiesToSet) {
           try {
-            const isDev = process.env.NODE_ENV === "development";
-            const { maxAge, expires, ...restOptions } = options;
-            cookieStore.set({
-              name,
-              value,
-              ...restOptions,
-              secure: isDev ? false : options.secure,
-            });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
           } catch (error) {
-            // Can be ignored if called from Server Component
-          }
-        },
-        remove(name: string, options: any) {
-          try {
-            const isDev = process.env.NODE_ENV === "development";
-            cookieStore.set({
-              name,
-              value: "",
-              ...options,
-              secure: isDev ? false : options.secure,
-            });
-          } catch (error) {
-            // Can be ignored if called from Server Component
+            // The `setAll` method was called from a Server Component.
+            // Can be safely ignored if middleware refreshes user sessions.
           }
         },
       },

@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // 1. Skip static assets, internal routes, public API endpoints, etc.
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
@@ -14,21 +15,17 @@ export async function middleware(request: NextRequest) {
   }
 
   let response = NextResponse.next({
-    request,
+    request: {
+      headers: request.headers,
+    },
   });
-
-  // Fast path: skip Supabase auth call for clearly public routes
-  const isPublicPath = pathname === "/" || pathname === "/login" || pathname.startsWith("/apply/");
-  if (isPublicPath) {
-    return response;
-  }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("Supabase environment variables are missing in middleware!");
-    return NextResponse.redirect(new URL("/login", request.url));
+    console.error("Supabase environment variables missing in middleware!");
+    return response;
   }
 
   const supabase = createServerClient(
@@ -36,33 +33,19 @@ export async function middleware(request: NextRequest) {
     supabaseAnonKey,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
+        getAll() {
+          return request.cookies.getAll();
         },
-        set(name: string, value: string, options: any) {
-          const isDev = process.env.NODE_ENV === "development";
-          const { maxAge, expires, ...restOptions } = options;
-          const cookieOptions = {
-            ...restOptions,
-            secure: isDev ? false : options.secure,
-          };
-          request.cookies.set({ name, value, ...cookieOptions });
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
           response = NextResponse.next({
             request,
           });
-          response.cookies.set({ name, value, ...cookieOptions });
-        },
-        remove(name: string, options: any) {
-          const isDev = process.env.NODE_ENV === "development";
-          const cookieOptions = {
-            ...options,
-            secure: isDev ? false : options.secure,
-          };
-          request.cookies.delete({ name, ...cookieOptions });
-          response = NextResponse.next({
-            request,
-          });
-          response.cookies.delete({ name, ...cookieOptions });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
         },
       },
     }
@@ -76,16 +59,33 @@ export async function middleware(request: NextRequest) {
     // Cookie is invalid or expired
   }
 
-  if (!user) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  const isPublicPath = pathname === "/" || pathname === "/login" || pathname.startsWith("/apply/");
+
+  // 2. Unauthenticated user attempting to access a protected page -> Redirect to /login
+  if (!user && !isPublicPath) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
   }
 
-  if (user && pathname === "/login") {
-    return NextResponse.redirect(new URL("/home", request.url));
+  // 3. Authenticated user attempting to access /login or / -> Redirect to /home
+  if (user && (pathname === "/login" || pathname === "/")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/home";
+    return NextResponse.redirect(url);
   }
 
-  // Stamp verified user ID into request header so Server Actions skip re-auth
-  response.headers.set("x-user-id", user.id);
+  // 4. If user is authenticated, forward x-user-id in request headers to downstream Server Components & Server Actions
+  if (user) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-user-id", user.id);
+    response = NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+  }
+
   return response;
 }
 

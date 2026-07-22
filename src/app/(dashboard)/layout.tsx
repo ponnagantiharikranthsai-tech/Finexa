@@ -53,6 +53,7 @@ export default function DashboardLayout({
   const handleLogoutConfirm = () => {
     startTransition(async () => {
       await logoutAction();
+      window.location.href = "/login";
     });
   };
 

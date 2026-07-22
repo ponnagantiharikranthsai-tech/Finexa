@@ -12,10 +12,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function LoginPage() {
   const router = useRouter();
-  
-  useEffect(() => {
-    router.prefetch("/home");
-  }, [router]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,14 +34,13 @@ export default function LoginPage() {
       if (data.success) {
         sessionStorage.setItem("session_active", "true");
         toast.success("Welcome back!");
-        router.push("/home");
-        router.refresh();
+        window.location.href = "/home";
       } else {
         setError(data.error);
+        setIsPending(false);
       }
     } catch (err: any) {
       setError(err.message || "Failed to log in");
-    } finally {
       setIsPending(false);
     }
   };

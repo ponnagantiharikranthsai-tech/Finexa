@@ -2,7 +2,6 @@ export type PenaltyParams = {
   principal: number;
   dueDate: string | Date;
   status: string;
-  penaltyType?: "fixed" | "percentage" | null;
   penaltyRate?: number | string | null;
   manualPenaltyAmount?: number | string | null;
 };
@@ -11,21 +10,17 @@ export type PenaltyResult = {
   daysOverdue: number;
   isPenaltyActive: boolean;
   dailyPenalty: number;
-  autoPenaltyAccrued: number;
   totalPenalty: number;
-  penaltyType: "fixed" | "percentage";
-  penaltyRate: number;
+  penaltyRatePerThousand: number;
 };
 
 /**
- * Calculates penalty automatically based on due date, days overdue, and rule (fixed or percentage).
- * - Fixed: e.g. ₹50 / day
- * - Percentage: e.g. 1% per day of principal
- * - Penalty is 0 if due date has not passed or loan is closed.
+ * Calculates penalty automatically based on principal, due date, overdue days, and penalty rate per ₹1,000/day.
+ * Formula: Penalty = (Principal / 1000) * PenaltyRatePerThousand * OverdueDays
+ * - Penalty is ₹0 if loan is Active, Due Today, Completed/Closed, or Overdue Days <= 0.
  */
 export function calculateAccruedPenalty(params: PenaltyParams): PenaltyResult {
-  const pType: "fixed" | "percentage" = params.penaltyType === "percentage" ? "percentage" : "fixed";
-  const pRate = Number(params.penaltyRate ?? 50.00);
+  const pRatePerThousand = Number(params.penaltyRate ?? 20.00);
   const manualAmount = Number(params.manualPenaltyAmount || 0);
 
   if (params.status === "closed") {
@@ -33,10 +28,8 @@ export function calculateAccruedPenalty(params: PenaltyParams): PenaltyResult {
       daysOverdue: 0,
       isPenaltyActive: manualAmount > 0,
       dailyPenalty: 0,
-      autoPenaltyAccrued: 0,
       totalPenalty: manualAmount,
-      penaltyType: pType,
-      penaltyRate: pRate,
+      penaltyRatePerThousand: pRatePerThousand,
     };
   }
 
@@ -54,32 +47,21 @@ export function calculateAccruedPenalty(params: PenaltyParams): PenaltyResult {
       daysOverdue: 0,
       isPenaltyActive: manualAmount > 0,
       dailyPenalty: 0,
-      autoPenaltyAccrued: 0,
       totalPenalty: manualAmount,
-      penaltyType: pType,
-      penaltyRate: pRate,
+      penaltyRatePerThousand: pRatePerThousand,
     };
   }
 
-  let dailyPenalty = 0;
-  if (pType === "percentage") {
-    // e.g. 1% per day = (1 / 100) * principal
-    dailyPenalty = (pRate / 100) * Number(params.principal);
-  } else {
-    // e.g. ₹50 per day
-    dailyPenalty = pRate;
-  }
-
-  const autoPenaltyAccrued = Math.round(daysOverdue * dailyPenalty * 100) / 100;
+  // Formula: Daily Penalty = (Principal / 1000) * Penalty Rate per ₹1,000 / day
+  const dailyPenalty = (Number(params.principal) / 1000) * pRatePerThousand;
+  const autoPenaltyAccrued = daysOverdue * dailyPenalty;
   const totalPenalty = Math.round((manualAmount + autoPenaltyAccrued) * 100) / 100;
 
   return {
     daysOverdue,
     isPenaltyActive: totalPenalty > 0,
     dailyPenalty: Math.round(dailyPenalty * 100) / 100,
-    autoPenaltyAccrued,
     totalPenalty,
-    penaltyType: pType,
-    penaltyRate: pRate,
+    penaltyRatePerThousand: pRatePerThousand,
   };
 }

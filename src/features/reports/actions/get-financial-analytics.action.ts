@@ -335,8 +335,7 @@ export async function getFinancialAnalyticsAction(
         principal: Number(loan.principal),
         dueDate: loan.dueDate,
         status: loan.status,
-        penaltyType: (loan as any).penaltyType || "fixed",
-        penaltyRate: Number((loan as any).penaltyRate || 50),
+        penaltyRate: Number((loan as any).penaltyRate || 20),
         manualPenaltyAmount: Number(loan.penaltyAmount || 0),
       });
 

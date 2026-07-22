@@ -60,8 +60,7 @@ export class LoanRepository {
         principal: Number(loan.principal),
         dueDate: loan.dueDate,
         status: loan.status,
-        penaltyType: (loan as any).penaltyType || "fixed",
-        penaltyRate: Number((loan as any).penaltyRate || 50),
+        penaltyRate: Number((loan as any).penaltyRate || 20),
         manualPenaltyAmount: Number(loan.penaltyAmount || 0),
       });
 
@@ -421,7 +420,6 @@ export class LoanRepository {
 
   async updatePenaltySettings(
     loanId: string,
-    penaltyType: "fixed" | "percentage",
     penaltyRate: number,
     adminName?: string
   ): Promise<void> {
@@ -434,13 +432,12 @@ export class LoanRepository {
     await db
       .update(loansTable)
       .set({
-        penaltyType,
         penaltyRate: penaltyRate.toString(),
         updatedAt: new Date(),
       })
       .where(eq(loansTable.loanId, loanId));
 
-    const updatedLoan = { ...loan, penaltyType, penaltyRate: penaltyRate.toString() };
+    const updatedLoan = { ...loan, penaltyRate: penaltyRate.toString() };
     const updatedBalanceMap = await this.getOutstandingBalancesForLoans([updatedLoan]);
     const balanceAfter = updatedBalanceMap.get(loanId) || 0;
 
@@ -448,7 +445,6 @@ export class LoanRepository {
       principal: Number(loan.principal),
       dueDate: loan.dueDate,
       status: loan.status,
-      penaltyType,
       penaltyRate,
       manualPenaltyAmount: Number(loan.penaltyAmount || 0),
     });
@@ -461,7 +457,7 @@ export class LoanRepository {
       outstandingBefore: balanceBefore.toString(),
       outstandingAfter: balanceAfter.toString(),
       adminName: adminName || "Administrator",
-      remarks: `Penalty rule updated to ${penaltyType === "fixed" ? `₹${penaltyRate}/day` : `${penaltyRate}%/day`}`,
+      remarks: `Penalty rate updated to ₹${penaltyRate} per ₹1,000 / day`,
     });
   }
 

@@ -7,7 +7,6 @@ import type { ActionResult } from "@/types/api.types";
 
 export async function updatePenaltySettingsAction(
   loanId: string,
-  penaltyType: "fixed" | "percentage",
   penaltyRate: number
 ): Promise<ActionResult<null>> {
   try {
@@ -17,10 +16,9 @@ export async function updatePenaltySettingsAction(
       return { success: false, error: "Penalty rate cannot be negative." };
     }
 
-    await loanRepository.updatePenaltySettings(loanId, penaltyType, penaltyRate, "Administrator");
+    await loanRepository.updatePenaltySettings(loanId, penaltyRate, "Administrator");
 
     await auditLog("penalty_settings_updated", "loan", loanId, {
-      penaltyType,
       penaltyRate,
     });
 

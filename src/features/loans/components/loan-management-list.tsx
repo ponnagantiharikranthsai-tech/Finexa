@@ -293,8 +293,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     setSelectedLoan(loan);
     setNotesText((loan.borrower as any).internalNotes || "");
     setOriginalNotesText((loan.borrower as any).internalNotes || "");
-    setPenaltyTypeInput(((loan as any).penaltyType as "fixed" | "percentage") || "fixed");
-    setPenaltyRateInput(((loan as any).penaltyRate || 50).toString());
+    setPenaltyRateInput(((loan as any).penaltyRate || 20).toString());
     setDetailsOpen(true);
     setDetailsLoading(true);
     setExtraDetails(null);
@@ -329,11 +328,11 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     }
 
     setIsUpdatingPenalty(true);
-    const res = await updatePenaltySettingsAction(selectedLoan.loanId, penaltyTypeInput, rate);
+    const res = await updatePenaltySettingsAction(selectedLoan.loanId, rate);
     setIsUpdatingPenalty(false);
 
     if (res.success) {
-      toast.success(`Penalty rule updated to ${penaltyTypeInput === "fixed" ? `₹${rate}/day` : `${rate}%/day`}`);
+      toast.success(`Penalty rate updated to ₹${rate} per ₹1,000 / day`);
       const ledgerRes = await getPenaltyLedgerAction(selectedLoan.loanId);
       if (ledgerRes.success && ledgerRes.data) {
         setPenaltyLedger(ledgerRes.data);
@@ -605,8 +604,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
               principal: Number(loan.principal),
               dueDate: loan.dueDate,
               status: loan.status,
-              penaltyType: (loan as any).penaltyType || "fixed",
-              penaltyRate: Number((loan as any).penaltyRate || 50),
+              penaltyRate: Number((loan as any).penaltyRate || 20),
               manualPenaltyAmount: Number(loan.penaltyAmount || 0),
             });
 
@@ -1093,120 +1091,97 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
               {/* ── Section 2B: Penalty Details & Settings ───────────────── */}
               {selectedLoan && (() => {
+                const currentRate = Number(penaltyRateInput);
                 const penaltyInfo = calculateAccruedPenalty({
                   principal: Number(selectedLoan.principal),
                   dueDate: selectedLoan.dueDate,
                   status: selectedLoan.status,
-                  penaltyType: (selectedLoan as any).penaltyType || "fixed",
-                  penaltyRate: Number((selectedLoan as any).penaltyRate || 50),
+                  penaltyRate: isNaN(currentRate) || currentRate < 0 ? Number((selectedLoan as any).penaltyRate || 20) : currentRate,
                   manualPenaltyAmount: Number(selectedLoan.penaltyAmount || 0),
                 });
                 const totalInterest = getInterestAmount(selectedLoan);
                 const totalPayable = Number(selectedLoan.principal) + totalInterest + penaltyInfo.totalPenalty;
 
+                const penaltyColorClass = 
+                  penaltyInfo.totalPenalty === 0
+                    ? "text-emerald-400 font-bold text-sm"
+                    : penaltyInfo.totalPenalty < 1000
+                    ? "text-amber-400 font-extrabold text-sm"
+                    : "text-red-400 font-black text-base";
+
                 return (
                   <div className="space-y-4">
                     <h3 className="font-bold text-base text-primary flex items-center gap-1.5 border-b border-border/40 pb-2">
-                      <ShieldAlert className="h-4 w-4 text-red-400" /> Penalty Details &amp; Settings
+                      <ShieldAlert className="h-4 w-4 text-red-400" /> Penalty Details
                     </h3>
 
-                    {/* Penalty Overview Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-red-500/[0.03] dark:bg-red-500/[0.05] p-4 rounded-xl border border-red-500/20">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Penalty Status</span>
-                        <p className="font-bold text-xs mt-0.5">
-                          {penaltyInfo.isPenaltyActive ? (
-                            <span className="text-red-400 font-extrabold uppercase">● Active (Overdue)</span>
-                          ) : (
-                            <span className="text-emerald-400 font-semibold">● Inactive</span>
-                          )}
-                        </p>
+                    {/* FINEXA Premium Dark Penalty Details Card */}
+                    <div className="p-5 rounded-2xl bg-black/40 border border-border/60 shadow-xl space-y-4 text-left">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground">Principal Amount</p>
+                          <p className="font-extrabold text-foreground text-sm mt-0.5">
+                            ₹{Number(selectedLoan.principal).toLocaleString("en-IN")}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground">Penalty Rate</p>
+                          <p className="font-semibold text-[#D4AF37] text-xs mt-0.5">
+                            ₹{penaltyInfo.penaltyRatePerThousand} / ₹1,000 / Day
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground">Overdue Days</p>
+                          <p className={`font-bold text-xs mt-0.5 ${penaltyInfo.daysOverdue > 0 ? "text-red-400" : "text-foreground"}`}>
+                            {penaltyInfo.daysOverdue > 0 ? `${penaltyInfo.daysOverdue} Days` : "No Penalty (0 Days)"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground">Daily Penalty</p>
+                          <p className="font-semibold text-foreground text-xs mt-0.5">
+                            ₹{penaltyInfo.dailyPenalty.toLocaleString("en-IN")}/day
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Penalty Type</span>
-                        <p className="font-semibold text-foreground mt-0.5 capitalize">
-                          {penaltyInfo.penaltyType} ({penaltyInfo.penaltyType === "fixed" ? `₹${penaltyInfo.penaltyRate}/day` : `${penaltyInfo.penaltyRate}%/day`})
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Days Overdue</span>
-                        <p className={`font-bold mt-0.5 ${penaltyInfo.daysOverdue > 0 ? "text-red-400 font-extrabold" : "text-foreground"}`}>
-                          {penaltyInfo.daysOverdue} Days
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Penalty</span>
-                        <p className={`font-extrabold mt-0.5 ${penaltyInfo.totalPenalty > 0 ? "text-red-400" : "text-emerald-400"}`}>
-                          ₹{penaltyInfo.totalPenalty.toLocaleString("en-IN")}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Penalty Started On</span>
-                        <p className="font-semibold text-foreground mt-0.5">{selectedLoan.dueDate}</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Daily Charge</span>
-                        <p className="font-semibold text-foreground mt-0.5">
-                          ₹{penaltyInfo.dailyPenalty.toLocaleString("en-IN")}/day
-                        </p>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Amount Payable</span>
-                        <p className="font-black text-primary text-sm mt-0.5">
-                          ₹{totalPayable.toLocaleString("en-IN")}
-                        </p>
+
+                      <div className="border-t border-border/40 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground">Total Penalty</p>
+                          <p className={`mt-0.5 ${penaltyColorClass}`}>
+                            ₹{penaltyInfo.totalPenalty.toLocaleString("en-IN")}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] uppercase font-bold text-muted-foreground">Total Amount Payable</p>
+                          <p className="font-black text-primary text-base mt-0.5">
+                            ₹{totalPayable.toLocaleString("en-IN")}
+                          </p>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Penalty Settings Admin Control */}
+                    {/* Penalty Rate Real-time Admin Configurator */}
                     <form onSubmit={handleUpdatePenaltySettings} className="p-4 rounded-xl bg-accent/20 dark:bg-secondary/15 border border-border/40 space-y-3">
                       <div className="flex items-center justify-between">
                         <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                          <Settings className="h-3.5 w-3.5 text-primary" /> Penalty Rule Configuration
+                          <Settings className="h-3.5 w-3.5 text-[#D4AF37]" /> Edit Penalty Rate (₹ per ₹1,000 / Day)
                         </h4>
-                        <span className="text-[10px] text-muted-foreground">Admin Only</span>
+                        <span className="text-[10px] text-muted-foreground">Real-time Calculation</span>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold uppercase text-muted-foreground">Calculation Mode</Label>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setPenaltyTypeInput("fixed")}
-                              className={`flex-1 h-9 rounded-lg text-xs font-bold border transition-all ${
-                                penaltyTypeInput === "fixed"
-                                  ? "bg-primary text-primary-foreground border-primary"
-                                  : "bg-transparent text-muted-foreground border-border hover:bg-accent/40"
-                              }`}
-                            >
-                              Fixed (₹)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setPenaltyTypeInput("percentage")}
-                              className={`flex-1 h-9 rounded-lg text-xs font-bold border transition-all ${
-                                penaltyTypeInput === "percentage"
-                                  ? "bg-primary text-primary-foreground border-primary"
-                                  : "bg-transparent text-muted-foreground border-border hover:bg-accent/40"
-                              }`}
-                            >
-                              Percent (%)
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-1">
+                        <div className="sm:col-span-2 space-y-1">
                           <Label className="text-[10px] font-bold uppercase text-muted-foreground">
-                            {penaltyTypeInput === "fixed" ? "Daily Amount (₹/day)" : "Daily Rate (%/day)"}
+                            Penalty Rate (₹ per ₹1,000 / Day)
                           </Label>
                           <Input
                             type="number"
-                            step="0.01"
+                            step="0.1"
+                            min="0"
                             value={penaltyRateInput}
                             onChange={(e) => setPenaltyRateInput(e.target.value)}
-                            placeholder={penaltyTypeInput === "fixed" ? "50" : "1.0"}
-                            className="h-9 rounded-lg text-xs bg-transparent border-border"
+                            placeholder="e.g. 5, 10, 15, 20, 50"
+                            className="h-10 rounded-xl text-xs bg-transparent border-border text-foreground font-bold"
                             required
                           />
                         </div>
@@ -1214,14 +1189,17 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                         <Button
                           type="submit"
                           disabled={isUpdatingPenalty}
-                          className="h-9 rounded-lg text-xs font-bold fx-brand-gradient border-0 text-white fx-pressable"
+                          className="h-10 rounded-xl text-xs font-bold fx-brand-gradient border-0 text-white fx-pressable"
                         >
-                          {isUpdatingPenalty ? "Saving..." : "Update Rule"}
+                          {isUpdatingPenalty ? "Saving..." : "Save Penalty Rate"}
                         </Button>
                       </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        Formula: Penalty = (Principal ÷ 1,000) × Penalty Rate × Overdue Days
+                      </p>
                     </form>
 
-                    {/* Penalty Ledger History */}
+                    {/* Penalty Ledger Audit Log */}
                     <div className="space-y-2.5">
                       <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
                         <History className="h-3.5 w-3.5 text-primary" /> Penalty Audit Ledger

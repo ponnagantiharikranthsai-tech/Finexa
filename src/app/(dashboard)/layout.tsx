@@ -115,6 +115,7 @@ export default function DashboardLayout({
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={true}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                   isActive
                     ? "fx-nav-active"
@@ -180,6 +181,7 @@ export default function DashboardLayout({
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={true}
                 title={item.label}
                 className={`flex items-center justify-center h-11 w-11 rounded-xl transition-all duration-200 ${
                   isActive
@@ -195,7 +197,7 @@ export default function DashboardLayout({
 
         {/* Compact New Loan */}
         <div className="px-2 pb-2">
-          <Link href="/loans/new" title="New Loan">
+          <Link href="/loans/new" prefetch={true} title="New Loan">
             <button className="flex items-center justify-center h-11 w-11 rounded-xl fx-brand-gradient text-white fx-cta-glow fx-pressable">
               <Plus className="h-5 w-5" />
             </button>
@@ -221,7 +223,7 @@ export default function DashboardLayout({
 
         {/* Mobile Top Header — logo + controls only (no hamburger) */}
         <header className="md:hidden h-14 fx-glass-header flex items-center justify-between px-4 shrink-0 border-b border-border/40">
-          <Link href="/home" className="flex items-center gap-2">
+          <Link href="/home" prefetch={true} className="flex items-center gap-2">
             <img
               src="/logo-icon.png"
               alt="Finexa"
@@ -230,7 +232,7 @@ export default function DashboardLayout({
             <span className="font-black text-xs tracking-[0.15em] text-foreground uppercase">FINEXA</span>
           </Link>
           <div className="flex items-center gap-2">
-            <Link href="/loans/new">
+            <Link href="/loans/new" prefetch={true}>
               <button className="flex items-center gap-1.5 h-8 px-3 rounded-lg fx-brand-gradient text-white text-xs font-semibold fx-cta-glow fx-pressable">
                 <Plus className="h-3.5 w-3.5" />
                 New Loan
@@ -260,6 +262,7 @@ export default function DashboardLayout({
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={true}
                 className={`relative flex flex-col items-center justify-center gap-0.5 flex-1 px-1 py-2 transition-all duration-200 ${
                   isActive
                     ? "text-primary"

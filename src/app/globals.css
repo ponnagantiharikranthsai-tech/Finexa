@@ -626,3 +626,27 @@ button:not(.absolute), a:not(.absolute), .fx-pressable {
   position: relative;
   overflow: hidden;
 }
+
+/* ============================================
+   60 FPS GPU HARDWARE ACCELERATION & PERFORMANCE
+   ============================================ */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  text-rendering: optimizeLegibility;
+}
+
+.fx-glass-card, .fx-glass-sidebar, .fx-glass-header, .page-transition, .fx-3d-hover {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+.fx-cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 400px;
+}

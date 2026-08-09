@@ -94,9 +94,10 @@ export async function middleware(request: NextRequest) {
         headers: requestHeaders,
       },
     });
-    supabaseResponse.cookies.getAll().forEach((c) => {
-      finalResponse.cookies.set(c.name, c.value, c);
-    });
+    finalResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    finalResponse.headers.set("Pragma", "no-cache");
+    finalResponse.headers.set("X-Content-Type-Options", "nosniff");
+    finalResponse.headers.set("X-Frame-Options", "DENY");
     return finalResponse;
   }
 

@@ -19,13 +19,32 @@ import { RealtimeSyncProvider } from "@/components/realtime-sync-provider";
 import { SessionTimeoutProvider } from "@/components/session-timeout-provider";
 
 export const metadata: Metadata = {
-  title: "FINEXA",
-  description: "Smart Loan Management. Simplified.",
+  title: {
+    default: "FINEXA – Smart Loan Management System",
+    template: "%s | FINEXA",
+  },
+  description: "FINEXA – Smart Loan Management System for secure loan, borrower, payment and financial record management.",
+  keywords: ["FINEXA", "Loan Management System", "FinTech", "Borrower Management", "Payment Tracking", "Financial Records"],
+  openGraph: {
+    title: "FINEXA – Smart Loan Management System",
+    description: "FINEXA – Smart Loan Management System for secure loan, borrower, payment and financial record management.",
+    siteName: "FINEXA",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "FINEXA – Smart Loan Management System",
+    description: "FINEXA – Smart Loan Management System for secure loan, borrower, payment and financial record management.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
   icons: {
     icon: "/logo-icon.png",
     shortcut: "/logo-icon.png",
     apple: "/logo-icon.png",
-  }
+  },
 };
 
 export default function RootLayout({

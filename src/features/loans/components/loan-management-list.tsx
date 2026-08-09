@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useTransition } from "react";
+import React, { useState, useEffect, useTransition, useMemo, useDeferredValue } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -227,77 +227,80 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   const todayStr = new Date().toISOString().split("T")[0]!;
   const today = new Date(todayStr);
 
-  const filteredLoans = loans
-    .filter((loan) => {
-      // 1. Search Query
-      const query = search.trim().toLowerCase();
-      if (query) {
-        const name = loan.borrower.name.toLowerCase();
-        const mobile = loan.borrower.mobile.toLowerCase();
-        const aadhaar = (loan.borrower.aadhaarDecrypted || "").toLowerCase();
-        const pan = (loan.borrower.panDecrypted || "").toLowerCase();
-        if (!name.includes(query) && !mobile.includes(query) && !aadhaar.includes(query) && !pan.includes(query)) {
-          return false;
+  const deferredSearch = useDeferredValue(search);
+
+  const filteredLoans = useMemo(() => {
+    return loans
+      .filter((loan) => {
+        // 1. Search Query
+        const query = deferredSearch.trim().toLowerCase();
+        if (query) {
+          const name = loan.borrower.name.toLowerCase();
+          const mobile = loan.borrower.mobile.toLowerCase();
+          const aadhaar = (loan.borrower.aadhaarDecrypted || "").toLowerCase();
+          const pan = (loan.borrower.panDecrypted || "").toLowerCase();
+          if (!name.includes(query) && !mobile.includes(query) && !aadhaar.includes(query) && !pan.includes(query)) {
+            return false;
+          }
         }
-      }
 
-      // 2. Status Filters
-      if (statusFilter === "all") return true;
+        // 2. Status Filters
+        if (statusFilter === "all") return true;
 
-      const isPaid = loan.outstandingBalance <= 0 || loan.status === "closed";
-      const isUnpaid = loan.outstandingBalance > 0 && loan.status !== "closed";
+        const isPaid = loan.outstandingBalance <= 0 || loan.status === "closed";
+        const isUnpaid = loan.outstandingBalance > 0 && loan.status !== "closed";
 
-      const loanDueDate = new Date(loan.dueDate);
-      const isDueToday = loan.dueDate === todayStr;
-      const isOverdue = loan.status === "overdue" || (loanDueDate < today && isUnpaid);
+        const loanDueDate = new Date(loan.dueDate);
+        const isDueToday = loan.dueDate === todayStr;
+        const isOverdue = loan.status === "overdue" || (loanDueDate < today && isUnpaid);
 
-      if (statusFilter === "active") {
-        return isUnpaid && (loan.status === "active" || loan.status === "extended" || loan.status === "overdue");
-      }
-      if (statusFilter === "due_today") {
-        return isDueToday && isUnpaid;
-      }
-      if (statusFilter === "upcoming_due") {
-        // Due after today & unpaid
-        return loan.dueDate > todayStr && isUnpaid;
-      }
-      if (statusFilter === "overdue") {
-        return isOverdue;
-      }
-      if (statusFilter === "completed") {
-        return isPaid;
-      }
-      if (statusFilter === "paid") {
-        return isPaid;
-      }
-      if (statusFilter === "unpaid") {
-        return isUnpaid;
-      }
+        if (statusFilter === "active") {
+          return isUnpaid && (loan.status === "active" || loan.status === "extended" || loan.status === "overdue");
+        }
+        if (statusFilter === "due_today") {
+          return isDueToday && isUnpaid;
+        }
+        if (statusFilter === "upcoming_due") {
+          return loan.dueDate > todayStr && isUnpaid;
+        }
+        if (statusFilter === "overdue") {
+          return isOverdue;
+        }
+        if (statusFilter === "completed") {
+          return isPaid;
+        }
+        if (statusFilter === "paid") {
+          return isPaid;
+        }
+        if (statusFilter === "unpaid") {
+          return isUnpaid;
+        }
 
-      return true;
-    })
-    .sort((a, b) => {
-      // 3. Sorting
-      if (sortBy === "newest") {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      }
-      if (sortBy === "oldest") {
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      }
-      if (sortBy === "highest_amount") {
-        return Number(b.principal) - Number(a.principal);
-      }
-      if (sortBy === "lowest_amount") {
-        return Number(a.principal) - Number(b.principal);
-      }
-      if (sortBy === "due_date") {
-        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-      }
-      if (sortBy === "borrower_name") {
-        return a.borrower.name.localeCompare(b.borrower.name);
-      }
-      return 0;
-    });
+        return true;
+      })
+      .sort((a, b) => {
+        // 3. Sorting
+        if (sortBy === "newest") {
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }
+        if (sortBy === "oldest") {
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        }
+        if (sortBy === "highest_amount") {
+          return Number(b.principal) - Number(a.principal);
+        }
+        if (sortBy === "lowest_amount") {
+          return Number(a.principal) - Number(b.principal);
+        }
+        if (sortBy === "due_date") {
+          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+        }
+        if (sortBy === "borrower_name") {
+          return a.borrower.name.localeCompare(b.borrower.name);
+        }
+        return 0;
+      });
+  }, [loans, deferredSearch, statusFilter, sortBy, todayStr]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleSaveNotes = async (borrowerId: string, textToSave: string) => {
@@ -440,7 +443,17 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       const res = await recordPaymentAction(null, fd);
       if (res.success) {
         setShowMoneyEffect(true);
-        toast.success(`Payment of ₹${Number(paymentAmount).toLocaleString("en-IN")} recorded!`);
+        const paidAmt = Number(paymentAmount);
+        setLoans((prev) =>
+          prev.map((l) => {
+            if (l.loanId === selectedLoan.loanId) {
+              const newBal = Math.max(0, l.outstandingBalance - paidAmt);
+              return { ...l, outstandingBalance: newBal, status: newBal === 0 ? "closed" : l.status };
+            }
+            return l;
+          })
+        );
+        toast.success(`Payment of ₹${paidAmt.toLocaleString("en-IN")} recorded!`);
         setPaymentOpen(false);
         setPaymentAmount("");
         setPaymentNotes("");
@@ -458,6 +471,12 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       if (res.success) {
         setCycleEffectText("Pay & Extend Successful — Next Cycle Activated");
         setTimeout(() => setCycleEffectText(null), 1500);
+        if (res.data?.newDueDate) {
+          const newDueDateStr = res.data.newDueDate;
+          setLoans((prev) =>
+            prev.map((l) => (l.loanId === selectedLoan.loanId ? { ...l, dueDate: newDueDateStr, status: "extended" } : l))
+          );
+        }
         toast.success(`Pay & Extend successful! Next cycle due: ${res.data?.newDueDate}`);
         setPaymentOpen(false);
         setPaymentNotes("");
@@ -475,6 +494,14 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       if (res.success) {
         setCycleEffectText("Overdue Cycle Cleared & New Cycle Activated");
         setTimeout(() => setCycleEffectText(null), 1500);
+        if (res.data?.newDueDate) {
+          const newDueDateStr = res.data.newDueDate;
+          setLoans((prev) =>
+            prev.map((l) =>
+              l.loanId === selectedLoan.loanId ? { ...l, dueDate: newDueDateStr, status: "active", penaltyAmount: "0" } : l
+            )
+          );
+        }
         toast.success(`Overdue cycle cleared! New cycle start: ${paymentDate}, Next due: ${res.data?.newDueDate}`);
         setPaymentOpen(false);
         setPaymentNotes("");
@@ -495,7 +522,6 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         toast.success("Reminder sent via SMS & Email!");
         setReminderOpen(false);
         setPenaltyAmount("0");
-        router.refresh();
       } else {
         toast.error(typeof res.error === "string" ? res.error : "Failed to send reminder");
       }
@@ -528,6 +554,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     startTransition(async () => {
       const res = await deleteLoanAction(loanId);
       if (res.success) {
+        setLoans((prev) => prev.filter((l) => l.loanId !== loanId));
         toast.success("Loan deleted successfully!");
         router.refresh();
       } else {

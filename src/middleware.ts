@@ -47,15 +47,25 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  let user = null;
-  try {
-    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
-    user = supabaseUser || null;
-  } catch (error) {
-    user = null;
+  const isPublicPath = pathname === "/" || pathname === "/login" || pathname.startsWith("/apply/");
+  const allCookies = request.cookies.getAll();
+  const hasAuthCookie = allCookies.some((c) => c.name.includes("auth-token") || c.name.startsWith("sb-"));
+
+  if (!hasAuthCookie && !isPublicPath) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
   }
 
-  const isPublicPath = pathname === "/" || pathname === "/login" || pathname.startsWith("/apply/");
+  let user = null;
+  if (hasAuthCookie) {
+    try {
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+      user = supabaseUser || null;
+    } catch (error) {
+      user = null;
+    }
+  }
 
   // 2. Unauthenticated user attempting to access a protected page -> Redirect to /login
   if (!user && !isPublicPath) {

@@ -68,6 +68,9 @@ export type FinancialAnalyticsData = {
   };
 };
 
+const analyticsCache = new Map<string, { data: FinancialAnalyticsData; timestamp: number }>();
+const CACHE_TTL_MS = 5000;
+
 export async function getFinancialAnalyticsAction(
   filterType: "today" | "yesterday" | "7days" | "30days" | "thisMonth" | "lastMonth" | "custom",
   customFrom?: string,
@@ -75,6 +78,12 @@ export async function getFinancialAnalyticsAction(
 ): Promise<ActionResult<FinancialAnalyticsData>> {
   try {
     await requireAuth();
+
+    const cacheKey = `${filterType}_${customFrom || ""}_${customTo || ""}`;
+    const cached = analyticsCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return { success: true, data: cached.data };
+    }
 
     // 1. Load all raw data from DB in parallel
     const [allLoans, allPayments, allBorrowers] = await Promise.all([
@@ -345,68 +354,68 @@ export async function getFinancialAnalyticsAction(
       }
     }
 
-    return {
-      success: true,
-      data: {
-        summary: {
-          totalLent: finalLent,
-          totalCollected: finalCollected,
-          totalOutstanding,
-          totalInterestEarned: finalInterest,
-          activeLoansCount: activeCount,
-          closedLoansCount: closedLoans.length,
-        },
-        today: {
-          lentToday,
-          collectedToday,
-          interestToday,
-          borrowersToday,
-          closedToday,
-        },
-        monthly: {
-          lentThisMonth,
-          collectedThisMonth,
-          interestThisMonth,
-          newLoansThisMonth,
-          closedLoansThisMonth,
-        },
-        borrowers: {
-          total: totalBorrowersCount,
-          active: activeBorrowersCount,
-          closed: closedBorrowersCount,
-          overdue: overdueBorrowersCount,
-        },
-        loans: {
-          active: activeCount + overdueCount,
-          dueToday: dueTodayCount,
-          overdue: overdueCount,
-          closingSevenDays: closingSevenDaysCount,
-        },
-        analytics: {
-          principalGiven: totalLent,
-          principalRecovered,
-          interestReceived: totalInterestEarned,
-          remainingPrincipal,
-          totalExpectedCollection,
-          netProfit,
-        },
-        penalty: {
-          todaysPenaltyCollected,
-          monthlyPenaltyCollected,
-          totalPenaltyCollected: totalPenaltiesCollected,
-          outstandingPenalty: Math.round(outstandingPenalty * 100) / 100,
-          borrowersWithActivePenalties: activePenaltyBorrowersSet.size,
-          totalPenaltyIncome: totalPenaltiesCollected,
-        },
-        charts: {
-          dailyLending,
-          dailyCollections,
-          monthlyLendingVsCollections,
-          interestOverTime,
-          statusDistribution,
-        },
+    const resultData: FinancialAnalyticsData = {
+      summary: {
+        totalLent: finalLent,
+        totalCollected: finalCollected,
+        totalOutstanding: Math.round(totalOutstanding * 100) / 100,
+        totalInterestEarned: finalInterest,
+        activeLoansCount: activeCount,
+        closedLoansCount: closedLoans.length,
+      },
+      today: {
+        lentToday,
+        collectedToday,
+        interestToday,
+        borrowersToday,
+        closedToday,
+      },
+      monthly: {
+        lentThisMonth,
+        collectedThisMonth,
+        interestThisMonth,
+        newLoansThisMonth,
+        closedLoansThisMonth,
+      },
+      borrowers: {
+        total: totalBorrowersCount,
+        active: activeBorrowersCount,
+        closed: closedBorrowersCount,
+        overdue: overdueBorrowersCount,
+      },
+      loans: {
+        active: activeCount + overdueCount,
+        dueToday: dueTodayCount,
+        overdue: overdueCount,
+        closingSevenDays: closingSevenDaysCount,
+      },
+      analytics: {
+        principalGiven: totalLent,
+        principalRecovered,
+        interestReceived: totalInterestEarned,
+        remainingPrincipal: Math.round(remainingPrincipal * 100) / 100,
+        totalExpectedCollection: Math.round(totalExpectedCollection * 100) / 100,
+        netProfit,
+      },
+      penalty: {
+        todaysPenaltyCollected,
+        monthlyPenaltyCollected,
+        totalPenaltyCollected: totalPenaltiesCollected,
+        outstandingPenalty: Math.round(outstandingPenalty * 100) / 100,
+        borrowersWithActivePenalties: activePenaltyBorrowersSet.size,
+        totalPenaltyIncome: totalPenaltiesCollected,
+      },
+      charts: {
+        dailyLending,
+        dailyCollections,
+        monthlyLendingVsCollections,
+        interestOverTime,
+        statusDistribution,
       },
     };
+
+    analyticsCache.set(cacheKey, { data: resultData, timestamp: Date.now() });
+    return { success: true, data: resultData };
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to compile financial analytics" };
   }

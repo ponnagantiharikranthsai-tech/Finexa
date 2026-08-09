@@ -31,6 +31,7 @@ import {
 import type { LoanManagementDetailResult } from "../actions/get-loan-management-data.action";
 import type { Payment, NotificationLog, PenaltyLedger } from "@/db/schema";
 import { calculatePeriods, calculateMonthlyInterest } from "@/domain/interest-calculator";
+import { generateActiveLoansPdf } from "../utils/generate-active-loans-pdf";
 import { differenceInDays } from "date-fns";
 
 interface LoanManagementListProps {
@@ -108,6 +109,24 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const [isPending, startTransition] = useTransition();
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const handleDownloadPdf = () => {
+    if (isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
+    toast.info("Generating Active Loans Backup PDF...");
+
+    setTimeout(() => {
+      try {
+        generateActiveLoansPdf(loans);
+        toast.success("PDF generated successfully!");
+      } catch (err: any) {
+        toast.error(err?.message || "Unable to generate the backup PDF. Your loan data has not been changed. Please try again.");
+      } finally {
+        setIsGeneratingPdf(false);
+      }
+    }, 100);
+  };
 
   // Dialog States
   const [selectedLoan, setSelectedLoan] = useState<LoanManagementDetailResult | null>(null);
@@ -564,6 +583,26 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
               <SelectItem value="borrower_name">Borrower (A-Z)</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* Download Active Loans PDF Button */}
+          <Button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={isGeneratingPdf}
+            className="h-11 px-4 rounded-xl gap-2 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-500/15 hover:from-amber-500/25 hover:to-amber-500/25 text-amber-400 border border-amber-500/40 text-sm font-bold shadow-[0_0_15px_-3px_rgba(212,175,55,0.15)] hover:shadow-[0_0_20px_0_rgba(212,175,55,0.25)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed fx-pressable"
+          >
+            {isGeneratingPdf ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin text-amber-400" />
+                <span>Generating PDF...</span>
+              </>
+            ) : (
+              <>
+                <FileText className="h-4 w-4 text-amber-400" />
+                <span>Download Active Loans PDF</span>
+              </>
+            )}
+          </Button>
 
           {/* New Loan */}
           <Link href="/loans/new">

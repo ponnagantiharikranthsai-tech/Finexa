@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import type { ApplicationWithBorrower } from "../repository/application.repository";
 import { calculateDueDate } from "@/domain/due-date-calculator";
+import { calculateMonthlyInterest } from "@/domain/interest-calculator";
 
 interface ApplicationsListProps {
   initialApps: ApplicationWithBorrower[];
@@ -100,13 +101,21 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
 
   // Link Generation Form States
   const [principal, setPrincipal] = useState("50000");
-  const [interestAmount, setInterestAmount] = useState("5000");
+  const [interestRate, setInterestRate] = useState("20");
   const [interestType, setInterestType] = useState<"monthly" | "daily">("monthly");
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]!);
   const [dueDate, setDueDate] = useState("");
   const [loanDuration, setLoanDuration] = useState("30 Days");
   const [expiryDays, setExpiryDays] = useState("7");
   const [notes, setNotes] = useState("");
+
+  // Live interest calculation (BR-1: ₹ per ₹1,000 / month)
+  const numericPrincipal = Number(principal || 0);
+  const numericRate = Number(interestRate || 0);
+  const monthlyInterest = calculateMonthlyInterest(numericPrincipal, numericRate);
+  const dailyInterest = monthlyInterest / 30;
+  const computedInterestAmount = Math.max(0, Math.round(interestType === "daily" ? dailyInterest * 30 : monthlyInterest));
+  const totalDueAtTerm = numericPrincipal + computedInterestAmount;
 
   // Result Link State
   const [generatedLinkData, setGeneratedLinkData] = useState<{ code: string; url: string } | null>(null);
@@ -159,7 +168,7 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
     e.preventDefault();
     const fd = new FormData();
     fd.append("principal", principal);
-    fd.append("interestAmount", interestAmount);
+    fd.append("interestAmount", computedInterestAmount.toString());
     fd.append("interestType", interestType);
     fd.append("startDate", startDate);
     fd.append("dueDate", dueDate);
@@ -441,14 +450,14 @@ Thank you for choosing **FINEXA – Smart Loan Management.**`;
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="interestAmount" className={labelClass}>Interest Amount (₹)*</Label>
+                <Label htmlFor="interestRate" className={labelClass}>Rate (₹ per ₹1,000 / month)*</Label>
                 <Input
-                  id="interestAmount"
+                  id="interestRate"
                   type="number"
-                  value={interestAmount}
-                  onChange={(e) => setInterestAmount(e.target.value)}
+                  value={interestRate}
+                  onChange={(e) => setInterestRate(e.target.value)}
                   required
-                  placeholder="5000"
+                  placeholder="20"
                   className={inputClass}
                 />
               </div>
@@ -520,6 +529,22 @@ Thank you for choosing **FINEXA – Smart Loan Management.**`;
               </div>
             </div>
 
+            {/* Live Calculation Preview Banner */}
+            <div className="p-3.5 rounded-xl bg-secondary/80 border border-border space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Rate Configuration:</span>
+                <span className="font-semibold text-foreground">₹{numericRate} per ₹1,000 / month</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Monthly Interest:</span>
+                <span className="font-semibold text-primary">₹{monthlyInterest.toLocaleString("en-IN")}</span>
+              </div>
+              <div className="flex justify-between font-bold pt-1.5 border-t border-border/50 text-foreground">
+                <span>Total Amount at Term:</span>
+                <span className="text-primary text-sm">₹{totalDueAtTerm.toLocaleString("en-IN")}</span>
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="notes" className={labelClass}>Admin Notes (Optional)</Label>
               <Textarea
@@ -535,7 +560,7 @@ Thank you for choosing **FINEXA – Smart Loan Management.**`;
             <div className="bg-secondary/60 dark:bg-secondary/30 p-3.5 rounded-xl flex items-center justify-between border border-border/40">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Repayment Amount:</span>
               <span className="text-base font-extrabold text-foreground">
-                ₹{(Number(principal || 0) + Number(interestAmount || 0)).toLocaleString("en-IN")}
+                ₹{totalDueAtTerm.toLocaleString("en-IN")}
               </span>
             </div>
 

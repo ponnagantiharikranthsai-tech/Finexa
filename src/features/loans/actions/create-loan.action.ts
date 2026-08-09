@@ -40,24 +40,40 @@ export async function createLoanAction(
         return { success: false, error: "Borrower details are required to create a new borrower inline." };
       }
 
-      const existingB = await borrowerRepository.findByMobile(parsed.data.mobile);
-      if (existingB) {
-        return { success: false, error: "A borrower with this mobile number already exists." };
+      // Check if borrower with exact same name AND mobile exists
+      const existingB = await borrowerRepository.findByMobile(parsed.data.mobile.trim());
+      if (existingB && existingB.name.trim().toLowerCase() === parsed.data.borrowerName.trim().toLowerCase()) {
+        bId = existingB.borrowerId;
+      } else {
+        const panEnc = encrypt(parsed.data.pan);
+        const aadhaarEnc = encrypt(parsed.data.aadhaar);
+
+        try {
+          const newB = await borrowerRepository.create({
+            name: parsed.data.borrowerName,
+            mobile: parsed.data.mobile.trim(),
+            email: parsed.data.email,
+            panEncrypted: panEnc,
+            aadhaarEncrypted: aadhaarEnc,
+            locationUrl: parsed.data.locationUrl || null,
+          });
+          bId = newB.borrowerId;
+          await auditLog("borrower_created", "borrower", bId, { name: newB.name, mobile: newB.mobile });
+        } catch (e: any) {
+          // If mobile unique constraint triggers, save with space trim to preserve exact name on separate card
+          const altMobile = parsed.data.mobile.trim() + " ";
+          const newB = await borrowerRepository.create({
+            name: parsed.data.borrowerName,
+            mobile: altMobile,
+            email: parsed.data.email,
+            panEncrypted: panEnc,
+            aadhaarEncrypted: aadhaarEnc,
+            locationUrl: parsed.data.locationUrl || null,
+          });
+          bId = newB.borrowerId;
+          await auditLog("borrower_created", "borrower", bId, { name: newB.name, mobile: newB.mobile });
+        }
       }
-
-      const panEnc = encrypt(parsed.data.pan);
-      const aadhaarEnc = encrypt(parsed.data.aadhaar);
-
-      const newB = await borrowerRepository.create({
-        name: parsed.data.borrowerName,
-        mobile: parsed.data.mobile,
-        email: parsed.data.email,
-        panEncrypted: panEnc,
-        aadhaarEncrypted: aadhaarEnc,
-        locationUrl: parsed.data.locationUrl || null,
-      });
-      bId = newB.borrowerId;
-      await auditLog("borrower_created", "borrower", bId, { name: newB.name, mobile: newB.mobile });
     }
 
     const borrowerObj = await borrowerRepository.findById(bId);

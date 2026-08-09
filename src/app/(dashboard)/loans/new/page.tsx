@@ -34,22 +34,6 @@ export default function NewLoanPage() {
   const [dateGiven, setDateGiven]         = useState(new Date().toISOString().split("T")[0]!);
   const [dueDate, setDueDate]             = useState("");
 
-  const [matchedBorrower, setMatchedBorrower] = useState<BorrowerLookupResult | null>(null);
-
-  // Live mobile lookup
-  useEffect(() => {
-    if (mobile.length === 10) {
-      const handler = setTimeout(() => {
-        startTransition(async () => {
-          const res = await lookupBorrowerAction(mobile);
-          if (res.success && res.data) setMatchedBorrower(res.data);
-          else setMatchedBorrower(null);
-        });
-      }, 500);
-      return () => clearTimeout(handler);
-    }
-  }, [mobile]);
-
   // Sync auto-calculated due date when dateGiven changes
   useEffect(() => {
     if (dateGiven) {
@@ -57,6 +41,11 @@ export default function NewLoanPage() {
       setDueDate(computedDue.toISOString().split("T")[0]!);
     }
   }, [dateGiven]);
+
+  const clearBorrowerSelection = () => {
+    setBorrowerId(""); setBorrowerName(""); setMobile(""); setEmail("");
+    setPan(""); setAadhaar(""); setLocationUrl("");
+  };
 
   useEffect(() => {
     if (state?.success) {
@@ -67,24 +56,6 @@ export default function NewLoanPage() {
       toast.error(typeof state.error === "string" ? state.error : "Validation errors found");
     }
   }, [state, router]);
-
-  const selectMatchedBorrower = () => {
-    if (!matchedBorrower) return;
-    setBorrowerId(matchedBorrower.borrowerId);
-    setBorrowerName(matchedBorrower.name);
-    setMobile(matchedBorrower.mobile);
-    setEmail(matchedBorrower.email || "");
-    setLocationUrl(matchedBorrower.locationUrl || "");
-    setPan("XXXXX1234X");
-    setAadhaar("123456789012");
-    setMatchedBorrower(null);
-    toast.success(`Using existing borrower: ${matchedBorrower.name}`);
-  };
-
-  const clearBorrowerSelection = () => {
-    setBorrowerId(""); setBorrowerName(""); setMobile(""); setEmail("");
-    setPan(""); setAadhaar(""); setLocationUrl("");
-  };
 
   // Calculator previews
   const numericPrincipal = Number(principal || 0);
@@ -114,35 +85,6 @@ export default function NewLoanPage() {
           <p className="text-xs text-muted-foreground mt-0.5">Issue a loan and register borrower KYC.</p>
         </div>
       </div>
-
-      {/* Existing borrower banner */}
-      {matchedBorrower && (
-        <div className="bg-accent dark:bg-secondary/80 border border-border dark:border-border/40 p-4 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-start gap-3 text-foreground dark:text-primary/80">
-            <Info className="h-5 w-5 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold text-sm">Existing Borrower Found</p>
-              <p className="text-xs mt-0.5">"{matchedBorrower.name}" is already in the system.</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 sm:shrink-0">
-            <button
-              type="button"
-              onClick={() => setMatchedBorrower(null)}
-              className="h-8 px-3 rounded-lg text-xs font-semibold border border-border dark:border-border text-primary dark:text-primary/80 hover:bg-accent dark:hover:bg-secondary transition-colors"
-            >
-              Ignore
-            </button>
-            <button
-              type="button"
-              onClick={selectMatchedBorrower}
-              className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/80 transition-colors"
-            >
-              <Check className="h-3.5 w-3.5" /> Use Existing
-            </button>
-          </div>
-        </div>
-      )}
 
       <form action={formAction} className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-5">

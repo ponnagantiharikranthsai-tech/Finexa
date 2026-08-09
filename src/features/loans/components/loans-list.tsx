@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { getLoansAction } from "../actions/get-loans.action";
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "../actions/extend-loan.action";
+import { payAndExtendAction } from "../actions/pay-and-extend.action";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { deleteLoanAction } from "../actions/delete-loan.action";
 import { Search, Plus, Send, Landmark, Calendar, RefreshCw, CreditCard, ChevronRight, Trash2 } from "lucide-react";
@@ -124,9 +125,9 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
   const handleExtendConfirm = async () => {
     if (!selectedLoan) return;
     startTransition(async () => {
-      const res = await extendLoanAction(selectedLoan.loanId);
+      const res = await payAndExtendAction(selectedLoan.loanId);
       if (res.success) {
-        toast.success(`Loan extended! New due date: ${res.data.newDueDate}`);
+        toast.success(`Pay & Extend processed! Next cycle due: ${res.data?.newDueDate}`);
         setExtendOpen(false); refreshLoans(); router.refresh();
       } else {
         toast.error(typeof res.error === "string" ? res.error : "Failed to extend loan");

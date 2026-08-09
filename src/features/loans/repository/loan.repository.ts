@@ -201,9 +201,8 @@ export class LoanRepository {
       .where(eq(loansTable.loanId, id));
   }
 
-  async updateDueDate(id: string, dueDate: Date): Promise<void> {
-    // format as YYYY-MM-DD
-    const formatted = dueDate.toISOString().split("T")[0];
+  async updateDueDate(id: string, dueDate: Date | string): Promise<void> {
+    const formatted = typeof dueDate === "string" ? dueDate : dueDate.toISOString().split("T")[0];
     if (!formatted) throw new Error("Invalid date");
     await db
       .update(loansTable)
@@ -459,6 +458,18 @@ export class LoanRepository {
       adminName: adminName || "Administrator",
       remarks: `Penalty rate updated to ₹${penaltyRate} per ₹1,000 / day`,
     });
+  }
+
+
+
+  async resetPenalty(id: string): Promise<void> {
+    await db
+      .update(loansTable)
+      .set({
+        penaltyAmount: "0",
+        updatedAt: new Date(),
+      })
+      .where(eq(loansTable.loanId, id));
   }
 
   async getPenaltyLedger(loanId: string): Promise<PenaltyLedger[]> {

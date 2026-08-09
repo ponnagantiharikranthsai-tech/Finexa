@@ -14,6 +14,7 @@ import { Eye, EyeOff, Send, Landmark, Calendar, Trash2, ArrowLeft, CheckCircle2,
 import { deletePaymentAction } from "@/features/payments/actions/delete-payment.action";
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "../actions/extend-loan.action";
+import { payAndExtendAction } from "../actions/pay-and-extend.action";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { useRouter } from "next/navigation";
 import type { LoanDetailResult } from "../actions/get-loan-by-id.action";
@@ -85,9 +86,11 @@ export function LoanDetailView({ initialLoan, initialPayments, initialNotifs }: 
 
   const handleExtendConfirm = async () => {
     startTransition(async () => {
-      const res = await extendLoanAction(loan.loanId);
+      const res = await payAndExtendAction(loan.loanId);
       if (res.success) {
-        toast.success("Loan period extended!"); setExtendOpen(false); router.refresh();
+        toast.success(`Pay & Extend processed! Next cycle due: ${res.data?.newDueDate}`);
+        setExtendOpen(false);
+        router.refresh();
       } else {
         toast.error(typeof res.error === "string" ? res.error : "Failed to extend loan");
       }

@@ -72,7 +72,7 @@ export async function verifyApplicationAction(
 
     // Find or create Borrower profile
     let borrowerId = "";
-    const existingBorrower = await borrowerRepository.findByMobile(mobile);
+    const existingBorrower = await borrowerRepository.findMatchingBorrower(name, mobile);
 
     if (existingBorrower) {
       borrowerId = existingBorrower.borrowerId;
@@ -86,9 +86,10 @@ export async function verifyApplicationAction(
         aadhaarEncrypted,
       });
     } else {
+      const uniqueMobile = await borrowerRepository.getUniqueMobileNumber(mobile);
       const newB = await borrowerRepository.create({
         name,
-        mobile,
+        mobile: uniqueMobile,
         email,
         panEncrypted,
         aadhaarEncrypted,

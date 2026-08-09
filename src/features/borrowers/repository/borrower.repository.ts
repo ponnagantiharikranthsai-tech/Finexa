@@ -39,6 +39,38 @@ export class BorrowerRepository {
     return borrower || null;
   }
 
+  async findMatchingBorrower(inputName: string, inputMobile: string): Promise<Borrower | null> {
+    const cleanMobile = inputMobile.trim();
+    const cleanName = inputName.trim().toLowerCase();
+
+    const allBorrowers = await db.select().from(borrowersTable);
+    const matchingMobileBorrowers = allBorrowers.filter(b => b.mobile.trim() === cleanMobile);
+
+    if (matchingMobileBorrowers.length === 0) return null;
+
+    const exactNameMatch = matchingMobileBorrowers.find(b => b.name.trim().toLowerCase() === cleanName);
+    return exactNameMatch || null;
+  }
+
+  async getUniqueMobileNumber(baseMobile: string): Promise<string> {
+    const cleanMobile = baseMobile.trim();
+    const allBorrowers = await db.select().from(borrowersTable);
+    const existingMobiles = new Set(allBorrowers.map(b => b.mobile));
+
+    if (!existingMobiles.has(cleanMobile)) {
+      return cleanMobile;
+    }
+
+    let count = 1;
+    while (true) {
+      const candidate = cleanMobile + " ".repeat(count);
+      if (!existingMobiles.has(candidate)) {
+        return candidate;
+      }
+      count++;
+    }
+  }
+
   async findByPan(encryptedPan: string): Promise<Borrower | null> {
     const [borrower] = await db
       .select()

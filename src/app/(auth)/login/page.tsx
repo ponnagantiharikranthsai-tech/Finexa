@@ -10,6 +10,8 @@ import { useRouter } from "next/navigation";
 import { branding } from "@/config/branding";
 import { ThemeToggle } from "@/components/theme-toggle";
 
+import { FinexaMoneyEffect } from "@/components/motion/finexa-effects";
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -19,6 +21,7 @@ export default function LoginPage() {
   const [error, setError] = useState<any>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [focused, setFocused] = useState<"email" | "password" | null>(null);
+  const [showMoneyEffect, setShowMoneyEffect] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,8 +36,11 @@ export default function LoginPage() {
       const data = await res.json();
       if (data.success) {
         sessionStorage.setItem("session_active", "true");
-        toast.success("Welcome back!");
-        window.location.href = "/home";
+        setShowMoneyEffect(true);
+        toast.success("Welcome back to FINEXA!");
+        setTimeout(() => {
+          window.location.href = "/home";
+        }, 800);
       } else {
         setError(data.error);
         setIsPending(false);
@@ -53,6 +59,7 @@ export default function LoginPage() {
 
   return (
     <div className="h-screen w-screen flex flex-col md:flex-row bg-[#0B0F19] relative overflow-hidden font-sans z-10">
+      <FinexaMoneyEffect active={showMoneyEffect} count={30} />
       
       {/* ─── STYLING & BACKGROUND GLOW ─── */}
       <style jsx global>{`

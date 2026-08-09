@@ -27,6 +27,7 @@ import {
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FinexaCard3D } from "@/components/motion/finexa-motion";
 
 type FilterType = "today" | "yesterday" | "7days" | "30days" | "thisMonth" | "lastMonth" | "custom";
 
@@ -373,6 +374,7 @@ export default function ReportsPage() {
           <div className="space-y-4 text-left">
             <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">All-Time Financial Overview</h3>
             <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+
               {[
                 { label: "Total Lent", val: report.summary.totalLent, format: "currency", icon: CreditCard, color: "text-[#FFD700]" },
                 { label: "Total Collected", val: report.summary.totalCollected, format: "currency", icon: Activity, color: "text-emerald-500" },
@@ -383,7 +385,7 @@ export default function ReportsPage() {
               ].map((card, idx) => {
                 const Icon = card.icon;
                 return (
-                  <div key={idx} className="p-4 rounded-xl bg-[#141923]/60 border border-white/5 flex flex-col justify-between h-28 print-card">
+                  <FinexaCard3D key={idx} className="p-4 rounded-xl bg-[#141923]/60 border border-white/5 flex flex-col justify-between h-28 print-card">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-medium text-zinc-400 print-muted">{card.label}</span>
                       <Icon className={`h-3.5 w-3.5 ${card.color}`} />
@@ -393,7 +395,7 @@ export default function ReportsPage() {
                         <AnimatedCounter value={Number(card.val) || 0} isCurrency={card.format === "currency"} />
                       </h4>
                     </div>
-                  </div>
+                  </FinexaCard3D>
                 );
               })}
             </div>

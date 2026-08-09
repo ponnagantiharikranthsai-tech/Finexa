@@ -36,6 +36,8 @@ import type { Payment, NotificationLog, PenaltyLedger, LoanCycle } from "@/db/sc
 import { calculatePeriods, calculateMonthlyInterest } from "@/domain/interest-calculator";
 import { generateActiveLoansPdf } from "../utils/generate-active-loans-pdf";
 import { differenceInDays } from "date-fns";
+import { FinexaCard3D, FinexaStaggerContainer, FinexaStaggerItem } from "@/components/motion/finexa-motion";
+import { FinexaMoneyEffect, FinexaCycleEffect, FinexaDocumentEffect } from "@/components/motion/finexa-effects";
 
 interface LoanManagementListProps {
   initialLoans: LoanManagementDetailResult[];
@@ -167,6 +169,11 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   const [penaltyRateInput, setPenaltyRateInput] = useState("50");
   const [penaltyLedger, setPenaltyLedger] = useState<PenaltyLedger[]>([]);
   const [isUpdatingPenalty, setIsUpdatingPenalty] = useState(false);
+
+  // 3D Motion System States
+  const [showMoneyEffect, setShowMoneyEffect] = useState(false);
+  const [cycleEffectText, setCycleEffectText] = useState<string | null>(null);
+  const [documentEffectText, setDocumentEffectText] = useState<string | null>(null);
 
   // Sync state with parent props when page dynamic refresh happens
   useEffect(() => {
@@ -432,6 +439,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     startTransition(async () => {
       const res = await recordPaymentAction(null, fd);
       if (res.success) {
+        setShowMoneyEffect(true);
         toast.success(`Payment of ₹${Number(paymentAmount).toLocaleString("en-IN")} recorded!`);
         setPaymentOpen(false);
         setPaymentAmount("");
@@ -448,6 +456,8 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     startTransition(async () => {
       const res = await payAndExtendAction(selectedLoan.loanId, paymentDate, paymentNotes);
       if (res.success) {
+        setCycleEffectText("Pay & Extend Successful — Next Cycle Activated");
+        setTimeout(() => setCycleEffectText(null), 1500);
         toast.success(`Pay & Extend successful! Next cycle due: ${res.data?.newDueDate}`);
         setPaymentOpen(false);
         setPaymentNotes("");
@@ -463,6 +473,8 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     startTransition(async () => {
       const res = await overdueAndPenaltyAction(selectedLoan.loanId, paymentDate, paymentNotes);
       if (res.success) {
+        setCycleEffectText("Overdue Cycle Cleared & New Cycle Activated");
+        setTimeout(() => setCycleEffectText(null), 1500);
         toast.success(`Overdue cycle cleared! New cycle start: ${paymentDate}, Next due: ${res.data?.newDueDate}`);
         setPaymentOpen(false);
         setPaymentNotes("");
@@ -572,6 +584,9 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
   return (
     <div className="space-y-5">
+      <FinexaMoneyEffect active={showMoneyEffect} onComplete={() => setShowMoneyEffect(false)} />
+      <FinexaCycleEffect active={!!cycleEffectText} text={cycleEffectText || undefined} />
+      <FinexaDocumentEffect active={!!documentEffectText} text={documentEffectText || undefined} />
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         {/* Search */}

@@ -9,6 +9,7 @@ import {
   BarChart3,
   ArrowUpRight
 } from "lucide-react";
+import { FinexaCard3D, FinexaStaggerContainer, FinexaStaggerItem } from "@/components/motion/finexa-motion";
 
 export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -179,40 +180,40 @@ export default function HomePage() {
         </blockquote>
       </div>
 
-      {/* ─── 2. FOUR PREMIUM NAVIGATION CARDS ─── */}
-      <div className="w-full max-w-4xl px-6 relative z-10 mt-8">
+      {/* ─── 2. PREMIUM NAVIGATION CARDS WITH STAGGERED 3D ─── */}
+      <FinexaStaggerContainer className="w-full max-w-4xl px-6 relative z-10 mt-8">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
-          {navCards.map((card) => {
+          {navCards.map((card, idx) => {
             const Icon = card.icon;
             return (
-              <Link
-                key={card.label}
-                href={card.href}
-                className="p-6 rounded-[20px] border nav-card-luxury text-left flex flex-col justify-between h-48 group relative overflow-hidden"
-              >
-                {/* Glowing light trail corner on hover */}
-                <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-[#FFD54A]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+              <FinexaStaggerItem key={card.label} index={idx}>
+                <Link href={card.href} className="block h-full">
+                  <FinexaCard3D className="p-6 rounded-[20px] border nav-card-luxury text-left flex flex-col justify-between h-48 group relative overflow-hidden">
+                    {/* Glowing light trail corner on hover */}
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-[#FFD54A]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 
-                <div className="flex items-start justify-between">
-                  <div className={`h-11 w-11 rounded-xl bg-primary/8 border border-border flex items-center justify-center text-muted-foreground group-hover:bg-primary/15 transition-colors ${card.accent}`}>
-                    <Icon className="h-5 w-5 transition-transform group-hover:scale-[1.1]" />
-                  </div>
-                  <ArrowUpRight className="h-4 w-4 text-zinc-650 group-hover:text-[#FFD54A] transition-colors" />
-                </div>
+                    <div className="flex items-start justify-between">
+                      <div className={`h-11 w-11 rounded-xl bg-primary/8 border border-border flex items-center justify-center text-muted-foreground group-hover:bg-primary/15 transition-colors ${card.accent}`}>
+                        <Icon className="h-5 w-5 transition-transform group-hover:scale-[1.1]" />
+                      </div>
+                      <ArrowUpRight className="h-4 w-4 text-zinc-650 group-hover:text-[#FFD54A] transition-colors" />
+                    </div>
 
-                <div className="space-y-1 mt-auto">
-                  <h3 className="text-base font-bold text-foreground tracking-tight group-hover:text-primary transition-colors">
-                    {card.label}
-                  </h3>
-                  <p className="text-[10px] text-muted-foreground leading-normal font-medium">
-                    {card.desc}
-                  </p>
-                </div>
-              </Link>
+                    <div className="space-y-1 mt-auto">
+                      <h3 className="text-base font-bold text-foreground tracking-tight group-hover:text-primary transition-colors">
+                        {card.label}
+                      </h3>
+                      <p className="text-[10px] text-muted-foreground leading-normal font-medium">
+                        {card.desc}
+                      </p>
+                    </div>
+                  </FinexaCard3D>
+                </Link>
+              </FinexaStaggerItem>
             );
           })}
         </div>
-      </div>
+      </FinexaStaggerContainer>
 
     </div>
   );

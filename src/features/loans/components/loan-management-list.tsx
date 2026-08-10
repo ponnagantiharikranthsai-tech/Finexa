@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "@/features/loans/actions/extend-loan.action";
 import { payAndExtendAction } from "../actions/pay-and-extend.action";
+import { generateLoanExtensionPdf } from "../utils/generate-loan-extension-pdf";
 import { overdueAndPenaltyAction } from "../actions/overdue-and-penalty.action";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { deleteLoanAction } from "@/features/loans/actions/delete-loan.action";
@@ -468,22 +469,43 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     if (!selectedLoan) return;
     startTransition(async () => {
       const res = await payAndExtendAction(selectedLoan.loanId, paymentDate, paymentNotes);
-      if (res.success) {
-        setCycleEffectText("Pay & Extend Successful — Next Cycle Activated");
-        setTimeout(() => setCycleEffectText(null), 1500);
-        if (res.data?.newDueDate) {
-          const newDueDateStr = res.data.newDueDate;
-          setLoans((prev) =>
-            prev.map((l) => (l.loanId === selectedLoan.loanId ? { ...l, dueDate: newDueDateStr, status: "extended" } : l))
-          );
-        }
-        toast.success(`Pay & Extend successful! Next cycle due: ${res.data?.newDueDate}`);
-        setPaymentOpen(false);
-        setPaymentNotes("");
-        router.refresh();
-      } else {
-        toast.error(typeof res.error === "string" ? res.error : "Failed to process Pay & Extend");
+      if (!res.success) {
+        const errText = typeof res.error === "string" ? res.error : "Failed to process Pay & Extend";
+        toast.error(errText);
+        return;
       }
+      const data = res.data;
+      setCycleEffectText("Pay & Extend Successful — Next Cycle Activated");
+      setTimeout(() => setCycleEffectText(null), 1500);
+      const newDueDateStr = data.newDueDate;
+      setLoans((prev) =>
+        prev.map((l) => (l.loanId === selectedLoan.loanId ? { ...l, dueDate: newDueDateStr, status: "extended" } : l))
+      );
+
+      // Automatic PDF Generation & Retry Toast Handling
+      try {
+        generateLoanExtensionPdf(data);
+        toast.success(`Loan extension completed successfully! Next cycle due: ${data.newDueDate}`, {
+          action: {
+            label: "📄 Download PDF",
+            onClick: () => generateLoanExtensionPdf(data),
+          },
+          duration: 8000,
+        });
+      } catch (pdfErr) {
+        console.error("PDF generation error:", pdfErr);
+        toast.error("Loan extension completed, but the PDF could not be generated.", {
+          action: {
+            label: "🔄 Retry PDF",
+            onClick: () => generateLoanExtensionPdf(data),
+          },
+          duration: 10000,
+        });
+      }
+
+      setPaymentOpen(false);
+      setPaymentNotes("");
+      router.refresh();
     });
   };
 

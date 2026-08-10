@@ -9,11 +9,33 @@ import { auditLog } from "@/lib/audit-log";
 import { requireAuth } from "@/lib/auth";
 import type { ActionResult } from "@/types/api.types";
 
+export type PayAndExtendResultPayload = {
+  documentId: string;
+  newDueDate: string;
+  amountPaid: number;
+  nextCycleName: string;
+  loanId: string;
+  borrowerName: string;
+  borrowerMobile: string;
+  fatherName?: string;
+  fatherMobile?: string;
+  locationUrl?: string;
+  dateGiven: string;
+  billingStartDate: string;
+  previousDueDate: string;
+  principal: number;
+  interestRate: number;
+  monthlyInterest: number;
+  remainingPrincipal: number;
+  paymentDate: string;
+  loanStatus: string;
+};
+
 export async function payAndExtendAction(
   loanId: string,
   paymentDateInput?: string,
   notesInput?: string
-): Promise<ActionResult<{ newDueDate: string; amountPaid: number; nextCycleName: string }>> {
+): Promise<ActionResult<PayAndExtendResultPayload>> {
   try {
     await requireAuth();
 
@@ -45,13 +67,20 @@ export async function payAndExtendAction(
       return { success: false, error: "Monthly interest amount must be greater than 0 to extend." };
     }
 
+    // Generate Unique Document ID: FIN-REC-YYYYMMDD-XXXX
+    const dateFormatted = actualPaymentDate.replace(/-/g, "");
+    const randomSeq = Math.floor(1000 + Math.random() * 9000).toString();
+    const documentId = `FIN-REC-${dateFormatted}-${randomSeq}`;
+
     // 1. Record Interest Payment in payments table
     await paymentRepository.create({
       loanId,
       amount: interestAmountPaid.toString(),
       paymentType: "interest",
       paymentDate: actualPaymentDate,
-      notes: notesInput ? `[Pay & Extend] ${notesInput}` : `[Pay & Extend] Monthly interest payment of ₹${interestAmountPaid.toLocaleString("en-IN")}`,
+      notes: notesInput
+        ? `[Pay & Extend | ${documentId}] ${notesInput}`
+        : `[Pay & Extend | ${documentId}] Monthly interest payment of ₹${interestAmountPaid.toLocaleString("en-IN")}`,
     });
 
     // 2. Extend Due Date by 1 month
@@ -81,10 +110,11 @@ export async function payAndExtendAction(
       remainingPrincipal: loan.principal, // Principal remains 100% outstanding!
       cycleStatus: "extended",
       paymentType: "pay_and_extend",
-      notes: notesInput || "Monthly interest cleared; loan principal extended to next cycle.",
+      notes: notesInput ? `[${documentId}] ${notesInput}` : `[${documentId}] Monthly interest cleared; loan principal extended to next cycle.`,
     });
 
     await auditLog("loan_pay_and_extend", "loan", loanId, {
+      documentId,
       interestPaid: interestAmountPaid,
       previousDueDate: loan.dueDate,
       newDueDate: newDueDateStr,
@@ -92,13 +122,30 @@ export async function payAndExtendAction(
     });
 
     const nextCycleMonth = newDueDateObj.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+    const borrower = loan.borrower;
 
     return {
       success: true,
       data: {
+        documentId,
         newDueDate: newDueDateStr,
         amountPaid: interestAmountPaid,
         nextCycleName: nextCycleMonth,
+        loanId: loan.loanId,
+        borrowerName: borrower.name,
+        borrowerMobile: borrower.mobile,
+        fatherName: (borrower as any).fatherName || (borrower as any).father_name || undefined,
+        fatherMobile: (borrower as any).fatherMobile || (borrower as any).father_mobile || undefined,
+        locationUrl: borrower.locationUrl || undefined,
+        dateGiven: loan.dateGiven,
+        billingStartDate: loan.dateGiven,
+        previousDueDate: loan.dueDate,
+        principal: principalNum,
+        interestRate: rateNum,
+        monthlyInterest: interestAmountPaid,
+        remainingPrincipal: principalNum,
+        paymentDate: actualPaymentDate,
+        loanStatus: "ACTIVE / EXTENDED",
       },
     };
   } catch (err: any) {

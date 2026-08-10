@@ -14,6 +14,7 @@ import { getLoansAction } from "../actions/get-loans.action";
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "../actions/extend-loan.action";
 import { payAndExtendAction } from "../actions/pay-and-extend.action";
+import { generateLoanExtensionPdf } from "../utils/generate-loan-extension-pdf";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { deleteLoanAction } from "../actions/delete-loan.action";
 import { Search, Plus, Send, Landmark, Calendar, RefreshCw, CreditCard, ChevronRight, Trash2 } from "lucide-react";
@@ -126,12 +127,32 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
     if (!selectedLoan) return;
     startTransition(async () => {
       const res = await payAndExtendAction(selectedLoan.loanId);
-      if (res.success) {
-        toast.success(`Pay & Extend processed! Next cycle due: ${res.data?.newDueDate}`);
-        setExtendOpen(false); refreshLoans(); router.refresh();
-      } else {
-        toast.error(typeof res.error === "string" ? res.error : "Failed to extend loan");
+      if (!res.success) {
+        const errText = typeof res.error === "string" ? res.error : "Failed to extend loan";
+        toast.error(errText);
+        return;
       }
+      const data = res.data;
+      try {
+        generateLoanExtensionPdf(data);
+        toast.success(`Pay & Extend processed! Next cycle due: ${data.newDueDate}`, {
+          action: {
+            label: "📄 Download PDF",
+            onClick: () => generateLoanExtensionPdf(data),
+          },
+          duration: 8000,
+        });
+      } catch (pdfErr) {
+        console.error("PDF generation error:", pdfErr);
+        toast.error("Loan extension completed, but the PDF could not be generated.", {
+          action: {
+            label: "🔄 Retry PDF",
+            onClick: () => generateLoanExtensionPdf(data),
+          },
+          duration: 10000,
+        });
+      }
+      setExtendOpen(false); refreshLoans(); router.refresh();
     });
   };
 

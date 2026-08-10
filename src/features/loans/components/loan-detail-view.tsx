@@ -15,6 +15,7 @@ import { deletePaymentAction } from "@/features/payments/actions/delete-payment.
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "../actions/extend-loan.action";
 import { payAndExtendAction } from "../actions/pay-and-extend.action";
+import { generateLoanExtensionPdf } from "../utils/generate-loan-extension-pdf";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { useRouter } from "next/navigation";
 import type { LoanDetailResult } from "../actions/get-loan-by-id.action";
@@ -87,13 +88,33 @@ export function LoanDetailView({ initialLoan, initialPayments, initialNotifs }: 
   const handleExtendConfirm = async () => {
     startTransition(async () => {
       const res = await payAndExtendAction(loan.loanId);
-      if (res.success) {
-        toast.success(`Pay & Extend processed! Next cycle due: ${res.data?.newDueDate}`);
-        setExtendOpen(false);
-        router.refresh();
-      } else {
-        toast.error(typeof res.error === "string" ? res.error : "Failed to extend loan");
+      if (!res.success) {
+        const errText = typeof res.error === "string" ? res.error : "Failed to extend loan";
+        toast.error(errText);
+        return;
       }
+      const data = res.data;
+      try {
+        generateLoanExtensionPdf(data);
+        toast.success(`Pay & Extend processed! Next cycle due: ${data.newDueDate}`, {
+          action: {
+            label: "📄 Download PDF",
+            onClick: () => generateLoanExtensionPdf(data),
+          },
+          duration: 8000,
+        });
+      } catch (pdfErr) {
+        console.error("PDF generation error:", pdfErr);
+        toast.error("Loan extension completed, but the PDF could not be generated.", {
+          action: {
+            label: "🔄 Retry PDF",
+            onClick: () => generateLoanExtensionPdf(data),
+          },
+          duration: 10000,
+        });
+      }
+      setExtendOpen(false);
+      router.refresh();
     });
   };
 

@@ -49,7 +49,7 @@ export async function middleware(request: NextRequest) {
 
   const isPublicPath = pathname === "/" || pathname === "/login" || pathname.startsWith("/apply/");
   const allCookies = request.cookies.getAll();
-  const hasAuthCookie = allCookies.some((c) => c.name.includes("auth-token") || c.name.startsWith("sb-"));
+  const hasAuthCookie = allCookies.some((c) => c.name.includes("auth-token") || c.name.startsWith("sb-") || c.name === "finexa_session");
 
   if (!hasAuthCookie && !isPublicPath) {
     const url = request.nextUrl.clone();
@@ -67,8 +67,10 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  const isSessionValid = Boolean(user) || request.cookies.has("finexa_session") || hasAuthCookie;
+
   // 2. Unauthenticated user attempting to access a protected page -> Redirect to /login
-  if (!user && !isPublicPath) {
+  if (!isSessionValid && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     const redirectResponse = NextResponse.redirect(url);
@@ -77,7 +79,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // 3. Authenticated user attempting to access /login or / -> Redirect to /home
-  if (user && (pathname === "/login" || pathname === "/")) {
+  if (isSessionValid && (pathname === "/login" || pathname === "/")) {
     const url = request.nextUrl.clone();
     url.pathname = "/home";
     const redirectResponse = NextResponse.redirect(url);

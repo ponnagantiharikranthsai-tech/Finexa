@@ -32,7 +32,18 @@ export async function POST(req: NextRequest) {
     // Fire-and-forget audit log
     auditLog("admin_login", "admin", undefined, { email: parsed.data.email });
 
-    return NextResponse.json({ success: true, data: null });
+    const res = NextResponse.json({ success: true, data: null });
+    res.cookies.set("finexa_session", "true", {
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    });
+    res.cookies.set("finexa_user_email", parsed.data.email, {
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+    return res;
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || "Failed to log in" }, { status: 500 });
   }

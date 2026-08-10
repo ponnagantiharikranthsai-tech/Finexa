@@ -49,11 +49,14 @@ export default function NewLoanPage() {
 
   useEffect(() => {
     if (state?.success) {
-      toast.success("Loan created successfully!");
+      toast.success("Loan created & issued successfully!");
       router.push("/loan-management");
       router.refresh();
     } else if (state && !state.success) {
-      toast.error(typeof state.error === "string" ? state.error : "Validation errors found");
+      const errStr = typeof state.error === "string" ? state.error : "Validation errors found. Please check input fields.";
+      if (errStr !== "NEXT_REDIRECT") {
+        toast.error(errStr);
+      }
     }
   }, [state, router]);
 

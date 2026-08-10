@@ -17,6 +17,7 @@ const geistMono = Geist_Mono({
 
 import { RealtimeSyncProvider } from "@/components/realtime-sync-provider";
 import { SessionTimeoutProvider } from "@/components/session-timeout-provider";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 export const metadata: Metadata = {
   title: {
@@ -61,11 +62,13 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <RealtimeSyncProvider>
-            <SessionTimeoutProvider>
-              {children}
-            </SessionTimeoutProvider>
-          </RealtimeSyncProvider>
+          <ErrorBoundary>
+            <RealtimeSyncProvider>
+              <SessionTimeoutProvider>
+                {children}
+              </SessionTimeoutProvider>
+            </RealtimeSyncProvider>
+          </ErrorBoundary>
           <Toaster position="top-right" />
         </ThemeProvider>
       </body>

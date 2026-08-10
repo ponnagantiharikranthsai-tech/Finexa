@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import {
   CreditCard,
-  Users,
   ClipboardList,
   BarChart3,
   ArrowUpRight
@@ -12,16 +11,7 @@ import {
 import { FinexaCard3D, FinexaStaggerContainer, FinexaStaggerItem } from "@/components/motion/finexa-motion";
 
 export default function HomePage() {
-  const [isLoading, setIsLoading] = useState(true);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
-
-  // Brief logo splash — reduced from 2200ms to 600ms
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 600);
-    return () => clearTimeout(timer);
-  }, []);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const { clientX, clientY } = e;
@@ -59,60 +49,9 @@ export default function HomePage() {
     }
   ];
 
-  // ─── RENDER LOADING SCREEN ───
-  if (isLoading) {
-    return (
-      <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center select-none overflow-hidden">
-        <style>{`
-          .loading-logo-glow {
-            filter: drop-shadow(0 0 35px rgba(255, 213, 74, 0.45));
-            animation: pulse-glow 2s infinite ease-in-out;
-          }
-          @keyframes pulse-glow {
-            0%, 100% { opacity: 0.85; transform: scale(0.98); }
-            50% { opacity: 1; transform: scale(1.02); }
-          }
-          
-          .shine-slider {
-            position: absolute;
-            top: 0;
-            left: -150%;
-            width: 50%;
-            height: 100%;
-            background: linear-gradient(
-              to right,
-              transparent,
-              rgba(255, 255, 255, 0.25) 50%,
-              transparent
-            );
-            transform: skewX(-25deg);
-            animation: shine-slide 1.8s infinite ease-in-out;
-          }
-          @keyframes shine-slide {
-            0% { left: -150%; }
-            100% { left: 150%; }
-          }
-        `}</style>
-        
-        <div className="relative max-w-sm sm:max-w-md px-6 loading-logo-glow">
-          <div className="relative overflow-hidden rounded-[20px]">
-            <img 
-              src="/logo.png" 
-              alt="Finexa Logo" 
-              className="w-[280px] h-auto object-contain" 
-            />
-            {/* Animated gold shine */}
-            <div className="shine-slider" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ─── RENDER LUXURIOUS HOME ───
   return (
     <div 
-      className="min-h-[85vh] flex flex-col justify-center items-center py-10 relative overflow-hidden bg-background animate-in fade-in duration-500"
+      className="min-h-[85vh] flex flex-col justify-center items-center py-10 relative overflow-hidden bg-background animate-in fade-in duration-300"
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
@@ -189,7 +128,6 @@ export default function HomePage() {
               <FinexaStaggerItem key={card.label} index={idx}>
                 <Link href={card.href} className="block h-full">
                   <FinexaCard3D className="p-6 rounded-[20px] border nav-card-luxury text-left flex flex-col justify-between h-48 group relative overflow-hidden">
-                    {/* Glowing light trail corner on hover */}
                     <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-[#FFD54A]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 
                     <div className="flex items-start justify-between">

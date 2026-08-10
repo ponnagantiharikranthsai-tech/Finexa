@@ -117,6 +117,10 @@ export async function createLoanAction(
 
     return { success: true, data: { loanId: loan.loanId } };
   } catch (err: any) {
-    return { success: false, error: err.message || "Failed to create loan" };
+    if (err?.message === "NEXT_REDIRECT" || err?.digest?.startsWith("NEXT_REDIRECT")) {
+      throw err;
+    }
+    console.error("createLoanAction Error:", err);
+    return { success: false, error: typeof err === "string" ? err : err.message || "Failed to create loan" };
   }
 }

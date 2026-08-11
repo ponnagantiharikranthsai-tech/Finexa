@@ -66,7 +66,7 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
   // Executive Page Layout Margins (A4)
   const margin = 18;        // Left & Right 18mm
   const topMargin = 25;     // Top 25mm
-  const bottomMargin = 25;  // Bottom 25mm
+  const bottomMargin = 20;  // Bottom 20mm
   const contentWidth = 174; // 210 - 36
   const maxRightX = pageWidth - margin; // 192mm
 
@@ -133,55 +133,59 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
     // Footer Line
     doc.setDrawColor(215, 215, 220);
     doc.setLineWidth(0.3);
-    doc.line(margin, pageHeight - 14, maxRightX, pageHeight - 14);
+    doc.line(margin, pageHeight - 12, maxRightX, pageHeight - 12);
 
     // Footer Text
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-    doc.text("FINEXA — Smart Loan Management System | Official System-Generated Current Statement", margin, pageHeight - 8);
-    doc.text(`Doc ID: ${data.documentId} | Page ${pageNum} of ${totalPages}`, maxRightX, pageHeight - 8, { align: "right" });
+    doc.text("FINEXA — Smart Loan Management System | Official System-Generated Current Statement", margin, pageHeight - 7);
+    doc.text(`Doc ID: ${data.documentId} | Page ${pageNum} of ${totalPages}`, maxRightX, pageHeight - 7, { align: "right" });
 
     doc.restoreGraphicsState();
   }
 
-  // Page Break Intelligence — Moves entire card if needed height exceeds remaining space
-  function checkPageBreak(neededHeight: number) {
-    if (y + neededHeight > pageHeight - bottomMargin - 5) {
+  // Content-Driven Page Break Intelligence
+  function checkPageBreak(neededHeight: number): boolean {
+    if (y + neededHeight > pageHeight - bottomMargin) {
       doc.addPage();
-      y = topMargin + 4;
+      y = topMargin + 2;
+      return true;
     }
+    return false;
+  }
+
+  function getAvailableSpace(): number {
+    return (pageHeight - bottomMargin) - y;
   }
 
   function renderCardTitle(titleStr: string) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
+    doc.setFontSize(9);
     doc.setTextColor(COLOR_GOLD[0], COLOR_GOLD[1], COLOR_GOLD[2]);
-    doc.text(titleStr.toUpperCase(), margin + 6, y + 7);
+    doc.text(titleStr.toUpperCase(), margin + 5, y + 6);
   }
 
   // ═════════════════════════════════════════════════════════════════════════
   // 1. DOCUMENT TITLE BANNER & STATUS BADGE
   // ═════════════════════════════════════════════════════════════════════════
-  y += 2;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
+  doc.setFontSize(15);
   doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
-  doc.text("CURRENT LOAN STATEMENT", margin, y + 4);
+  doc.text("CURRENT LOAN STATEMENT", margin, y + 3);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-  doc.text(`Statement Date: ${data.statementDate}`, maxRightX, y + 4, { align: "right" });
+  doc.text(`Statement Date: ${data.statementDate}`, maxRightX, y + 3, { align: "right" });
 
-  y += 9;
+  y += 7;
   doc.setDrawColor(COLOR_GOLD[0], COLOR_GOLD[1], COLOR_GOLD[2]);
-  doc.setLineWidth(0.6);
+  doc.setLineWidth(0.5);
   doc.line(margin, y, maxRightX, y);
-  y += 8;
+  y += 6;
 
-  // Status Banner Box (Overdue vs Due Soon vs Active)
-  checkPageBreak(22);
+  // Status Banner Box
   let bannerBg = COLOR_GREEN_BG;
   let bannerBorder = COLOR_GREEN_BORDER;
   let bannerText = COLOR_GREEN_TEXT;
@@ -204,25 +208,25 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
 
   doc.setFillColor(bannerBg[0], bannerBg[1], bannerBg[2]);
   doc.setDrawColor(bannerBorder[0], bannerBorder[1], bannerBorder[2]);
-  doc.roundedRect(margin, y, contentWidth, 18, 2, 2, "FD");
+  doc.roundedRect(margin, y, contentWidth, 15, 1.5, 1.5, "FD");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
   doc.setTextColor(bannerText[0], bannerText[1], bannerText[2]);
-  doc.text(bannerTitle, margin + 6, y + 7);
+  doc.text(bannerTitle, margin + 5, y + 5.5);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text(bannerSub, margin + 6, y + 13);
+  doc.setFontSize(7.5);
+  doc.text(bannerSub, margin + 5, y + 11);
 
-  y += 24;
+  y += 20;
 
   // ═════════════════════════════════════════════════════════════════════════
   // (01) BORROWER INFORMATION CARD
   // ═════════════════════════════════════════════════════════════════════════
-  const colW = (contentWidth - 18) / 2; // 78mm per column
-  const leftColX = margin + 6;
-  const rightColX = margin + colW + 12;
+  const colW = (contentWidth - 14) / 2; // 80mm per column
+  const leftColX = margin + 5;
+  const rightColX = margin + colW + 9;
 
   const panStr = data.panDecrypted ? data.panDecrypted : "Not Provided";
   const aadhaarStr = data.aadhaarDecrypted ? data.aadhaarDecrypted : "Not Provided";
@@ -230,133 +234,117 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
   const wrappedPan = doc.splitTextToSize(panStr, colW - 4);
   const wrappedAadhaar = doc.splitTextToSize(aadhaarStr, colW - 4);
 
-  const panLinesHeight = wrappedPan.length * 4;
-  const aadhaarLinesHeight = wrappedAadhaar.length * 4;
-  const kycTotalH = 14 + panLinesHeight + aadhaarLinesHeight;
-  const cardBodyH = Math.max(52, kycTotalH + 16);
+  const cardBodyH = 44;
 
-  checkPageBreak(cardBodyH + 8);
   doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
   doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
   doc.roundedRect(margin, y, contentWidth, cardBodyH, 2, 2, "FD");
 
   renderCardTitle("(01) BORROWER INFORMATION");
   doc.setDrawColor(228, 220, 195);
-  doc.line(margin + 6, y + 10, maxRightX - 6, y + 10);
+  doc.line(margin + 5, y + 9, maxRightX - 5, y + 9);
 
-  let bRowY = y + 16;
+  let bRowY = y + 14;
 
   // Left Column
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
   doc.text("CUSTOMER NAME", leftColX, bRowY);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
   doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
-  doc.text(data.borrowerName, leftColX, bRowY + 5);
+  doc.text(data.borrowerName, leftColX, bRowY + 4.5);
 
-  bRowY += 12;
+  bRowY += 10.5;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
   doc.text("MOBILE NUMBER", leftColX, bRowY);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.5);
+  doc.setFontSize(9);
   doc.setTextColor(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2]);
-  doc.text(data.mobile, leftColX, bRowY + 5);
+  doc.text(data.mobile, leftColX, bRowY + 4.5);
 
-  bRowY += 12;
+  bRowY += 10.5;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
   doc.text("EMAIL ADDRESS", leftColX, bRowY);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2]);
-  doc.text(data.email || "N/A", leftColX, bRowY + 5);
+  doc.text(data.email || "N/A", leftColX, bRowY + 4.5);
 
   // Right Column
-  let rRowY = y + 16;
+  let rRowY = y + 14;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
   doc.text("PAN NUMBER", rightColX, rRowY);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2]);
-  doc.text(wrappedPan, rightColX, rRowY + 5);
+  doc.text(wrappedPan, rightColX, rRowY + 4.5);
 
-  rRowY += 8 + panLinesHeight;
+  rRowY += 10.5;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
   doc.text("AADHAAR NUMBER", rightColX, rRowY);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2]);
-  doc.text(wrappedAadhaar, rightColX, rRowY + 5);
+  doc.text(wrappedAadhaar, rightColX, rRowY + 4.5);
 
-  y += cardBodyH + 10;
+  y += cardBodyH + 5;
 
   // ═════════════════════════════════════════════════════════════════════════
-  // (02) LOAN PORTFOLIO SUMMARY (DYNAMIC EXPANSION & 40px BOTTOM PADDING)
+  // (02) LOAN PORTFOLIO SUMMARY (FIT EFFICIENTLY ON PAGE 1)
   // ═════════════════════════════════════════════════════════════════════════
-  const gridCardW = (contentWidth - 18) / 2; // 78mm each
+  const gridCardW = (contentWidth - 14) / 2; // 80mm each
+  const summaryCardH = 50;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  const loanIdWrapped = doc.splitTextToSize(data.loanId.toUpperCase(), gridCardW - 10);
-  const loanIdH = Math.max(18, 12 + loanIdWrapped.length * 4);
-
-  // Ensure 14mm (40px) bottom padding below the last inner row before the card border
-  const summaryCardH = 14 + loanIdH + 46;
-
-  checkPageBreak(summaryCardH + 8);
   doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
   doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
   doc.roundedRect(margin, y, contentWidth, summaryCardH, 2, 2, "FD");
 
   renderCardTitle("(02) LOAN PORTFOLIO SUMMARY");
   doc.setDrawColor(228, 220, 195);
-  doc.line(margin + 6, y + 10, maxRightX - 6, y + 10);
+  doc.line(margin + 5, y + 9, maxRightX - 5, y + 9);
 
-  const gridStartY = y + 14;
+  const gridStartY = y + 12;
 
   const summaryItems = [
-    { label: "LOAN ID", val: loanIdWrapped, isBold: true, customH: loanIdH },
-    { label: "LOAN ISSUE DATE", val: data.dateGiven || "N/A", customH: 18 },
-    { label: "CURRENT DUE DATE", val: data.dueDate || "N/A", isGold: true, customH: 18 },
-    { label: "STATEMENT DATE", val: data.statementDate.split(",")[0]!, customH: 18 },
-    { label: "ORIGINAL PRINCIPAL", val: formatMoney(data.principal, false), isBold: true, customH: 18 },
-    { label: "INTEREST RATE BASIS", val: `Rs. ${data.interestRate} / Rs. 1,000 / month`, customH: 18 },
+    { label: "LOAN ID", val: data.loanId.slice(0, 18).toUpperCase(), isBold: true },
+    { label: "LOAN ISSUE DATE", val: data.dateGiven || "N/A" },
+    { label: "CURRENT DUE DATE", val: data.dueDate || "N/A", isGold: true },
+    { label: "STATEMENT DATE", val: data.statementDate.split(",")[0]! },
+    { label: "ORIGINAL PRINCIPAL", val: formatMoney(data.principal, false), isBold: true },
+    { label: "INTEREST RATE BASIS", val: `Rs. ${data.interestRate} / Rs. 1,000 / month` },
   ];
 
   summaryItems.forEach((sc, idx) => {
     const colIdx = idx % 2;
     const rowIdx = Math.floor(idx / 2);
 
-    const cx = margin + 6 + colIdx * (gridCardW + 6);
-    let cy = gridStartY;
-    if (rowIdx === 1) cy = gridStartY + loanIdH + 3;
-    if (rowIdx === 2) cy = gridStartY + loanIdH + 3 + 21;
-
-    const currentH = sc.customH || 18;
+    const cx = margin + 5 + colIdx * (gridCardW + 4);
+    const cy = gridStartY + rowIdx * 17.5;
 
     doc.setFillColor(255, 255, 255);
     doc.setDrawColor(230, 224, 205);
-    doc.roundedRect(cx, cy, gridCardW, currentH, 1.5, 1.5, "FD");
+    doc.roundedRect(cx, cy, gridCardW, 15.5, 1.5, 1.5, "FD");
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.8);
+    doc.setFontSize(6.5);
     doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-    doc.text(sc.label, cx + 5, cy + 5.5);
+    doc.text(sc.label, cx + 4, cy + 4.5);
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
@@ -365,43 +353,45 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
     } else {
       doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
     }
-    doc.text(sc.val, cx + 5, cy + 12);
+    doc.text(sc.val, cx + 4, cy + 11);
   });
 
-  y += summaryCardH + 10;
+  y += summaryCardH + 5;
 
   // ═════════════════════════════════════════════════════════════════════════
-  // (03) CURRENT FINANCIAL POSITION (ONE SINGLE LIGHT CARD — ZERO DARK BOXES)
+  // (03) CURRENT FINANCIAL POSITION (PLACED ON PAGE 1 — ZERO WASTED BLANK SPACE!)
   // ═════════════════════════════════════════════════════════════════════════
-  const finCardH = 86; // Clean vertical presentation with 40px bottom padding
+  const finCardH = 68;
 
-  checkPageBreak(finCardH + 8);
+  // Checks space; if not fitting 100%, checks if it fits on Page 1 or moves cleanly
+  checkPageBreak(finCardH);
+
   doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
   doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
   doc.roundedRect(margin, y, contentWidth, finCardH, 2, 2, "FD");
 
   renderCardTitle("(03) CURRENT FINANCIAL POSITION");
   doc.setDrawColor(228, 220, 195);
-  doc.line(margin + 6, y + 10, maxRightX - 6, y + 10);
+  doc.line(margin + 5, y + 9, maxRightX - 5, y + 9);
 
-  let finY = y + 16;
+  let finY = y + 14;
 
-  // NET CURRENT TOTAL PAYABLE (Highlighted Light Banner Box inside Card)
+  // Highlighted Light Banner Box for NET CURRENT TOTAL PAYABLE
   doc.setFillColor(248, 244, 230);
   doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
-  doc.roundedRect(margin + 6, finY, contentWidth - 12, 16, 1.5, 1.5, "FD");
+  doc.roundedRect(margin + 5, finY, contentWidth - 10, 15, 1.5, 1.5, "FD");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
   doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-  doc.text("NET CURRENT TOTAL PAYABLE", margin + 12, finY + 6);
+  doc.text("NET CURRENT TOTAL PAYABLE", margin + 10, finY + 5.5);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
   doc.setTextColor(COLOR_GOLD[0], COLOR_GOLD[1], COLOR_GOLD[2]);
-  doc.text(formatMoney(data.totalPayable, true), maxRightX - 12, finY + 11, { align: "right" });
+  doc.text(formatMoney(data.totalPayable, true), maxRightX - 10, finY + 10.5, { align: "right" });
 
-  finY += 22;
+  finY += 20;
 
   const finItems = [
     { label: "ORIGINAL PRINCIPAL", val: formatMoney(data.principal, false) },
@@ -416,7 +406,7 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
     doc.text(item.label, margin + 8, finY);
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
+    doc.setFontSize(9);
     if (item.isGreen) {
       doc.setTextColor(14, 94, 46);
     } else {
@@ -424,93 +414,92 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
     }
     doc.text(item.val, maxRightX - 8, finY, { align: "right" });
 
-    finY += 11;
+    finY += 10;
   });
 
-  y += finCardH + 10;
+  y += finCardH + 6;
 
   // ═════════════════════════════════════════════════════════════════════════
-  // (04) ITEMIZED CALCULATION BREAKDOWN (EXPLICIT ACCOUNTING TABLE)
+  // PAGE 2 STARTS HERE (INTENTIONAL, ELEGANT PAGE 2 FLOW)
   // ═════════════════════════════════════════════════════════════════════════
-  checkPageBreak(66);
+  checkPageBreak(58);
 
+  // (04) ITEMIZED CALCULATION BREAKDOWN
   doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
   doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
-  doc.roundedRect(margin, y, contentWidth, 60, 2, 2, "FD");
+  doc.roundedRect(margin, y, contentWidth, 54, 2, 2, "FD");
 
   renderCardTitle("(04) ITEMIZED CALCULATION BREAKDOWN");
   doc.setDrawColor(228, 220, 195);
-  doc.line(margin + 6, y + 10, maxRightX - 6, y + 10);
+  doc.line(margin + 5, y + 9, maxRightX - 5, y + 9);
 
-  // Table Header Bar with Distinct Styling
-  const tblY = y + 14;
+  // Table Header Bar
+  const tblY = y + 13;
   doc.setFillColor(240, 234, 215);
-  doc.rect(margin + 6, tblY, contentWidth - 12, 6.5, "F");
+  doc.rect(margin + 5, tblY, contentWidth - 10, 6, "F");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
   doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
-  doc.text("LINE ITEM DESCRIPTION", margin + 10, tblY + 4.5);
-  doc.text("CALCULATION FORMULA & BASIS", margin + 68, tblY + 4.5);
-  doc.text("ITEMIZED AMOUNT", maxRightX - 10, tblY + 4.5, { align: "right" });
+  doc.text("LINE ITEM DESCRIPTION", margin + 8, tblY + 4);
+  doc.text("CALCULATION FORMULA & BASIS", margin + 65, tblY + 4);
+  doc.text("ITEMIZED AMOUNT", maxRightX - 8, tblY + 4, { align: "right" });
 
-  // Explicit Accounting Itemization Rows
   const accountingRows = [
-    { desc: "Loan Principal", basis: "Original Principal Disbursed", amt: `+ ${formatMoney(data.principal, true)}` },
+    { desc: "Loan Principal", basis: "Original Disbursed Principal", amt: `+ ${formatMoney(data.principal, true)}` },
     { desc: "Accrued Interest", basis: `Rs. ${data.interestRate} / Rs. 1,000 / month`, amt: `+ ${formatMoney(data.totalInterest, true)}` },
     { desc: "Overdue Penalty", basis: data.isOverdue ? `Rs. ${data.penaltyRate || 20} / day x ${data.overdueDays} days` : "No Penalty (On Time)", amt: `+ ${formatMoney(data.accruedPenalty, true)}` },
     { desc: "Payments Received", basis: `${data.payments.length} Payment Credit(s) Recorded`, amt: `- ${formatMoney(data.totalPayments, true)}` },
   ];
 
   accountingRows.forEach((row, idx) => {
-    const rowTop = tblY + 8 + idx * 6.5;
+    const rowTop = tblY + 7 + idx * 6;
     if (idx % 2 === 1) {
       doc.setFillColor(250, 248, 242);
-      doc.rect(margin + 6, rowTop - 1.5, contentWidth - 12, 6.5, "F");
+      doc.rect(margin + 5, rowTop - 1, contentWidth - 10, 6, "F");
     }
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2]);
-    doc.text(row.desc, margin + 10, rowTop + 3);
+    doc.text(row.desc, margin + 8, rowTop + 3.2);
 
     doc.setFont("helvetica", "normal");
     doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-    doc.text(row.basis, margin + 68, rowTop + 3);
+    doc.text(row.basis, margin + 65, rowTop + 3.2);
 
     doc.setFont("helvetica", "bold");
     doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
-    doc.text(row.amt, maxRightX - 10, rowTop + 3, { align: "right" });
+    doc.text(row.amt, maxRightX - 8, rowTop + 3.2, { align: "right" });
   });
 
-  // Table Bottom Summary Row
-  const totalLineY = tblY + 36;
+  // Table Bottom Summary Line
+  const totalLineY = tblY + 32;
   doc.setDrawColor(COLOR_GOLD[0], COLOR_GOLD[1], COLOR_GOLD[2]);
   doc.setLineWidth(0.5);
-  doc.line(margin + 6, totalLineY, maxRightX - 6, totalLineY);
+  doc.line(margin + 5, totalLineY, maxRightX - 5, totalLineY);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.5);
+  doc.setFontSize(9);
   doc.setTextColor(COLOR_GOLD[0], COLOR_GOLD[1], COLOR_GOLD[2]);
-  doc.text("NET CURRENT PAYABLE", margin + 10, totalLineY + 6);
-  doc.text(formatMoney(data.totalPayable, true), maxRightX - 10, totalLineY + 6, { align: "right" });
+  doc.text("NET CURRENT PAYABLE", margin + 8, totalLineY + 5.5);
+  doc.text(formatMoney(data.totalPayable, true), maxRightX - 8, totalLineY + 5.5, { align: "right" });
 
-  y += 68;
+  y += 60;
 
   // ═════════════════════════════════════════════════════════════════════════
-  // (05) REPAYMENT RECORD & TRANSACTION LOG (VERTICAL TRANSACTION CARDS)
+  // (05) REPAYMENT RECORD & TRANSACTION LOG (NON-SPLITTABLE TRANSACTION BLOCKS)
   // ═════════════════════════════════════════════════════════════════════════
   const hasPayments = data.payments.length > 0;
 
   if (hasPayments) {
     data.payments.forEach((p, pIdx) => {
       const remarkText = p.notes || "Monthly interest payment received for the current loan cycle.";
-      const wrappedRemark = doc.splitTextToSize(remarkText, contentWidth - 16);
+      const wrappedRemark = doc.splitTextToSize(remarkText, contentWidth - 14);
+      const txCardH = Math.max(50, 42 + wrappedRemark.length * 4);
 
-      // Dynamic card height calculation ensuring 32px bottom padding
-      const txCardH = Math.max(68, 54 + wrappedRemark.length * 4.5);
-
-      checkPageBreak(txCardH + 8);
+      // Moves transaction block if remaining page height is insufficient
+      checkPageBreak(txCardH + 5);
 
       doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
       doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
@@ -518,76 +507,64 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
 
       renderCardTitle(`(05) REPAYMENT RECORD #${String(pIdx + 1).padStart(2, "0")}`);
       doc.setDrawColor(228, 220, 195);
-      doc.line(margin + 6, y + 10, maxRightX - 6, y + 10);
+      doc.line(margin + 5, y + 9, maxRightX - 5, y + 9);
 
-      let pY = y + 16;
+      let pY = y + 14;
 
-      // PAYMENT DATE
+      // PAYMENT DATE & TRANSACTION ID
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
+      doc.setFontSize(7);
       doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-      doc.text("PAYMENT DATE", margin + 8, pY);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9.5);
-      doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
-      doc.text(p.paymentDate, margin + 8, pY + 5);
-
-      pY += 12;
-
-      // TRANSACTION ID
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
-      doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-      doc.text("TRANSACTION ID", margin + 8, pY);
+      doc.text("PAYMENT DATE", margin + 7, pY);
+      doc.text("TRANSACTION ID", margin + 70, pY);
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
-      doc.setTextColor(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2]);
-      doc.text(p.paymentId.toUpperCase(), margin + 8, pY + 5);
+      doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
+      doc.text(p.paymentDate, margin + 7, pY + 4.5);
+      doc.text(p.paymentId.toUpperCase(), margin + 70, pY + 4.5);
 
-      pY += 12;
+      pY += 11;
 
-      // TYPE / REMARK (Dynamic Multi-Line Wrapping)
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
-      doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-      doc.text("TYPE / REMARK", margin + 8, pY);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
-      doc.setTextColor(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2]);
-      doc.text(wrappedRemark, margin + 8, pY + 5);
-
-      pY += 7 + wrappedRemark.length * 4.5;
-
-      // STATUS & AMOUNT CREDITED (Padded Grid Row inside Card)
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
-      doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-      doc.text("STATUS", margin + 8, pY);
-      doc.text("AMOUNT CREDITED", margin + 85, pY);
-
-      // Status Badge Pill
-      doc.setFillColor(232, 245, 233);
-      doc.setDrawColor(160, 212, 164);
-      doc.roundedRect(margin + 8, pY + 2.5, 24, 5.5, 1, 1, "FD");
-
+      // TYPE / REMARK
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7);
-      doc.setTextColor(14, 94, 46);
-      doc.text("RECEIVED", margin + 10.5, pY + 6.2);
+      doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
+      doc.text("TYPE / REMARK", margin + 7, pY);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2]);
+      doc.text(wrappedRemark, margin + 7, pY + 4.5);
+
+      pY += 6 + wrappedRemark.length * 4;
+
+      // STATUS & AMOUNT CREDITED
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
+      doc.text("STATUS", margin + 7, pY);
+      doc.text("AMOUNT CREDITED", margin + 70, pY);
+
+      doc.setFillColor(232, 245, 233);
+      doc.setDrawColor(160, 212, 164);
+      doc.roundedRect(margin + 7, pY + 2, 22, 5, 1, 1, "FD");
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(10.5);
-      doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
-      doc.text(formatMoney(p.amount, true), margin + 85, pY + 7);
+      doc.setFontSize(6.5);
+      doc.setTextColor(14, 94, 46);
+      doc.text("RECEIVED", margin + 9.5, pY + 5.5);
 
-      y += txCardH + 10; // 10mm (30px) vertical gap between separate repayment transaction cards
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
+      doc.text(formatMoney(p.amount, true), margin + 70, pY + 6);
+
+      y += txCardH + 5;
     });
   } else {
-    const noPayCardH = 28;
-    checkPageBreak(noPayCardH + 8);
+    const noPayCardH = 24;
+    checkPageBreak(noPayCardH + 5);
 
     doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
     doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
@@ -595,61 +572,61 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
 
     renderCardTitle("(05) REPAYMENT RECORD & TRANSACTION LOG");
     doc.setDrawColor(228, 220, 195);
-    doc.line(margin + 6, y + 10, maxRightX - 6, y + 10);
+    doc.line(margin + 5, y + 9, maxRightX - 5, y + 9);
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(8);
     doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-    doc.text("No repayment transactions recorded prior to the statement date.", margin + 8, y + 19);
+    doc.text("No repayment transactions recorded prior to the statement date.", margin + 7, y + 16);
 
-    y += noPayCardH + 10;
+    y += noPayCardH + 5;
   }
 
   // ═════════════════════════════════════════════════════════════════════════
   // (06) NOTES & RECORD REMARKS
   // ═════════════════════════════════════════════════════════════════════════
   const noteText = data.notes || "No additional remarks recorded for this loan portfolio.";
-  const wrappedNotes = doc.splitTextToSize(noteText, contentWidth - 16);
-  const notesCardH = Math.max(28, 16 + wrappedNotes.length * 4.5);
+  const wrappedNotes = doc.splitTextToSize(noteText, contentWidth - 14);
+  const notesCardH = Math.max(22, 14 + wrappedNotes.length * 4);
 
-  checkPageBreak(notesCardH + 6);
+  checkPageBreak(notesCardH + 5);
   doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
   doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
   doc.roundedRect(margin, y, contentWidth, notesCardH, 2, 2, "FD");
 
   renderCardTitle("(06) NOTES & RECORD REMARKS");
   doc.setDrawColor(228, 220, 195);
-  doc.line(margin + 6, y + 10, maxRightX - 6, y + 10);
+  doc.line(margin + 5, y + 9, maxRightX - 5, y + 9);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2]);
-  doc.text(wrappedNotes, margin + 8, y + 17);
+  doc.text(wrappedNotes, margin + 7, y + 15);
 
-  y += notesCardH + 10;
+  y += notesCardH + 6;
 
   // ═════════════════════════════════════════════════════════════════════════
-  // (07) THANK YOU & ENTERPRISE CLOSING
+  // (07) THANK YOU & ENTERPRISE CLOSING (PLACED NATURALLY AT BOTTOM OF PAGE 2)
   // ═════════════════════════════════════════════════════════════════════════
-  checkPageBreak(28);
+  checkPageBreak(22);
   doc.setFillColor(250, 248, 242);
   doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
-  doc.roundedRect(margin, y, contentWidth, 24, 2, 2, "FD");
+  doc.roundedRect(margin, y, contentWidth, 20, 2, 2, "FD");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
+  doc.setFontSize(10);
   doc.setTextColor(COLOR_GOLD[0], COLOR_GOLD[1], COLOR_GOLD[2]);
-  doc.text("Thank You", pageWidth / 2, y + 9, { align: "center" });
+  doc.text("Thank You", pageWidth / 2, y + 7, { align: "center" });
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
-  doc.text("FINEXA — Smart Loan Management System", pageWidth / 2, y + 15, { align: "center" });
+  doc.text("FINEXA — Smart Loan Management System", pageWidth / 2, y + 12.5, { align: "center" });
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-  doc.text("This statement is an official system-generated record. For inquiries, contact your account administrator.", pageWidth / 2, y + 20, { align: "center" });
+  doc.text("This statement is an official system-generated record. For inquiries, contact your account administrator.", pageWidth / 2, y + 16.5, { align: "center" });
 
   // Render Header & Footer Across All Pages
   const totalPages = doc.getNumberOfPages();

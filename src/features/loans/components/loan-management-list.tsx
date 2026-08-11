@@ -934,29 +934,30 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                 </div>
 
                 {/* Bottom Actions Row */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-4 mt-4 border-t border-white/[0.03]">
+                <div className="flex flex-wrap items-center gap-2 pt-4 mt-4 border-t border-white/[0.03]">
                   {!isSettled ? (
                     <>
                       <button
                         onClick={() => { setSelectedLoan(loan); setPaymentAmount(""); setPaymentNotes(""); setPaymentOpen(true); }}
-                        className="flex-1 min-w-[50px] flex items-center justify-center gap-1 h-9 rounded-xl bg-secondary hover:bg-accent/40 text-primary text-xs font-bold transition-all duration-200 fx-pressable"
+                        className="h-9 px-3 flex-1 min-w-[70px] sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl bg-secondary hover:bg-accent/40 text-primary text-xs font-bold whitespace-nowrap transition-all duration-200 fx-pressable"
                       >
-                        <Landmark className="h-3.5 w-3.5" /> Pay
+                        <Landmark className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        <span>Pay</span>
                       </button>
                       <button
                         onClick={() => handleCurrentStatement(loan)}
                         disabled={generatingStatementId === loan.loanId}
-                        className="flex-1 min-w-[130px] flex items-center justify-center gap-1.5 h-9 rounded-xl bg-secondary hover:bg-accent/40 text-primary text-xs font-bold transition-all duration-200 fx-pressable disabled:opacity-50"
+                        className="h-9 px-3.5 flex-1 min-w-[115px] sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl bg-secondary hover:bg-accent/40 text-primary text-xs font-bold whitespace-nowrap transition-all duration-200 fx-pressable disabled:opacity-50"
                       >
                         {generatingStatementId === loan.loanId ? (
                           <>
-                            <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
+                            <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
                             <span>Generating...</span>
                           </>
                         ) : (
                           <>
-                            <FileText className="h-3.5 w-3.5 text-primary" />
-                            <span>Current Statement</span>
+                            <FileText className="h-3.5 w-3.5 shrink-0 text-primary" />
+                            <span>Loan Status</span>
                           </>
                         )}
                       </button>
@@ -965,27 +966,29 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
                   <button
                     onClick={() => handleViewDetails(loan)}
-                    className="flex-1 min-w-[70px] flex items-center justify-center gap-1 h-9 rounded-xl bg-accent/25 hover:bg-accent/50 text-foreground text-xs font-semibold transition-all duration-200"
+                    className="h-9 px-3.5 flex-1 min-w-[100px] sm:flex-initial flex items-center justify-center gap-1 rounded-xl bg-accent/25 hover:bg-accent/50 text-foreground text-xs font-semibold whitespace-nowrap transition-all duration-200"
                   >
-                    View Details
+                    <span>View Details</span>
                   </button>
 
-                  <button
-                    onClick={(e) => handleEditOpen(loan, e)}
-                    className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors"
-                    title="Edit Borrower Details"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-1 ml-auto shrink-0">
+                    <button
+                      onClick={(e) => handleEditOpen(loan, e)}
+                      className="h-9 w-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors"
+                      title="Edit Borrower Details"
+                    >
+                      <Edit className="h-4 w-4 shrink-0" />
+                    </button>
 
-                  <button
-                    onClick={(e) => handleDeleteLoan(loan.loanId, loan.borrower.name, e)}
-                    disabled={isPending}
-                    className="p-2 rounded-xl text-muted-foreground hover:text-red-400 hover:bg-red-550/10 transition-all duration-200"
-                    title="Delete Loan"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                    <button
+                      onClick={(e) => handleDeleteLoan(loan.loanId, loan.borrower.name, e)}
+                      disabled={isPending}
+                      className="h-9 w-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-red-400 hover:bg-red-550/10 transition-all duration-200"
+                      title="Delete Loan"
+                    >
+                      <Trash2 className="h-4 w-4 shrink-0" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );

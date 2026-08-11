@@ -395,7 +395,7 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
                     <button
                       onClick={() => handleCurrentStatement(loan)}
                       disabled={generatingStatementId === loan.loanId}
-                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl bg-secondary text-primary text-xs font-semibold hover:bg-accent transition-all duration-200 fx-pressable disabled:opacity-50"
+                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl bg-secondary text-primary text-xs font-semibold whitespace-nowrap hover:bg-accent transition-all duration-200 fx-pressable disabled:opacity-50"
                     >
                       {generatingStatementId === loan.loanId ? (
                         <>
@@ -405,7 +405,7 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
                       ) : (
                         <>
                           <FileText className="h-3.5 w-3.5" />
-                          <span>Current Statement</span>
+                          <span>Loan Status</span>
                         </>
                       )}
                     </button>

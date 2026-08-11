@@ -69,6 +69,7 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
   const bottomMargin = 20;  // Bottom 20mm
   const contentWidth = 174; // 210 - 36
   const maxRightX = pageWidth - margin; // 192mm
+  const sectionGap = 7;     // 7mm (22px) space between sections
 
   // Executive Palette Tokens
   const COLOR_NAVY = [15, 20, 30];          // Deep Executive Navy (#0F141E)
@@ -145,7 +146,7 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
     doc.restoreGraphicsState();
   }
 
-  // Content-Driven Page Break Intelligence
+  // Content-Aware Page Break Intelligence
   function checkPageBreak(neededHeight: number): boolean {
     if (y + neededHeight > pageHeight - bottomMargin) {
       doc.addPage();
@@ -153,10 +154,6 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
       return true;
     }
     return false;
-  }
-
-  function getAvailableSpace(): number {
-    return (pageHeight - bottomMargin) - y;
   }
 
   function renderCardTitle(titleStr: string) {
@@ -183,7 +180,7 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
   doc.setDrawColor(COLOR_GOLD[0], COLOR_GOLD[1], COLOR_GOLD[2]);
   doc.setLineWidth(0.5);
   doc.line(margin, y, maxRightX, y);
-  y += 6;
+  y += 5;
 
   // Status Banner Box
   let bannerBg = COLOR_GREEN_BG;
@@ -208,21 +205,21 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
 
   doc.setFillColor(bannerBg[0], bannerBg[1], bannerBg[2]);
   doc.setDrawColor(bannerBorder[0], bannerBorder[1], bannerBorder[2]);
-  doc.roundedRect(margin, y, contentWidth, 15, 1.5, 1.5, "FD");
+  doc.roundedRect(margin, y, contentWidth, 14, 1.5, 1.5, "FD");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.5);
+  doc.setFontSize(9);
   doc.setTextColor(bannerText[0], bannerText[1], bannerText[2]);
-  doc.text(bannerTitle, margin + 5, y + 5.5);
+  doc.text(bannerTitle, margin + 5, y + 5);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
-  doc.text(bannerSub, margin + 5, y + 11);
+  doc.text(bannerSub, margin + 5, y + 10);
 
-  y += 20;
+  y += 14 + sectionGap;
 
   // ═════════════════════════════════════════════════════════════════════════
-  // (01) BORROWER INFORMATION CARD
+  // (01) BORROWER INFORMATION CARD (STRICT CONTENT-DRIVEN BOUNDARY)
   // ═════════════════════════════════════════════════════════════════════════
   const colW = (contentWidth - 14) / 2; // 80mm per column
   const leftColX = margin + 5;
@@ -234,11 +231,14 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
   const wrappedPan = doc.splitTextToSize(panStr, colW - 4);
   const wrappedAadhaar = doc.splitTextToSize(aadhaarStr, colW - 4);
 
-  const cardBodyH = 44;
+  const kycHeight = Math.max(wrappedPan.length, wrappedAadhaar.length) * 4;
+  const card01Height = 11 + 22 + kycHeight + 6; // Content-driven total height
+
+  checkPageBreak(card01Height);
 
   doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
   doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
-  doc.roundedRect(margin, y, contentWidth, cardBodyH, 2, 2, "FD");
+  doc.roundedRect(margin, y, contentWidth, card01Height, 2, 2, "FD");
 
   renderCardTitle("(01) BORROWER INFORMATION");
   doc.setDrawColor(228, 220, 195);
@@ -303,17 +303,35 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
   doc.setTextColor(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2]);
   doc.text(wrappedAadhaar, rightColX, rRowY + 4.5);
 
-  y += cardBodyH + 5;
+  // Advance Y to exact bottom of Section (01) + gap
+  y += card01Height + sectionGap;
 
   // ═════════════════════════════════════════════════════════════════════════
-  // (02) LOAN PORTFOLIO SUMMARY (FIT EFFICIENTLY ON PAGE 1)
+  // (02) LOAN PORTFOLIO SUMMARY (EXACT CONTENT-DRIVEN DYNAMIC HEIGHT)
   // ═════════════════════════════════════════════════════════════════════════
   const gridCardW = (contentWidth - 14) / 2; // 80mm each
-  const summaryCardH = 50;
 
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  const loanIdWrapped = doc.splitTextToSize(data.loanId.toUpperCase(), gridCardW - 8);
+  const loanIdBoxH = Math.max(16, 11 + loanIdWrapped.length * 3.8);
+
+  // Calculate EXACT total card height from ALL content items + padding:
+  // Header: 11mm
+  // Row 0 (Loan ID & Issue Date): loanIdBoxH
+  // Row Gap: 3mm
+  // Row 1 (Due Date & Statement Date): 16mm
+  // Row Gap: 3mm
+  // Row 2 (Principal & Interest Rate): 16mm
+  // Bottom Padding: 8mm
+  const card02Height = 11 + loanIdBoxH + 3 + 16 + 3 + 16 + 8;
+
+  checkPageBreak(card02Height);
+
+  // Draw Section (02) Outer Card Box
   doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
   doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
-  doc.roundedRect(margin, y, contentWidth, summaryCardH, 2, 2, "FD");
+  doc.roundedRect(margin, y, contentWidth, card02Height, 2, 2, "FD");
 
   renderCardTitle("(02) LOAN PORTFOLIO SUMMARY");
   doc.setDrawColor(228, 220, 195);
@@ -322,12 +340,12 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
   const gridStartY = y + 12;
 
   const summaryItems = [
-    { label: "LOAN ID", val: data.loanId.slice(0, 18).toUpperCase(), isBold: true },
-    { label: "LOAN ISSUE DATE", val: data.dateGiven || "N/A" },
-    { label: "CURRENT DUE DATE", val: data.dueDate || "N/A", isGold: true },
-    { label: "STATEMENT DATE", val: data.statementDate.split(",")[0]! },
-    { label: "ORIGINAL PRINCIPAL", val: formatMoney(data.principal, false), isBold: true },
-    { label: "INTEREST RATE BASIS", val: `Rs. ${data.interestRate} / Rs. 1,000 / month` },
+    { label: "LOAN ID", val: loanIdWrapped, isBold: true, customH: loanIdBoxH },
+    { label: "LOAN ISSUE DATE", val: data.dateGiven || "N/A", customH: loanIdBoxH },
+    { label: "CURRENT DUE DATE", val: data.dueDate || "N/A", isGold: true, customH: 16 },
+    { label: "STATEMENT DATE", val: data.statementDate.split(",")[0]!, customH: 16 },
+    { label: "ORIGINAL PRINCIPAL", val: formatMoney(data.principal, false), isBold: true, customH: 16 },
+    { label: "INTEREST RATE BASIS", val: `Rs. ${data.interestRate} / Rs. 1,000 / month`, customH: 16 },
   ];
 
   summaryItems.forEach((sc, idx) => {
@@ -335,11 +353,16 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
     const rowIdx = Math.floor(idx / 2);
 
     const cx = margin + 5 + colIdx * (gridCardW + 4);
-    const cy = gridStartY + rowIdx * 17.5;
+
+    let cy = gridStartY;
+    if (rowIdx === 1) cy = gridStartY + loanIdBoxH + 3;
+    if (rowIdx === 2) cy = gridStartY + loanIdBoxH + 3 + 16 + 3;
+
+    const currentBoxH = sc.customH || 16;
 
     doc.setFillColor(255, 255, 255);
     doc.setDrawColor(230, 224, 205);
-    doc.roundedRect(cx, cy, gridCardW, 15.5, 1.5, 1.5, "FD");
+    doc.roundedRect(cx, cy, gridCardW, currentBoxH, 1.5, 1.5, "FD");
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.5);
@@ -347,7 +370,7 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
     doc.text(sc.label, cx + 4, cy + 4.5);
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
     if (sc.isGold) {
       doc.setTextColor(COLOR_GOLD[0], COLOR_GOLD[1], COLOR_GOLD[2]);
     } else {
@@ -356,19 +379,20 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
     doc.text(sc.val, cx + 4, cy + 11);
   });
 
-  y += summaryCardH + 5;
+  // Advance Y strictly based on Section (02)'s calculated height + sectionGap
+  y += card02Height + sectionGap;
 
   // ═════════════════════════════════════════════════════════════════════════
-  // (03) CURRENT FINANCIAL POSITION (PLACED ON PAGE 1 — ZERO WASTED BLANK SPACE!)
+  // (03) CURRENT FINANCIAL POSITION (STARTS ONLY AFTER SECTION 02 IS CLOSED)
   // ═════════════════════════════════════════════════════════════════════════
-  const finCardH = 68;
+  const card03Height = 66;
 
-  // Checks space; if not fitting 100%, checks if it fits on Page 1 or moves cleanly
-  checkPageBreak(finCardH);
+  // Check if Section (03) fits in remaining space on Page 1
+  checkPageBreak(card03Height);
 
   doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
   doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
-  doc.roundedRect(margin, y, contentWidth, finCardH, 2, 2, "FD");
+  doc.roundedRect(margin, y, contentWidth, card03Height, 2, 2, "FD");
 
   renderCardTitle("(03) CURRENT FINANCIAL POSITION");
   doc.setDrawColor(228, 220, 195);
@@ -417,17 +441,19 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
     finY += 10;
   });
 
-  y += finCardH + 6;
+  // Advance Y strictly based on Section (03)'s calculated height + sectionGap
+  y += card03Height + sectionGap;
 
   // ═════════════════════════════════════════════════════════════════════════
-  // PAGE 2 STARTS HERE (INTENTIONAL, ELEGANT PAGE 2 FLOW)
+  // (04) ITEMIZED CALCULATION BREAKDOWN (EXPLICIT ACCOUNTING TABLE)
   // ═════════════════════════════════════════════════════════════════════════
-  checkPageBreak(58);
+  const card04Height = 56;
 
-  // (04) ITEMIZED CALCULATION BREAKDOWN
+  checkPageBreak(card04Height);
+
   doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
   doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
-  doc.roundedRect(margin, y, contentWidth, 54, 2, 2, "FD");
+  doc.roundedRect(margin, y, contentWidth, card04Height, 2, 2, "FD");
 
   renderCardTitle("(04) ITEMIZED CALCULATION BREAKDOWN");
   doc.setDrawColor(228, 220, 195);
@@ -485,10 +511,10 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
   doc.text("NET CURRENT PAYABLE", margin + 8, totalLineY + 5.5);
   doc.text(formatMoney(data.totalPayable, true), maxRightX - 8, totalLineY + 5.5, { align: "right" });
 
-  y += 60;
+  y += card04Height + sectionGap;
 
   // ═════════════════════════════════════════════════════════════════════════
-  // (05) REPAYMENT RECORD & TRANSACTION LOG (NON-SPLITTABLE TRANSACTION BLOCKS)
+  // (05) REPAYMENT RECORD & TRANSACTION LOG (INDIVIDUAL TRANSACTION BLOCKS)
   // ═════════════════════════════════════════════════════════════════════════
   const hasPayments = data.payments.length > 0;
 
@@ -496,10 +522,9 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
     data.payments.forEach((p, pIdx) => {
       const remarkText = p.notes || "Monthly interest payment received for the current loan cycle.";
       const wrappedRemark = doc.splitTextToSize(remarkText, contentWidth - 14);
-      const txCardH = Math.max(50, 42 + wrappedRemark.length * 4);
+      const txCardH = Math.max(48, 40 + wrappedRemark.length * 4);
 
-      // Moves transaction block if remaining page height is insufficient
-      checkPageBreak(txCardH + 5);
+      checkPageBreak(txCardH);
 
       doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
       doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
@@ -560,11 +585,11 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
       doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
       doc.text(formatMoney(p.amount, true), margin + 70, pY + 6);
 
-      y += txCardH + 5;
+      y += txCardH + sectionGap;
     });
   } else {
     const noPayCardH = 24;
-    checkPageBreak(noPayCardH + 5);
+    checkPageBreak(noPayCardH);
 
     doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
     doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
@@ -579,7 +604,7 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
     doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
     doc.text("No repayment transactions recorded prior to the statement date.", margin + 7, y + 16);
 
-    y += noPayCardH + 5;
+    y += noPayCardH + sectionGap;
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -589,7 +614,7 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
   const wrappedNotes = doc.splitTextToSize(noteText, contentWidth - 14);
   const notesCardH = Math.max(22, 14 + wrappedNotes.length * 4);
 
-  checkPageBreak(notesCardH + 5);
+  checkPageBreak(notesCardH);
   doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
   doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
   doc.roundedRect(margin, y, contentWidth, notesCardH, 2, 2, "FD");
@@ -603,10 +628,10 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
   doc.setTextColor(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2]);
   doc.text(wrappedNotes, margin + 7, y + 15);
 
-  y += notesCardH + 6;
+  y += notesCardH + sectionGap;
 
   // ═════════════════════════════════════════════════════════════════════════
-  // (07) THANK YOU & ENTERPRISE CLOSING (PLACED NATURALLY AT BOTTOM OF PAGE 2)
+  // (07) THANK YOU & ENTERPRISE CLOSING
   // ═════════════════════════════════════════════════════════════════════════
   checkPageBreak(22);
   doc.setFillColor(250, 248, 242);

@@ -36,7 +36,8 @@ import type { LoanManagementDetailResult } from "../actions/get-loan-management-
 import type { Payment, NotificationLog, PenaltyLedger, LoanCycle } from "@/db/schema";
 import { calculatePeriods, calculateMonthlyInterest } from "@/domain/interest-calculator";
 import { generateActiveLoansPdf } from "../utils/generate-active-loans-pdf";
-import { differenceInDays } from "date-fns";
+import { generateCurrentStatementPdf } from "../utils/generate-current-statement-pdf";
+import { differenceInDays, format } from "date-fns";
 import { FinexaCard3D, FinexaStaggerContainer, FinexaStaggerItem } from "@/components/motion/finexa-motion";
 import { FinexaMoneyEffect, FinexaCycleEffect, FinexaDocumentEffect } from "@/components/motion/finexa-effects";
 
@@ -116,6 +117,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   const [sortBy, setSortBy] = useState("newest");
   const [isPending, startTransition] = useTransition();
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [generatingStatementId, setGeneratingStatementId] = useState<string | null>(null);
 
   const handleDownloadPdf = () => {
     if (isGeneratingPdf) return;
@@ -130,6 +132,91 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         toast.error(err?.message || "Unable to generate the backup PDF. Your loan data has not been changed. Please try again.");
       } finally {
         setIsGeneratingPdf(false);
+      }
+    }, 100);
+  };
+
+  const handleCurrentStatement = async (loan: LoanManagementDetailResult) => {
+    if (generatingStatementId === loan.loanId) return;
+    setGeneratingStatementId(loan.loanId);
+    toast.info("Generating Current Statement...");
+
+    setTimeout(async () => {
+      try {
+        const res = await getExtraLoanDetailsAction(loan.loanId);
+        const paymentsList = res.success && res.data?.payments ? res.data.payments : [];
+        const cyclesList = res.success && res.data?.cycles ? res.data.cycles : [];
+
+        const todayStr = new Date().toISOString().split("T")[0]!;
+        const today = new Date(todayStr);
+        const due = new Date(loan.dueDate);
+        const isPaid = loan.outstandingBalance <= 0 || loan.status === "closed";
+        const isOverdue = !isPaid && due < today;
+        const overdueDays = isOverdue ? Math.max(0, differenceInDays(today, due)) : 0;
+        const daysRemaining = !isOverdue && !isPaid ? Math.max(0, differenceInDays(due, today)) : 0;
+
+        const accruedPenalty = calculateAccruedPenalty({
+          principal: Number(loan.principal),
+          dueDate: loan.dueDate,
+          status: loan.status,
+          penaltyRate: Number((loan as any).penaltyRate || 20),
+          manualPenaltyAmount: Number(loan.penaltyAmount || 0),
+        });
+
+        const principal = Number(loan.principal);
+        const interestRate = Number(loan.interestRate);
+        const periods = calculatePeriods(loan.dateGiven, loan.dueDate);
+        const monthlyInterestAmount = calculateMonthlyInterest(principal, interestRate);
+        const totalInterest = periods * monthlyInterestAmount;
+
+        const totalPayments = paymentsList.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+        const totalPayable = loan.outstandingBalance;
+
+        const nowFormatted = format(new Date(), "dd MMM yyyy, hh:mm a");
+        const docId = `FIN-CST-${format(new Date(), "yyyyMMdd")}-${Math.floor(100000 + Math.random() * 900000)}`;
+
+        generateCurrentStatementPdf({
+          documentId: docId,
+          statementDate: nowFormatted,
+          loanId: loan.loanId,
+          borrowerName: loan.borrower.name,
+          mobile: loan.borrower.mobile,
+          email: loan.borrower.email || undefined,
+          panDecrypted: loan.borrower.panDecrypted,
+          aadhaarDecrypted: loan.borrower.aadhaarDecrypted,
+          locationUrl: loan.borrower.locationUrl || undefined,
+          principal,
+          interestRate,
+          interestType: loan.interestType as any,
+          dateGiven: loan.dateGiven,
+          dueDate: loan.dueDate,
+          status: loan.status,
+          penaltyRate: Number((loan as any).penaltyRate || 20),
+          manualPenaltyAmount: Number(loan.penaltyAmount || 0),
+
+          monthlyInterestAmount,
+          totalInterest,
+          accruedPenalty: accruedPenalty.totalPenalty,
+          isPenaltyActive: accruedPenalty.isPenaltyActive,
+          overdueDays,
+          daysRemaining,
+          isOverdue,
+
+          totalPayments,
+          outstandingBalance: loan.outstandingBalance,
+          totalPayable,
+
+          payments: paymentsList,
+          cycles: cyclesList,
+          notes: (loan as any).notes || undefined,
+        });
+
+        toast.success("Current Statement PDF generated & downloaded!");
+      } catch (err: any) {
+        console.error("Current Statement PDF Error:", err);
+        toast.error("Unable to generate the current statement. Please try again.");
+      } finally {
+        setGeneratingStatementId(null);
       }
     }, 100);
   };
@@ -556,7 +643,20 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     startTransition(async () => {
       const res = await extendLoanAction(selectedLoan.loanId);
       if (res.success) {
-        toast.success("Loan period extended by 1 month!");
+        const data = res.data;
+        try {
+          generateLoanExtensionPdf(data);
+          toast.success(`Loan period extended! Next due date: ${data.newDueDate}`, {
+            action: {
+              label: "📄 Download PDF",
+              onClick: () => generateLoanExtensionPdf(data),
+            },
+            duration: 8000,
+          });
+        } catch (pdfErr) {
+          console.error("PDF generation error:", pdfErr);
+          toast.success("Loan period extended by 1 month!");
+        }
         setExtendOpen(false);
         router.refresh();
       } else {
@@ -844,10 +944,21 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                         <Landmark className="h-3.5 w-3.5" /> Pay
                       </button>
                       <button
-                        onClick={() => { setSelectedLoan(loan); setPenaltyAmount("0"); setReminderOpen(true); }}
-                        className="flex-1 min-w-[50px] flex items-center justify-center gap-1 h-9 rounded-xl bg-secondary hover:bg-accent/40 text-primary text-xs font-bold transition-all duration-200 fx-pressable"
+                        onClick={() => handleCurrentStatement(loan)}
+                        disabled={generatingStatementId === loan.loanId}
+                        className="flex-1 min-w-[130px] flex items-center justify-center gap-1.5 h-9 rounded-xl bg-secondary hover:bg-accent/40 text-primary text-xs font-bold transition-all duration-200 fx-pressable disabled:opacity-50"
                       >
-                        <Send className="h-3.5 w-3.5" /> Remind
+                        {generatingStatementId === loan.loanId ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
+                            <span>Generating...</span>
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="h-3.5 w-3.5 text-primary" />
+                            <span>Current Statement</span>
+                          </>
+                        )}
                       </button>
                     </>
                   ) : null}

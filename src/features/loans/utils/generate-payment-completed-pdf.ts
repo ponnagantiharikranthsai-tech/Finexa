@@ -50,6 +50,145 @@ export type PaymentCompletedResultPayload = {
   }>;
 };
 
+// Canvas Helper: Dynamically Renders Official FINEXA Circular Stamp with Dynamic Payment Date
+function createCircularStampImage(paymentDateStr: string): string {
+  if (typeof document === "undefined") return "";
+
+  const canvas = document.createElement("canvas");
+  const size = 600;
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+
+  const context = ctx;
+
+  const cx = size / 2;
+  const cy = size / 2;
+
+  // Format Dynamic Payment Date (e.g. "AUGUST 12, 2026")
+  let formattedDate = paymentDateStr;
+  try {
+    const parts = paymentDateStr.split("-");
+    if (parts.length === 3) {
+      // YYYY-MM-DD
+      const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      if (!isNaN(dateObj.getTime())) {
+        formattedDate = format(dateObj, "MMMM dd, yyyy").toUpperCase();
+      }
+    } else {
+      const dateObj = new Date(paymentDateStr);
+      if (!isNaN(dateObj.getTime())) {
+        formattedDate = format(dateObj, "MMMM dd, yyyy").toUpperCase();
+      }
+    }
+  } catch (e) {
+    formattedDate = paymentDateStr.toUpperCase();
+  }
+
+  // Stamp Color: Official Dark Ink / Emerald Green Seal (#0E5E2E)
+  const stampColor = "#0E5E2E";
+
+  context.clearRect(0, 0, size, size);
+  context.save();
+
+  // Outer Thick Circular Ring
+  context.strokeStyle = stampColor;
+  context.lineWidth = 12;
+  context.beginPath();
+  context.arc(cx, cy, 270, 0, Math.PI * 2);
+  context.stroke();
+
+  // Outer Thin Circular Ring
+  context.lineWidth = 3.5;
+  context.beginPath();
+  context.arc(cx, cy, 256, 0, Math.PI * 2);
+  context.stroke();
+
+  // Inner Circular Ring
+  context.lineWidth = 4;
+  context.beginPath();
+  context.arc(cx, cy, 185, 0, Math.PI * 2);
+  context.stroke();
+
+  // Helper function to render text along circular arc
+  function drawArcText(
+    text: string,
+    radius: number,
+    startAngleRad: number,
+    endAngleRad: number,
+    fontSize: number = 26,
+    fontWeight: string = "bold"
+  ) {
+    context.save();
+    context.font = `${fontWeight} ${fontSize}px sans-serif`;
+    context.fillStyle = stampColor;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+
+    const chars = text.split("");
+    const step = (endAngleRad - startAngleRad) / Math.max(1, chars.length - 1);
+
+    chars.forEach((ch, idx) => {
+      const angle = startAngleRad + idx * step;
+      context.save();
+      context.translate(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle));
+      context.rotate(angle + Math.PI / 2);
+      context.fillText(ch, 0, 0);
+      context.restore();
+    });
+
+    context.restore();
+  }
+
+  // Top Arc: "F I N E X A"
+  drawArcText("F  I  N  E  X  A", 222, -Math.PI * 0.76, -Math.PI * 0.24, 34, "900");
+
+  // Bottom Outer Arc: "SMART LOAN MANAGEMENT"
+  drawArcText("SMART  LOAN  MANAGEMENT", 222, Math.PI * 0.22, Math.PI * 0.78, 22, "bold");
+
+  // Bottom Inner Arc: Dynamic Payment Date (e.g. "AUGUST 12, 2026")
+  drawArcText(formattedDate, 145, Math.PI * 0.22, Math.PI * 0.78, 21, "bold");
+
+  // Decorative Stars on Top Left & Top Right
+  context.fillStyle = stampColor;
+  context.font = "bold 24px sans-serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText("★", cx - 222 * Math.cos(Math.PI * 0.15), cy - 222 * Math.sin(Math.PI * 0.15));
+  context.fillText("★", cx + 222 * Math.cos(Math.PI * 0.15), cy - 222 * Math.sin(Math.PI * 0.15));
+
+  // Center Banner Box (Double Border)
+  const boxW = 420;
+  const boxH = 145;
+  const boxX = cx - boxW / 2;
+  const boxY = cy - boxH / 2 - 12;
+
+  // Fill Background White to Mask Inner Lines
+  context.fillStyle = "#FFFFFF";
+  context.fillRect(boxX, boxY, boxW, boxH);
+
+  // Outer Box Border
+  context.strokeStyle = stampColor;
+  context.lineWidth = 6;
+  context.strokeRect(boxX, boxY, boxW, boxH);
+
+  // Inner Box Border
+  context.lineWidth = 2.5;
+  context.strokeRect(boxX + 6, boxY + 6, boxW - 12, boxH - 12);
+
+  // Banner Text: "AMOUNT CLEARED"
+  context.fillStyle = stampColor;
+  context.font = "900 46px sans-serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText("AMOUNT", cx, boxY + 44);
+  context.fillText("CLEARED", cx, boxY + 102);
+
+  context.restore();
+  return canvas.toDataURL("image/png");
+}
+
 export function generatePaymentCompletedPdf(data: PaymentCompletedResultPayload): void {
   const doc = new jsPDF({
     orientation: "portrait",
@@ -76,10 +215,6 @@ export function generatePaymentCompletedPdf(data: PaymentCompletedResultPayload)
   const COLOR_MUTED = [100, 110, 125];       // Muted Label Text
   const COLOR_CARD_BG = [252, 251, 244];     // Warm Ivory Fill (#FCFAF4)
   const COLOR_CARD_BORDER = [226, 216, 191]; // Soft Gold Border (#E2D8BF)
-
-  const COLOR_RED_BG = [253, 242, 242];
-  const COLOR_RED_BORDER = [248, 180, 180];
-  const COLOR_RED_TEXT = [155, 28, 28];
 
   const COLOR_AMBER_BG = [254, 252, 232];
   const COLOR_AMBER_BORDER = [253, 224, 71];
@@ -379,7 +514,7 @@ export function generatePaymentCompletedPdf(data: PaymentCompletedResultPayload)
 
   let pY = y + 14;
 
-  // Banner Box for PAYMENT AMOUNT RECEIVED
+  // Banner Box for PAYMENT AMOUNT RECORDED
   doc.setFillColor(232, 245, 233);
   doc.setDrawColor(160, 212, 164);
   doc.roundedRect(margin + 5, pY, contentWidth - 10, 15, 1.5, 1.5, "FD");
@@ -567,47 +702,34 @@ export function generatePaymentCompletedPdf(data: PaymentCompletedResultPayload)
   }
 
   // ═════════════════════════════════════════════════════════════════════════
-  // (06) OFFICIAL FINEXA STAMP — FULL PAYMENT ONLY (EXCLUSIVELY WHEN OUTSTANDING = 0)
+  // (06) OFFICIAL FINEXA CIRCULAR STAMP — FULL PAYMENT ONLY (EXCLUSIVELY WHEN OUTSTANDING = 0)
   // ═════════════════════════════════════════════════════════════════════════
   if (data.isFullyCleared) {
-    checkPageBreak(28);
+    const stampSize = 52; // 52mm width & height (Proportional, centered)
+    checkPageBreak(stampSize + 10);
 
-    const stampW = 110;
-    const stampH = 22;
-    const stampX = (pageWidth - stampW) / 2; // Center Aligned
-    const stampY = y;
+    const stampImgData = createCircularStampImage(data.paymentDate);
+    const stampX = (pageWidth - stampSize) / 2; // Center Aligned
 
-    // Outer Emerald Green Border
-    doc.setDrawColor(14, 94, 46);
-    doc.setLineWidth(0.8);
-    doc.roundedRect(stampX, stampY, stampW, stampH, 2, 2, "D");
+    if (stampImgData) {
+      doc.addImage(stampImgData, "PNG", stampX, y, stampSize, stampSize);
+      y += stampSize + sectionGap + 4;
+    } else {
+      // Fallback vector drawing if canvas unavailable
+      doc.setDrawColor(14, 94, 46);
+      doc.setLineWidth(0.8);
+      doc.circle(pageWidth / 2, y + 20, 20, "D");
 
-    // Inner Green Border
-    doc.setLineWidth(0.3);
-    doc.roundedRect(stampX + 0.8, stampY + 0.8, stampW - 1.6, stampH - 1.6, 1.5, 1.5, "D");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(14, 94, 46);
+      doc.text("AMOUNT CLEARED", pageWidth / 2, y + 18, { align: "center" });
 
-    // Green Checkmark & Heading
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.setTextColor(14, 94, 46);
-    doc.text("✓ ALL AMOUNT CLEARED", pageWidth / 2, stampY + 8, { align: "center" });
-
-    // Red Dotted Separator Line
-    doc.setDrawColor(180, 40, 40);
-    doc.setLineWidth(0.4);
-    doc.setLineDashPattern([1, 1], 0);
-    doc.line(stampX + 12, stampY + 11.5, stampX + stampW - 12, stampY + 11.5);
-    doc.setLineDashPattern([], 0);
-
-    // Red Subtitle: FINEXA • DATE: AUG 11TH • TUESDAY
-    const dateObj = data.paymentDate ? new Date(data.paymentDate) : new Date();
-    const stampDateStr = format(dateObj, "MMM dd'TH' • EEEE").toUpperCase();
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(180, 30, 30);
-    doc.text(`FINEXA • DATE: ${stampDateStr}`, pageWidth / 2, stampY + 17, { align: "center" });
-
-    y += stampH + sectionGap + 2;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text(data.paymentDate, pageWidth / 2, y + 24, { align: "center" });
+      y += 45;
+    }
   }
 
   // ═════════════════════════════════════════════════════════════════════════

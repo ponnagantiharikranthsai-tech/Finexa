@@ -14,6 +14,7 @@ import { recordPaymentAction } from "@/features/payments/actions/record-payment.
 import { extendLoanAction } from "@/features/loans/actions/extend-loan.action";
 import { payAndExtendAction } from "../actions/pay-and-extend.action";
 import { generateLoanExtensionPdf } from "../utils/generate-loan-extension-pdf";
+import { generatePaymentCompletedPdf } from "../utils/generate-payment-completed-pdf";
 import { overdueAndPenaltyAction } from "../actions/overdue-and-penalty.action";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { deleteLoanAction } from "@/features/loans/actions/delete-loan.action";
@@ -529,26 +530,44 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
     startTransition(async () => {
       const res = await recordPaymentAction(null, fd);
-      if (res.success) {
-        setShowMoneyEffect(true);
-        const paidAmt = Number(paymentAmount);
-        setLoans((prev) =>
-          prev.map((l) => {
-            if (l.loanId === selectedLoan.loanId) {
-              const newBal = Math.max(0, l.outstandingBalance - paidAmt);
-              return { ...l, outstandingBalance: newBal, status: newBal === 0 ? "closed" : l.status };
-            }
-            return l;
-          })
-        );
-        toast.success(`Payment of ₹${paidAmt.toLocaleString("en-IN")} recorded!`);
-        setPaymentOpen(false);
-        setPaymentAmount("");
-        setPaymentNotes("");
-        router.refresh();
-      } else {
+      if (!res.success) {
         toast.error(typeof res.error === "string" ? res.error : "Failed to record payment");
+        return;
       }
+
+      setShowMoneyEffect(true);
+      const data = res.data;
+      const paidAmt = Number(paymentAmount);
+
+      setLoans((prev) =>
+        prev.map((l) => {
+          if (l.loanId === selectedLoan.loanId) {
+            const newBal = Math.max(0, l.outstandingBalance - paidAmt);
+            return { ...l, outstandingBalance: newBal, status: newBal === 0 ? "closed" : l.status };
+          }
+          return l;
+        })
+      );
+
+      // Automatic PDF Generation & Success Toast with Retry Button
+      try {
+        generatePaymentCompletedPdf(data);
+        toast.success(`Payment of ₹${paidAmt.toLocaleString("en-IN")} recorded! Receipt downloaded.`, {
+          action: {
+            label: "📄 Download PDF",
+            onClick: () => generatePaymentCompletedPdf(data),
+          },
+          duration: 8000,
+        });
+      } catch (pdfErr) {
+        console.error("Payment PDF generation error:", pdfErr);
+        toast.success(`Payment of ₹${paidAmt.toLocaleString("en-IN")} recorded!`);
+      }
+
+      setPaymentOpen(false);
+      setPaymentAmount("");
+      setPaymentNotes("");
+      router.refresh();
     });
   };
 

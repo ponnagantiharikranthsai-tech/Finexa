@@ -18,6 +18,7 @@ import { generateLoanExtensionPdf } from "../utils/generate-loan-extension-pdf";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { deleteLoanAction } from "../actions/delete-loan.action";
 import { generateCurrentStatementPdf } from "../utils/generate-current-statement-pdf";
+import { generatePaymentCompletedPdf } from "../utils/generate-payment-completed-pdf";
 import { getExtraLoanDetailsAction } from "@/features/loans/actions/get-extra-loan-details.action";
 import { calculatePeriods } from "@/domain/interest-calculator";
 import { calculateAccruedPenalty } from "@/domain/penalty-calculator";
@@ -200,14 +201,31 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
     fd.append("notes", paymentNotes);
     startTransition(async () => {
       const res = await recordPaymentAction(null, fd);
-      if (res.success) {
-        toast.success(`Payment of ₹${Number(paymentAmount).toLocaleString("en-IN")} recorded!`);
-        setPaymentOpen(false);
-        setPaymentAmount(""); setPaymentNotes("");
-        refreshLoans(); router.refresh();
-      } else {
+      if (!res.success) {
         toast.error(typeof res.error === "string" ? res.error : "Failed to record payment");
+        return;
       }
+
+      const data = res.data;
+      const paidAmt = Number(paymentAmount);
+
+      try {
+        generatePaymentCompletedPdf(data);
+        toast.success(`Payment of ₹${paidAmt.toLocaleString("en-IN")} recorded! Receipt downloaded.`, {
+          action: {
+            label: "📄 Download PDF",
+            onClick: () => generatePaymentCompletedPdf(data),
+          },
+          duration: 8000,
+        });
+      } catch (pdfErr) {
+        console.error("Payment PDF generation error:", pdfErr);
+        toast.success(`Payment of ₹${paidAmt.toLocaleString("en-IN")} recorded!`);
+      }
+
+      setPaymentOpen(false);
+      setPaymentAmount(""); setPaymentNotes("");
+      refreshLoans(); router.refresh();
     });
   };
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { logoutAction } from "@/features/auth/actions/logout.action";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationCenter } from "@/components/notification-center";
 import {
   Dialog,
   DialogContent,
@@ -145,7 +146,7 @@ export default function DashboardLayout({
           </Link>
         </div>
 
-        {/* Sign Out + Theme Toggle */}
+        {/* Sign Out + Theme Toggle + Notification Bell */}
         <div className="p-3 border-t border-border/50 flex items-center justify-between gap-2 shrink-0">
           <button
             type="button"
@@ -155,6 +156,7 @@ export default function DashboardLayout({
             <LogOut className="h-4 w-4 mr-2" />
             Sign Out
           </button>
+          <NotificationCenter />
           <ThemeToggle />
         </div>
       </aside>
@@ -208,8 +210,9 @@ export default function DashboardLayout({
           </Link>
         </div>
 
-        {/* Compact Sign Out + Theme */}
+        {/* Compact Sign Out + Notification Bell + Theme */}
         <div className="p-2 border-t border-border/40 flex flex-col items-center gap-2 shrink-0">
+          <NotificationCenter />
           <ThemeToggle />
           <button
             type="button"
@@ -225,23 +228,31 @@ export default function DashboardLayout({
       {/* ─── MAIN WORKSPACE ──────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative z-[1]">
 
-        {/* Mobile Top Header — logo + controls only (no hamburger) */}
-        <header className="md:hidden h-14 fx-glass-header flex items-center justify-between px-4 shrink-0 border-b border-border/40">
-          <Link href="/home" prefetch={true} className="flex items-center gap-2">
-            <img
-              src="/logo-icon.png"
-              alt="Finexa"
-              className="h-7 w-7 object-contain filter drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]"
-            />
-            <span className="font-black text-xs tracking-[0.15em] text-foreground uppercase">FINEXA</span>
-          </Link>
-          <div className="flex items-center gap-2">
+        {/* Top Header Bar — Logo, Search/Controls, Bell, Theme */}
+        <header className="h-14 fx-glass-header flex items-center justify-between px-4 shrink-0 border-b border-border/40">
+          <div className="flex items-center gap-2 md:hidden">
+            <Link href="/home" prefetch={true} className="flex items-center gap-2">
+              <img
+                src="/logo-icon.png"
+                alt="Finexa"
+                className="h-7 w-7 object-contain filter drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]"
+              />
+              <span className="font-black text-xs tracking-[0.15em] text-foreground uppercase">FINEXA</span>
+            </Link>
+          </div>
+
+          <div className="hidden md:flex items-center gap-2 font-bold text-xs text-muted-foreground">
+            <span>SMART LOAN MANAGEMENT SYSTEM</span>
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto">
             <Link href="/loans/new" prefetch={true}>
               <button className="flex items-center gap-1.5 h-8 px-3 rounded-lg fx-brand-gradient text-white text-xs font-semibold fx-cta-glow fx-pressable">
                 <Plus className="h-3.5 w-3.5" />
                 New Loan
               </button>
             </Link>
+            <NotificationCenter />
             <ThemeToggle />
           </div>
         </header>

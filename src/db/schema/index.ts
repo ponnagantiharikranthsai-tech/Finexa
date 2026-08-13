@@ -6,3 +6,5 @@ export * from "./audit-log";
 export * from "./loan-applications";
 export * from "./capital";
 export * from "./loan-cycles";
+export * from "./payment-reminders";
+export * from "./admin-notifications";

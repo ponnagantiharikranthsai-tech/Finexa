@@ -8,6 +8,7 @@ import { auditLog } from "@/lib/audit-log";
 import { requireAuth } from "@/lib/auth";
 import type { ActionResult } from "@/types/api.types";
 import type { PayAndExtendResultPayload } from "./pay-and-extend.action";
+import { paymentReminderRepository } from "@/features/notifications/repository/payment-reminder.repository";
 
 export async function extendLoanAction(
   loanId: string
@@ -44,6 +45,7 @@ export async function extendLoanAction(
 
     await loanRepository.updateDueDate(loanId, newDueDateDate);
     await loanRepository.updateStatus(loanId, "extended");
+    await paymentReminderRepository.recalculateScheduleForExtension(loanId, newDueDateStr);
 
     const existingCycles = await loanCycleRepository.findByLoanId(loanId);
     const cycleNum = existingCycles.length + 1;

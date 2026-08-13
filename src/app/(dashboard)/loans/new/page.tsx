@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { calculateMonthlyInterest } from "@/domain/interest-calculator";
 import { calculateDueDate } from "@/domain/due-date-calculator";
-import { Search, Info, Check, ArrowLeft, User, FileText, Calculator, CreditCard } from "lucide-react";
+import { Search, Info, Check, ArrowLeft, User, FileText, Calculator, CreditCard, Bell } from "lucide-react";
 import Link from "next/link";
 
 export default function NewLoanPage() {
@@ -201,6 +201,52 @@ export default function NewLoanPage() {
                   <Label htmlFor="dueDate" className={labelClass}>Due Date*</Label>
                   <Input id="dueDate" name="dueDate" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required className={inputClass} />
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Section 3: Payment Reminders Schedule ─────────────────────── */}
+          <div className="bg-white dark:bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-secondary">
+              <div className="flex items-center gap-3">
+                <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Bell className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">Payment Reminders</p>
+                  <p className="text-[11px] text-muted-foreground">Admin reminders calculated relative to due date ({formattedDueDate || "N/A"})</p>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold">
+                AUTOMATIC
+              </span>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                {[
+                  { key: "10d", label: "10 Days Before", desc: "Inform borrower early" },
+                  { key: "7d", label: "7 Days Before", desc: "Upcoming payment" },
+                  { key: "3d", label: "3 Days Before", desc: "Follow up" },
+                  { key: "1d", label: "1 Day Before", desc: "Final reminder" },
+                  { key: "due_date", label: "Due Date", desc: "Payment due today" },
+                  { key: "overdue", label: "Overdue Follow-up", desc: "Overdue follow-up" },
+                ].map((item) => (
+                  <label
+                    key={item.key}
+                    className="flex items-start gap-2.5 p-3 rounded-xl border border-border/60 bg-secondary/20 hover:bg-accent/20 cursor-pointer transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      defaultChecked={true}
+                      className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                    />
+                    <div>
+                      <p className="text-xs font-bold text-foreground">{item.label}</p>
+                      <p className="text-[10px] text-muted-foreground">{item.desc}</p>
+                    </div>
+                  </label>
+                ))}
               </div>
             </div>
           </div>

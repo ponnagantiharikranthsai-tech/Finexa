@@ -7,6 +7,7 @@ import { auditLog } from "@/lib/audit-log";
 import { requireAuth } from "@/lib/auth";
 import type { ActionResult } from "@/types/api.types";
 import type { PaymentCompletedResultPayload } from "@/features/loans/utils/generate-payment-completed-pdf";
+import { paymentReminderRepository } from "@/features/notifications/repository/payment-reminder.repository";
 
 export async function recordPaymentAction(
   _prevState: ActionResult<PaymentCompletedResultPayload> | null,
@@ -57,6 +58,7 @@ export async function recordPaymentAction(
 
     if (isFullyCleared) {
       await loanRepository.close(loanId);
+      await paymentReminderRepository.cancelRemindersForLoan(loanId);
       await auditLog("loan_closed", "loan", loanId, { triggeredBy: "payment" });
       finalStatus = "closed";
     }

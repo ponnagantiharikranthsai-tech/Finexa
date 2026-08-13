@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,6 +17,8 @@ import { extendLoanAction } from "../actions/extend-loan.action";
 import { payAndExtendAction } from "../actions/pay-and-extend.action";
 import { generateLoanExtensionPdf } from "../utils/generate-loan-extension-pdf";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
+import { getExtraLoanDetailsAction } from "@/features/loans/actions/get-extra-loan-details.action";
+import { getReminderHistoryAction } from "@/features/notifications/actions/payment-reminders.action";
 import { useRouter } from "next/navigation";
 import type { LoanDetailResult } from "../actions/get-loan-by-id.action";
 import type { Payment, NotificationLog } from "@/db/schema";
@@ -46,7 +48,18 @@ export function LoanDetailView({ initialLoan, initialPayments, initialNotifs }: 
   const [loan, setLoan] = useState<LoanDetailResult>(initialLoan);
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
   const [notifs, setNotifs] = useState<NotificationLog[]>(initialNotifs);
+  const [reminderHistory, setReminderHistory] = useState<any[]>([]);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    async function loadReminders() {
+      const res = await getReminderHistoryAction(initialLoan.loanId);
+      if (res.success && res.data) {
+        setReminderHistory(res.data);
+      }
+    }
+    loadReminders();
+  }, [initialLoan.loanId]);
 
   const [showSensitive, setShowSensitive] = useState(false);
   const [paymentOpen, setPaymentOpen]     = useState(false);
@@ -346,6 +359,67 @@ export function LoanDetailView({ initialLoan, initialPayments, initialNotifs }: 
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+          </div>
+
+          {/* Reminder History & Schedule */}
+          <div className="fx-glass-card rounded-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between">
+              <h2 className="font-bold text-sm">Payment Reminder History</h2>
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase">Asia/Kolkata</span>
+            </div>
+            <div className="p-4 space-y-2 max-h-72 overflow-y-auto">
+              {reminderHistory.length === 0 ? (
+                <p className="text-center text-sm text-muted-foreground py-6">No reminder schedule generated yet.</p>
+              ) : (
+                reminderHistory.map((rem) => {
+                  let badgeStyle = "bg-amber-500/10 text-amber-500 border-amber-500/20";
+                  let iconSymbol = "○";
+                  if (rem.status === "sent") {
+                    badgeStyle = "bg-blue-500/10 text-blue-500 border-blue-500/20";
+                    iconSymbol = "✓";
+                  } else if (rem.status === "contacted") {
+                    badgeStyle = "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
+                    iconSymbol = "✓";
+                  } else if (rem.status === "cancelled") {
+                    badgeStyle = "bg-muted/40 text-muted-foreground border-border/40";
+                    iconSymbol = "✕";
+                  }
+
+                  const labelMap: Record<string, string> = {
+                    "10d": "10 Days Before",
+                    "7d": "7 Days Before",
+                    "3d": "3 Days Before",
+                    "1d": "1 Day Before",
+                    due_date: "Due Date",
+                    overdue: "Overdue Follow-up",
+                  };
+
+                  return (
+                    <div key={rem.reminderId} className="flex items-start gap-2.5 p-3 rounded-xl bg-accent/15 border border-border/30">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-xs font-extrabold shrink-0">
+                        {iconSymbol}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-bold text-foreground">
+                            {labelMap[rem.intervalKey] || rem.intervalKey}
+                          </p>
+                          <span className={`px-2 py-0.5 rounded-full border text-[10px] font-black uppercase ${badgeStyle}`}>
+                            {rem.status}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Scheduled Date: <strong>{rem.scheduledDate}</strong></p>
+                        {rem.notes && (
+                          <p className="text-[11px] text-foreground italic mt-1 bg-background/60 p-2 rounded-lg border border-border/40">
+                            "{rem.notes}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>

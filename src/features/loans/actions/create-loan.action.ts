@@ -11,6 +11,7 @@ import { encrypt } from "@/lib/encryption";
 import { auditLog } from "@/lib/audit-log";
 import { requireAuth } from "@/lib/auth";
 import type { ActionResult } from "@/types/api.types";
+import { paymentReminderRepository } from "@/features/notifications/repository/payment-reminder.repository";
 
 export async function createLoanAction(
   _prevState: ActionResult<{ loanId: string }> | null,
@@ -113,6 +114,7 @@ export async function createLoanAction(
       }
     }
 
+    await paymentReminderRepository.createScheduleForLoan(loan.loanId, loan.dueDate);
     await auditLog("loan_created", "loan", loan.loanId, { principal: loan.principal });
 
     return { success: true, data: { loanId: loan.loanId } };

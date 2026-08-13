@@ -8,6 +8,7 @@ import { calculateDueDate } from "@/domain/due-date-calculator";
 import { auditLog } from "@/lib/audit-log";
 import { requireAuth } from "@/lib/auth";
 import type { ActionResult } from "@/types/api.types";
+import { paymentReminderRepository } from "@/features/notifications/repository/payment-reminder.repository";
 
 export type PayAndExtendResultPayload = {
   documentId: string;
@@ -90,6 +91,7 @@ export async function payAndExtendAction(
 
     await loanRepository.updateDueDate(loanId, newDueDateObj);
     await loanRepository.updateStatus(loanId, "extended");
+    await paymentReminderRepository.recalculateScheduleForExtension(loanId, newDueDateStr);
 
     // 3. Record Permanent Cycle History
     const existingCycles = await loanCycleRepository.findByLoanId(loanId);

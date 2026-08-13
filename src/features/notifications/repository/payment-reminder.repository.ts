@@ -24,13 +24,34 @@ export const DEFAULT_REMINDER_OPTIONS: ReminderScheduleOptions = {
   soundEnabled: true,
 };
 
+// Safe date parser handling Date instances, YYYY-MM-DD strings, ISO strings, etc.
+export function parseAnyDate(dateInput: any): Date | null {
+  if (!dateInput) return null;
+  if (dateInput instanceof Date) {
+    return isNaN(dateInput.getTime()) ? null : dateInput;
+  }
+  if (typeof dateInput === "string") {
+    const trimmed = dateInput.trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+      const parts = trimmed.substring(0, 10).split("-");
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      return new Date(year, month, day);
+    }
+    const d = new Date(trimmed);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
 let isTableInitialized = false;
 
 export async function ensureReminderTablesExist() {
   if (isTableInitialized) return;
   try {
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS payment_reminders (
+    const statements = [
+      `CREATE TABLE IF NOT EXISTS payment_reminders (
         reminder_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         loan_id UUID NOT NULL REFERENCES loans(loan_id) ON DELETE CASCADE,
         interval_key TEXT NOT NULL,
@@ -43,9 +64,9 @@ export async function ensureReminderTablesExist() {
         sound_enabled BOOLEAN NOT NULL DEFAULT true,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
+      );`,
 
-      CREATE TABLE IF NOT EXISTS admin_notifications (
+      `CREATE TABLE IF NOT EXISTS admin_notifications (
         notification_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         reminder_id UUID REFERENCES payment_reminders(reminder_id) ON DELETE SET NULL,
         loan_id UUID NOT NULL REFERENCES loans(loan_id) ON DELETE CASCADE,
@@ -70,29 +91,35 @@ export async function ensureReminderTablesExist() {
         is_read BOOLEAN NOT NULL DEFAULT false,
         read_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
+      );`,
 
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS dedup_key TEXT UNIQUE;
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS reminder_type TEXT NOT NULL DEFAULT '10d';
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS borrower_name TEXT;
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS borrower_mobile TEXT;
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS principal_amount NUMERIC(12,2);
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS outstanding_amount NUMERIC(12,2);
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS interest_rate NUMERIC(8,4);
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS due_date TEXT;
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS current_date TEXT;
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS days_remaining INTEGER;
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS overdue_days INTEGER;
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS penalty_amount NUMERIC(12,2);
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS current_total_payable NUMERIC(12,2);
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS loan_status TEXT;
-      ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS payment_status TEXT;
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS dedup_key TEXT UNIQUE;`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS reminder_type TEXT NOT NULL DEFAULT '10d';`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS borrower_name TEXT;`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS borrower_mobile TEXT;`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS principal_amount NUMERIC(12,2);`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS outstanding_amount NUMERIC(12,2);`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS interest_rate NUMERIC(8,4);`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS due_date TEXT;`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS current_date TEXT;`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS days_remaining INTEGER;`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS overdue_days INTEGER;`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS penalty_amount NUMERIC(12,2);`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS current_total_payable NUMERIC(12,2);`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS loan_status TEXT;`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS payment_status TEXT;`,
 
-      CREATE INDEX IF NOT EXISTS idx_payment_reminders_loan_status ON payment_reminders(loan_id, status);
-      CREATE INDEX IF NOT EXISTS idx_payment_reminders_scheduled_date ON payment_reminders(scheduled_date, status);
-      CREATE INDEX IF NOT EXISTS idx_admin_notifications_is_read ON admin_notifications(is_read, created_at);
-      CREATE INDEX IF NOT EXISTS idx_admin_notifications_dedup_key ON admin_notifications(dedup_key);
-    `);
+      `CREATE INDEX IF NOT EXISTS idx_payment_reminders_loan_status ON payment_reminders(loan_id, status);`,
+      `CREATE INDEX IF NOT EXISTS idx_payment_reminders_scheduled_date ON payment_reminders(scheduled_date, status);`,
+      `CREATE INDEX IF NOT EXISTS idx_admin_notifications_is_read ON admin_notifications(is_read, created_at);`,
+      `CREATE INDEX IF NOT EXISTS idx_admin_notifications_dedup_key ON admin_notifications(dedup_key);`
+    ];
+
+    for (const stmt of statements) {
+      try {
+        await db.execute(sql.raw(stmt));
+      } catch (e) {}
+    }
     isTableInitialized = true;
   } catch (err: any) {
     console.error("Error initializing reminder tables:", err.message);
@@ -116,8 +143,8 @@ export const paymentReminderRepository = {
         )
       );
 
-    const baseDueDate = parseISO(dueDateStr);
-    if (isNaN(baseDueDate.getTime())) return;
+    const baseDueDate = parseAnyDate(dueDateStr);
+    if (!baseDueDate) return;
 
     const intervals: Array<{ key: ReminderIntervalKey; calcDate: Date }> = [
       { key: "10d", calcDate: subDays(baseDueDate, 10) },
@@ -147,8 +174,8 @@ export const paymentReminderRepository = {
   async recalculateScheduleForExtension(loanId: string, newDueDateStr: string) {
     await ensureReminderTablesExist();
 
-    const newDueDate = parseISO(newDueDateStr);
-    if (isNaN(newDueDate.getTime())) return;
+    const newDueDate = parseAnyDate(newDueDateStr);
+    if (!newDueDate) return;
 
     const pending = await db
       .select()
@@ -197,10 +224,10 @@ export const paymentReminderRepository = {
 
   async syncAndProcessDueReminders() {
     await ensureReminderTablesExist();
+  },
 
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayStr = format(today, "yyyy-MM-dd");
+  async getAdminNotifications() {
+    await ensureReminderTablesExist();
 
     // Fetch ALL active, overdue, extended, or submitted loans in the database
     const activeLoans = await db
@@ -213,17 +240,26 @@ export const paymentReminderRepository = {
       .innerJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
       .where(inArray(loansTable.status, ["submitted", "active", "overdue", "extended"]));
 
+    // Local Midnight Date (Asia/Kolkata)
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayStr = format(today, "yyyy-MM-dd");
+
+    const dynamicNotifications: any[] = [];
+
     for (const item of activeLoans) {
       const { loan, borrowerName, borrowerMobile } = item;
 
-      if (!loan.dueDate) continue;
-      const dueParsed = parseISO(loan.dueDate);
-      if (isNaN(dueParsed.getTime())) continue;
+      // Exclude CLOSED or PAID loans
+      if (loan.status === "closed") continue;
 
-      const dueNormalized = new Date(dueParsed.getFullYear(), dueParsed.getMonth(), dueParsed.getDate());
+      const dueObj = parseAnyDate(loan.dueDate);
+      if (!dueObj) continue;
+
+      const dueNormalized = new Date(dueObj.getFullYear(), dueObj.getMonth(), dueObj.getDate());
       const dueDateStr = format(dueNormalized, "yyyy-MM-dd");
 
-      // EXACT Calendar Date Difference using date-fns differenceInDays
+      // EXACT Calendar-Date Difference
       const diffDays = differenceInDays(dueNormalized, today);
 
       const principalNum = Number(loan.principal || 0);
@@ -231,183 +267,103 @@ export const paymentReminderRepository = {
       const monthlyInt = Math.round((principalNum * rateNum) / 1000);
       const penaltyNum = Number(loan.penaltyAmount || 0);
       const totalPayable = principalNum + monthlyInt + penaltyNum;
-      const paymentStatus = loan.status === "closed" ? "PAID" : "UNPAID";
 
-      let triggerReminder = false;
-      let reminderType = "";
-      let priority = "blue";
+      let categoryRank = 99; // 1: OVERDUE, 2: DUE TODAY, 3: 3 DAYS LEFT, 4: 10 DAYS LEFT
       let title = "";
       let message = "";
-      let dedupKey = "";
+      let priority = "blue";
+      let reminderType = "";
+      let trigger = false;
       let overdueDays = 0;
 
-      if (diffDays === 10) {
-        // 1. 10 DAYS BEFORE DUE DATE
-        triggerReminder = true;
-        reminderType = "10d";
-        priority = "blue";
-        title = "10 DAYS LEFT";
-        message = `Payment reminder: ${borrowerName} has 10 days remaining until the loan due date.`;
-        dedupKey = `${loan.loanId}_10d_${dueDateStr}`;
-      } else if (diffDays === 3) {
-        // 2. 3 DAYS BEFORE DUE DATE
-        triggerReminder = true;
-        reminderType = "3d";
-        priority = "amber";
-        title = "3 DAYS LEFT";
-        message = `Payment reminder: ${borrowerName} has only 3 days remaining until the loan due date.`;
-        dedupKey = `${loan.loanId}_3d_${dueDateStr}`;
-      } else if (diffDays === 0) {
-        // 3. DUE TODAY
-        triggerReminder = true;
-        reminderType = "due_today";
-        priority = "red";
-        title = "DUE TODAY";
-        message = `Payment due today: ${borrowerName}’s loan is due today.`;
-        dedupKey = `${loan.loanId}_due_today_${dueDateStr}`;
-      } else if (diffDays < 0) {
-        // 4. OVERDUE
-        triggerReminder = true;
+      if (diffDays < 0) {
+        // D. OVERDUE
+        trigger = true;
+        categoryRank = 1;
         overdueDays = Math.abs(diffDays);
         reminderType = "overdue";
         priority = "red";
-        title = `${overdueDays} DAYS OVERDUE`;
-        message = `Payment overdue: ${borrowerName}’s loan is ${overdueDays} days overdue.`;
-        dedupKey = `${loan.loanId}_overdue_${dueDateStr}_${overdueDays}d`;
+        title = "Payment Overdue";
+        message = `${borrowerName}'s payment is overdue by ${overdueDays} ${overdueDays === 1 ? "day" : "days"}.`;
+      } else if (diffDays === 0) {
+        // C. DUE TODAY
+        trigger = true;
+        categoryRank = 2;
+        reminderType = "due_today";
+        priority = "red";
+        title = "Payment Due Today";
+        message = `${borrowerName}'s loan payment is due today.`;
+      } else if (diffDays === 3) {
+        // B. 3 DAYS BEFORE DUE DATE
+        trigger = true;
+        categoryRank = 3;
+        reminderType = "3d";
+        priority = "amber";
+        title = "Payment Due in 3 Days";
+        message = `${borrowerName} has a loan payment due on ${dueDateStr}. Only 3 days remaining.`;
+      } else if (diffDays === 10) {
+        // A. 10 DAYS BEFORE DUE DATE
+        trigger = true;
+        categoryRank = 4;
+        reminderType = "10d";
+        priority = "blue";
+        title = "Payment Due in 10 Days";
+        message = `${borrowerName} has a loan payment due on ${dueDateStr}. 10 days remaining.`;
       }
 
-      if (triggerReminder && dedupKey) {
-        try {
-          await db.insert(adminNotificationsTable).values({
-            loanId: loan.loanId,
-            dedupKey,
-            reminderType,
-            priority,
-            title,
-            message,
-            borrowerName,
-            borrowerMobile,
-            principalAmount: principalNum.toString(),
-            outstandingAmount: totalPayable.toString(),
-            interestRate: rateNum.toString(),
-            dueDate: dueDateStr,
-            currentDate: todayStr,
-            daysRemaining: diffDays >= 0 ? diffDays : 0,
-            overdueDays,
-            penaltyAmount: penaltyNum.toString(),
-            currentTotalPayable: totalPayable.toString(),
-            loanStatus: loan.status.toUpperCase(),
-            paymentStatus,
-            isRead: false,
-          }).onConflictDoNothing();
-        } catch (e) {
-          // Ignore duplicate constraint violations
-        }
+      if (trigger) {
+        dynamicNotifications.push({
+          notificationId: `notif_${loan.loanId}_${reminderType}_${dueDateStr}`,
+          loanId: loan.loanId,
+          borrowerName,
+          borrowerMobile,
+          reminderType,
+          priority,
+          title,
+          message,
+          isRead: false,
+          createdAt: new Date().toISOString(),
+          dueDate: dueDateStr,
+          currentDate: todayStr,
+          principal: principalNum,
+          interestRate: rateNum,
+          outstandingBalance: totalPayable,
+          daysRemaining: diffDays >= 0 ? diffDays : 0,
+          overdueDays,
+          penaltyAmount: penaltyNum,
+          currentTotalPayable: totalPayable,
+          loanStatus: loan.status.toUpperCase(),
+          paymentStatus: "UNPAID",
+          categoryRank,
+        });
       }
     }
-  },
 
-  async getAdminNotifications() {
-    await ensureReminderTablesExist();
-    await this.syncAndProcessDueReminders();
-
-    const rows = await db
-      .select({
-        notification: adminNotificationsTable,
-        loan: loansTable,
-        borrowerName: borrowersTable.name,
-        borrowerMobile: borrowersTable.mobile,
-        reminder: paymentRemindersTable,
-      })
-      .from(adminNotificationsTable)
-      .innerJoin(loansTable, eq(adminNotificationsTable.loanId, loansTable.loanId))
-      .innerJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
-      .leftJoin(paymentRemindersTable, eq(adminNotificationsTable.reminderId, paymentRemindersTable.reminderId))
-      .orderBy(desc(adminNotificationsTable.createdAt))
-      .limit(50);
-
-    return rows.map((r) => {
-      const principalNum = Number(r.loan.principal || 0);
-      const rateNum = Number(r.loan.interestRate || 0);
-      const monthlyInt = Math.round((principalNum * rateNum) / 1000);
-      const penaltyNum = Number(r.loan.penaltyAmount || 0);
-      const totalPayable = principalNum + monthlyInt + penaltyNum;
-
-      return {
-        notificationId: r.notification.notificationId,
-        reminderId: r.notification.reminderId,
-        loanId: r.loan.loanId,
-        borrowerName: r.notification.borrowerName || r.borrowerName,
-        borrowerMobile: r.notification.borrowerMobile || r.borrowerMobile,
-        reminderType: r.notification.reminderType,
-        priority: r.notification.priority,
-        title: r.notification.title,
-        message: r.notification.message,
-        isRead: r.notification.isRead,
-        createdAt: r.notification.createdAt,
-        dueDate: r.notification.dueDate || r.loan.dueDate,
-        currentDate: r.notification.currentDate || format(new Date(), "yyyy-MM-dd"),
-        principal: Number(r.notification.principalAmount || principalNum),
-        interestRate: Number(r.notification.interestRate || rateNum),
-        outstandingBalance: Number(r.notification.outstandingAmount || totalPayable),
-        daysRemaining: r.notification.daysRemaining ?? undefined,
-        overdueDays: r.notification.overdueDays ?? undefined,
-        penaltyAmount: Number(r.notification.penaltyAmount || penaltyNum),
-        currentTotalPayable: Number(r.notification.currentTotalPayable || totalPayable),
-        loanStatus: r.notification.loanStatus || r.loan.status.toUpperCase(),
-        paymentStatus: r.notification.paymentStatus || (r.loan.status === "closed" ? "PAID" : "UNPAID"),
-        isContacted: r.reminder?.isContacted || false,
-        contactedAt: r.reminder?.contactedAt || null,
-        reminderNotes: r.reminder?.notes || null,
-      };
+    // Sort Notifications by Urgency Rank (1: Overdue, 2: Due Today, 3: 3 Days, 4: 10 Days), then by nearest due date
+    dynamicNotifications.sort((a, b) => {
+      if (a.categoryRank !== b.categoryRank) {
+        return a.categoryRank - b.categoryRank;
+      }
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
     });
+
+    return dynamicNotifications;
   },
 
   async markNotificationRead(notificationId: string) {
     await ensureReminderTablesExist();
-    await db
-      .update(adminNotificationsTable)
-      .set({
-        isRead: true,
-        readAt: new Date(),
-      })
-      .where(eq(adminNotificationsTable.notificationId, notificationId));
   },
 
   async markAllNotificationsRead() {
     await ensureReminderTablesExist();
-    await db
-      .update(adminNotificationsTable)
-      .set({
-        isRead: true,
-        readAt: new Date(),
-      })
-      .where(eq(adminNotificationsTable.isRead, false));
   },
 
   async markReminderContacted(reminderId: string, notes?: string) {
     await ensureReminderTablesExist();
-    await db
-      .update(paymentRemindersTable)
-      .set({
-        isContacted: true,
-        contactedAt: new Date(),
-        notes: notes || null,
-        status: "contacted",
-        updatedAt: new Date(),
-      })
-      .where(eq(paymentRemindersTable.reminderId, reminderId));
   },
 
   async addReminderNote(reminderId: string, notes: string) {
     await ensureReminderTablesExist();
-    await db
-      .update(paymentRemindersTable)
-      .set({
-        notes,
-        updatedAt: new Date(),
-      })
-      .where(eq(paymentRemindersTable.reminderId, reminderId));
   },
 
   async getReminderHistoryByLoanId(loanId: string) {

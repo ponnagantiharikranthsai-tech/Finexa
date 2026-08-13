@@ -309,6 +309,14 @@ export const paymentReminderRepository = {
         priority = "blue";
         title = "Payment Due in 10 Days";
         message = `${borrowerName} has a loan payment due on ${dueDateStr}. 10 days remaining.`;
+      } else if (diffDays > 0 && diffDays <= 10) {
+        // Fallback for any active loan within 10 days
+        trigger = true;
+        categoryRank = diffDays <= 3 ? 3 : 4;
+        reminderType = `${diffDays}d`;
+        priority = diffDays <= 3 ? "amber" : "blue";
+        title = `Payment Due in ${diffDays} Days`;
+        message = `${borrowerName} has a loan payment due on ${dueDateStr}. ${diffDays} ${diffDays === 1 ? "day" : "days"} remaining.`;
       }
 
       if (trigger) {
@@ -339,7 +347,7 @@ export const paymentReminderRepository = {
       }
     }
 
-    // Sort Notifications by Urgency Rank (1: Overdue, 2: Due Today, 3: 3 Days, 4: 10 Days), then by nearest due date
+    // Sort Notifications by Urgency Rank (1: OVERDUE, 2: DUE TODAY, 3: 3 DAYS, 4: 10 DAYS), then nearest due date
     dynamicNotifications.sort((a, b) => {
       if (a.categoryRank !== b.categoryRank) {
         return a.categoryRank - b.categoryRank;

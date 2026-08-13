@@ -41,6 +41,8 @@ export const adminNotificationsTable = pgTable("admin_notifications", {
 
   isRead: boolean("is_read").notNull().default(false),
   readAt: timestamp("read_at", { withTimezone: true }),
+  isCompleted: boolean("is_completed").notNull().default(false),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
 
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -51,5 +53,13 @@ export const adminNotificationsTable = pgTable("admin_notifications", {
   index("idx_admin_notifications_dedup_key").on(table.dedupKey),
 ]);
 
+export const completedNotificationKeysTable = pgTable("completed_notification_keys", {
+  dedupKey: text("dedup_key").primaryKey(),
+  completedAt: timestamp("completed_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+});
+
 export type AdminNotification = typeof adminNotificationsTable.$inferSelect;
 export type InsertAdminNotification = typeof adminNotificationsTable.$inferInsert;
+export type CompletedNotificationKey = typeof completedNotificationKeysTable.$inferSelect;

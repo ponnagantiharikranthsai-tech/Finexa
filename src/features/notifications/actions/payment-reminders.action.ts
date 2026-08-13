@@ -14,6 +14,16 @@ export async function getAdminNotificationsAction(): Promise<ActionResult<any[]>
   }
 }
 
+export async function markNotificationCompletedAction(dedupKey: string): Promise<ActionResult<null>> {
+  try {
+    await requireAuth();
+    await paymentReminderRepository.markNotificationCompleted(dedupKey);
+    return { success: true, data: null };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to mark notification completed" };
+  }
+}
+
 export async function markNotificationReadAction(notificationId: string): Promise<ActionResult<null>> {
   try {
     await requireAuth();

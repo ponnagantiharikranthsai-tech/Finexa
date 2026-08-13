@@ -1,5 +1,5 @@
 import { db } from "@/db/client";
-import { paymentRemindersTable, adminNotificationsTable, loansTable, borrowersTable } from "@/db/schema";
+import { paymentRemindersTable, adminNotificationsTable, completedNotificationKeysTable, loansTable, borrowersTable } from "@/db/schema";
 import { eq, and, lte, desc, sql, inArray } from "drizzle-orm";
 import { format, subDays, addDays, parseISO, differenceInDays } from "date-fns";
 
@@ -90,7 +90,14 @@ export async function ensureReminderTablesExist() {
         payment_status TEXT,
         is_read BOOLEAN NOT NULL DEFAULT false,
         read_at TIMESTAMPTZ,
+        is_completed BOOLEAN NOT NULL DEFAULT false,
+        completed_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );`,
+
+      `CREATE TABLE IF NOT EXISTS completed_notification_keys (
+        dedup_key TEXT PRIMARY KEY,
+        completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );`,
 
       `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS dedup_key TEXT UNIQUE;`,
@@ -108,6 +115,8 @@ export async function ensureReminderTablesExist() {
       `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS current_total_payable NUMERIC(12,2);`,
       `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS loan_status TEXT;`,
       `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS payment_status TEXT;`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS is_completed BOOLEAN NOT NULL DEFAULT false;`,
+      `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;`,
 
       `CREATE INDEX IF NOT EXISTS idx_payment_reminders_loan_status ON payment_reminders(loan_id, status);`,
       `CREATE INDEX IF NOT EXISTS idx_payment_reminders_scheduled_date ON payment_reminders(scheduled_date, status);`,
@@ -229,7 +238,11 @@ export const paymentReminderRepository = {
   async getAdminNotifications() {
     await ensureReminderTablesExist();
 
-    // Fetch ALL active, overdue, extended, or submitted loans in the database
+    // 1. Fetch completed notification dedup keys from database
+    const completedRows = await db.select({ dedupKey: completedNotificationKeysTable.dedupKey }).from(completedNotificationKeysTable);
+    const completedKeysSet = new Set(completedRows.map(r => r.dedupKey));
+
+    // 2. Fetch ALL active, overdue, extended, or submitted loans in the database
     const activeLoans = await db
       .select({
         loan: loansTable,
@@ -275,6 +288,7 @@ export const paymentReminderRepository = {
       let reminderType = "";
       let trigger = false;
       let overdueDays = 0;
+      let dedupKey = "";
 
       if (diffDays < 0) {
         // D. OVERDUE
@@ -285,6 +299,7 @@ export const paymentReminderRepository = {
         priority = "red";
         title = "Payment Overdue";
         message = `${borrowerName}'s payment is overdue by ${overdueDays} ${overdueDays === 1 ? "day" : "days"}.`;
+        dedupKey = `notif_${loan.loanId}_overdue_${dueDateStr}`;
       } else if (diffDays === 0) {
         // C. DUE TODAY
         trigger = true;
@@ -293,6 +308,7 @@ export const paymentReminderRepository = {
         priority = "red";
         title = "Payment Due Today";
         message = `${borrowerName}'s loan payment is due today.`;
+        dedupKey = `notif_${loan.loanId}_due_today_${dueDateStr}`;
       } else if (diffDays === 3) {
         // B. 3 DAYS BEFORE DUE DATE
         trigger = true;
@@ -301,6 +317,7 @@ export const paymentReminderRepository = {
         priority = "amber";
         title = "Payment Due in 3 Days";
         message = `${borrowerName} has a loan payment due on ${dueDateStr}. Only 3 days remaining.`;
+        dedupKey = `notif_${loan.loanId}_3d_${dueDateStr}`;
       } else if (diffDays === 10) {
         // A. 10 DAYS BEFORE DUE DATE
         trigger = true;
@@ -309,6 +326,7 @@ export const paymentReminderRepository = {
         priority = "blue";
         title = "Payment Due in 10 Days";
         message = `${borrowerName} has a loan payment due on ${dueDateStr}. 10 days remaining.`;
+        dedupKey = `notif_${loan.loanId}_10d_${dueDateStr}`;
       } else if (diffDays > 0 && diffDays <= 10) {
         // Fallback for any active loan within 10 days
         trigger = true;
@@ -317,12 +335,15 @@ export const paymentReminderRepository = {
         priority = diffDays <= 3 ? "amber" : "blue";
         title = `Payment Due in ${diffDays} Days`;
         message = `${borrowerName} has a loan payment due on ${dueDateStr}. ${diffDays} ${diffDays === 1 ? "day" : "days"} remaining.`;
+        dedupKey = `notif_${loan.loanId}_${reminderType}_${dueDateStr}`;
       }
 
-      if (trigger) {
+      // Check if this specific reminder instance has been marked as COMPLETED by admin
+      if (trigger && dedupKey && !completedKeysSet.has(dedupKey)) {
         dynamicNotifications.push({
-          notificationId: `notif_${loan.loanId}_${reminderType}_${dueDateStr}`,
+          notificationId: dedupKey,
           loanId: loan.loanId,
+          dedupKey,
           borrowerName,
           borrowerMobile,
           reminderType,
@@ -330,6 +351,7 @@ export const paymentReminderRepository = {
           title,
           message,
           isRead: false,
+          isCompleted: false,
           createdAt: new Date().toISOString(),
           dueDate: dueDateStr,
           currentDate: todayStr,
@@ -356,6 +378,25 @@ export const paymentReminderRepository = {
     });
 
     return dynamicNotifications;
+  },
+
+  async markNotificationCompleted(dedupKey: string) {
+    await ensureReminderTablesExist();
+    if (!dedupKey) return;
+
+    try {
+      await db.insert(completedNotificationKeysTable).values({
+        dedupKey,
+        completedAt: new Date(),
+      }).onConflictDoNothing();
+
+      await db.update(adminNotificationsTable).set({
+        isCompleted: true,
+        completedAt: new Date(),
+      }).where(eq(adminNotificationsTable.dedupKey, dedupKey));
+    } catch (err: any) {
+      console.error("Error marking notification completed:", err.message);
+    }
   },
 
   async markNotificationRead(notificationId: string) {

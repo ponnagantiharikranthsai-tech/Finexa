@@ -3,7 +3,7 @@ import { paymentRemindersTable, adminNotificationsTable, completedNotificationKe
 import { eq, and, lte, desc, sql, inArray } from "drizzle-orm";
 import { format, subDays, addDays, parseISO, differenceInDays } from "date-fns";
 
-export type ReminderIntervalKey = "10d" | "7d" | "3d" | "1d" | "due_date" | "overdue";
+export type ReminderIntervalKey = "10d" | "3d" | "due_date" | "overdue";
 
 export type ReminderScheduleOptions = {
   enabledIntervals: Record<ReminderIntervalKey, boolean>;
@@ -14,9 +14,7 @@ export type ReminderScheduleOptions = {
 export const DEFAULT_REMINDER_OPTIONS: ReminderScheduleOptions = {
   enabledIntervals: {
     "10d": true,
-    "7d": true,
     "3d": true,
-    "1d": true,
     due_date: true,
     overdue: true,
   },
@@ -155,11 +153,10 @@ export const paymentReminderRepository = {
     const baseDueDate = parseAnyDate(dueDateStr);
     if (!baseDueDate) return;
 
+    // Strict 4 cycles: 10d, 3d, due_date, overdue
     const intervals: Array<{ key: ReminderIntervalKey; calcDate: Date }> = [
       { key: "10d", calcDate: subDays(baseDueDate, 10) },
-      { key: "7d", calcDate: subDays(baseDueDate, 7) },
       { key: "3d", calcDate: subDays(baseDueDate, 3) },
-      { key: "1d", calcDate: subDays(baseDueDate, 1) },
       { key: "due_date", calcDate: baseDueDate },
       { key: "overdue", calcDate: addDays(baseDueDate, 1) },
     ];
@@ -199,9 +196,7 @@ export const paymentReminderRepository = {
     for (const item of pending) {
       let newCalcDate = newDueDate;
       if (item.intervalKey === "10d") newCalcDate = subDays(newDueDate, 10);
-      else if (item.intervalKey === "7d") newCalcDate = subDays(newDueDate, 7);
       else if (item.intervalKey === "3d") newCalcDate = subDays(newDueDate, 3);
-      else if (item.intervalKey === "1d") newCalcDate = subDays(newDueDate, 1);
       else if (item.intervalKey === "due_date") newCalcDate = newDueDate;
       else if (item.intervalKey === "overdue") newCalcDate = addDays(newDueDate, 1);
 
@@ -290,8 +285,9 @@ export const paymentReminderRepository = {
       let overdueDays = 0;
       let dedupKey = "";
 
+      // STRICT 4 NOTIFICATION CYCLES ONLY: 10D, 3D, DUE TODAY, OVERDUE
       if (diffDays < 0) {
-        // D. OVERDUE
+        // CYCLE 4 — OVERDUE (daysRemaining < 0)
         trigger = true;
         categoryRank = 1;
         overdueDays = Math.abs(diffDays);
@@ -301,7 +297,7 @@ export const paymentReminderRepository = {
         message = `${borrowerName}'s payment is overdue by ${overdueDays} ${overdueDays === 1 ? "day" : "days"}.`;
         dedupKey = `notif_${loan.loanId}_overdue_${dueDateStr}`;
       } else if (diffDays === 0) {
-        // C. DUE TODAY
+        // CYCLE 3 — DUE TODAY (daysRemaining === 0)
         trigger = true;
         categoryRank = 2;
         reminderType = "due_today";
@@ -310,16 +306,16 @@ export const paymentReminderRepository = {
         message = `${borrowerName}'s loan payment is due today.`;
         dedupKey = `notif_${loan.loanId}_due_today_${dueDateStr}`;
       } else if (diffDays === 3) {
-        // B. 3 DAYS BEFORE DUE DATE
+        // CYCLE 2 — 3 DAYS BEFORE DUE DATE (daysRemaining === 3)
         trigger = true;
         categoryRank = 3;
         reminderType = "3d";
         priority = "amber";
         title = "Payment Due in 3 Days";
-        message = `${borrowerName} has a loan payment due on ${dueDateStr}. Only 3 days remaining.`;
+        message = `${borrowerName} has a loan payment due on ${dueDateStr}. 3 days remaining.`;
         dedupKey = `notif_${loan.loanId}_3d_${dueDateStr}`;
       } else if (diffDays === 10) {
-        // A. 10 DAYS BEFORE DUE DATE
+        // CYCLE 1 — 10 DAYS BEFORE DUE DATE (daysRemaining === 10)
         trigger = true;
         categoryRank = 4;
         reminderType = "10d";
@@ -327,15 +323,6 @@ export const paymentReminderRepository = {
         title = "Payment Due in 10 Days";
         message = `${borrowerName} has a loan payment due on ${dueDateStr}. 10 days remaining.`;
         dedupKey = `notif_${loan.loanId}_10d_${dueDateStr}`;
-      } else if (diffDays > 0 && diffDays <= 10) {
-        // Fallback for any active loan within 10 days
-        trigger = true;
-        categoryRank = diffDays <= 3 ? 3 : 4;
-        reminderType = `${diffDays}d`;
-        priority = diffDays <= 3 ? "amber" : "blue";
-        title = `Payment Due in ${diffDays} Days`;
-        message = `${borrowerName} has a loan payment due on ${dueDateStr}. ${diffDays} ${diffDays === 1 ? "day" : "days"} remaining.`;
-        dedupKey = `notif_${loan.loanId}_${reminderType}_${dueDateStr}`;
       }
 
       // Check if this specific reminder instance has been marked as COMPLETED by admin

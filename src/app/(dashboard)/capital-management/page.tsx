@@ -21,7 +21,7 @@ export default async function CapitalManagementPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-foreground">Capital Management</h1>
+          <h1 className="text-2xl font-black tracking-tight text-foreground">Capital</h1>
           <p className="text-xs text-muted-foreground mt-1">
             Track funder investments, capital returns, and capital summary stats.
           </p>

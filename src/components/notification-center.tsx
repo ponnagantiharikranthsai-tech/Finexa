@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   ChevronRight,
   Info,
+  Copy,
 } from "lucide-react";
 import {
   Popover,
@@ -67,6 +68,153 @@ export type AdminNotificationItem = {
   reminderNotes?: string | null;
 };
 
+// Format ISO/YYYY-MM-DD date to "15 August 2026"
+function formatDateVerbose(dateInput: any): string {
+  if (!dateInput) return "";
+  try {
+    let year: number, month: number, day: number;
+    if (typeof dateInput === "string" && /^\d{4}-\d{2}-\d{2}/.test(dateInput.trim())) {
+      const parts = dateInput.trim().substring(0, 10).split("-");
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10) - 1;
+      day = parseInt(parts[2], 10);
+    } else {
+      const d = new Date(dateInput);
+      if (isNaN(d.getTime())) return String(dateInput);
+      year = d.getFullYear();
+      month = d.getMonth();
+      day = d.getDate();
+    }
+    const months = [
+      "August", "August", "August", "August", "August", "August",
+      "August", "August", "September", "October", "November", "December"
+    ];
+    const realMonths = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    return `${day} ${realMonths[month]} ${year}`;
+  } catch (e) {
+    return String(dateInput);
+  }
+}
+
+// Generate dynamic borrower payment reminder message based on loan cycle
+export function generateBorrowerReminderMessage(item: AdminNotificationItem): {
+  title: string;
+  body: string;
+} {
+  const name = item.borrowerName || "Borrower";
+  const formattedDueDate = formatDateVerbose(item.dueDate);
+  const loanAmt = item.principal ? `₹${Number(item.principal).toLocaleString("en-IN")}` : null;
+  const payableVal = item.currentTotalPayable || item.outstandingBalance || item.principal || 0;
+  const payableAmt = `₹${Number(payableVal).toLocaleString("en-IN")}`;
+
+  const reminderType = item.reminderType || "";
+  const daysRemaining = item.daysRemaining ?? 0;
+  const overdueDays = item.overdueDays ?? (daysRemaining < 0 ? Math.abs(daysRemaining) : 0);
+
+  // CYCLE 4: OVERDUE
+  if (reminderType === "overdue" || (daysRemaining < 0 && overdueDays > 0)) {
+    const overdueLabel = `${overdueDays} ${overdueDays === 1 ? "day" : "days"}`;
+    const body = `FINEXA — Payment Overdue
+
+Dear ${name},
+
+Your loan payment was due on ${formattedDueDate} and is currently ${overdueLabel} overdue.
+
+Loan Details
+
+${loanAmt ? `Loan Amount: ${loanAmt}\n` : ""}Current Payable Amount: ${payableAmt}
+Due Date: ${formattedDueDate}
+Overdue: ${overdueLabel}
+Payment Status: Unpaid
+
+Please arrange the outstanding amount and complete your payment at the earliest.
+
+Thank you for choosing FINEXA.
+
+This is an automatically generated message. Please do not reply to this message.`;
+
+    return { title: "FINEXA — Payment Overdue", body };
+  }
+
+  // CYCLE 3: DUE TODAY
+  if (reminderType === "due_today" || daysRemaining === 0) {
+    const body = `FINEXA — Payment Due Today
+
+Dear ${name},
+
+This is an automatic reminder regarding your active loan with FINEXA.
+
+Your payment is due today, ${formattedDueDate}.
+
+Loan Details
+
+${loanAmt ? `Loan Amount: ${loanAmt}\n` : ""}Total Payable: ${payableAmt}
+Due Date: ${formattedDueDate}
+Payment Status: Unpaid
+
+Please complete your payment today.
+
+Thank you for choosing FINEXA.
+
+This is an automatically generated message. Please do not reply to this message.`;
+
+    return { title: "FINEXA — Payment Due Today", body };
+  }
+
+  // CYCLE 2: 3 DAYS BEFORE DUE DATE
+  if (reminderType === "3d" || daysRemaining === 3) {
+    const body = `FINEXA — Payment Reminder
+
+Dear ${name},
+
+This is an automatic reminder regarding your active loan with FINEXA.
+
+Your payment is due on ${formattedDueDate}.
+
+Loan Details
+
+${loanAmt ? `Loan Amount: ${loanAmt}\n` : ""}Total Payable: ${payableAmt}
+Due Date: ${formattedDueDate}
+Payment Status: Unpaid
+Days Remaining: 3 days
+
+Please arrange the required amount and complete your payment on or before the due date.
+
+Thank you for choosing FINEXA.
+
+This is an automatically generated message. Please do not reply to this message.`;
+
+    return { title: "FINEXA — Payment Reminder", body };
+  }
+
+  // CYCLE 1: 10 DAYS BEFORE DUE DATE (or default)
+  const body = `FINEXA — Payment Reminder
+
+Dear ${name},
+
+This is an automatic reminder regarding your active loan with FINEXA.
+
+Your payment is due on ${formattedDueDate}.
+
+Loan Details
+
+${loanAmt ? `Loan Amount: ${loanAmt}\n` : ""}Total Payable: ${payableAmt}
+Due Date: ${formattedDueDate}
+Payment Status: Unpaid
+Days Remaining: 10 days
+
+Please arrange the required amount and complete your payment on or before the due date.
+
+Thank you for choosing FINEXA.
+
+This is an automatically generated message. Please do not reply to this message.`;
+
+  return { title: "FINEXA — Payment Reminder", body };
+}
+
 // Play a short, professional, non-intrusive 2-tone chime using Web Audio API
 function playNotificationChime() {
   try {
@@ -112,6 +260,11 @@ export function NotificationCenter() {
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [activeReminderId, setActiveReminderId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
+
+  // Borrower Message Modal State
+  const [messageModalOpen, setMessageModalOpen] = useState(false);
+  const [selectedNotifForMsg, setSelectedNotifForMsg] = useState<AdminNotificationItem | null>(null);
+  const [copiedSuccess, setCopiedSuccess] = useState(false);
 
   // Load Preferences & Push Permission
   useEffect(() => {
@@ -209,14 +362,38 @@ export function NotificationCenter() {
     });
   };
 
-  const handleMarkContacted = (reminderId: string, name: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.reminderId === reminderId ? { ...n, isContacted: true } : n))
-    );
-    toast.success(`Contacted status updated for ${name}`);
-    startTransition(async () => {
-      await markReminderContactedAction(reminderId);
-    });
+  const openMessageModal = (item: AdminNotificationItem) => {
+    setSelectedNotifForMsg(item);
+    setCopiedSuccess(false);
+    setMessageModalOpen(true);
+  };
+
+  const currentMsgObj = selectedNotifForMsg
+    ? generateBorrowerReminderMessage(selectedNotifForMsg)
+    : { title: "Payment Reminder Message", body: "" };
+
+  const handleCopyMessage = async () => {
+    if (!currentMsgObj.body) return;
+    try {
+      await navigator.clipboard.writeText(currentMsgObj.body);
+      setCopiedSuccess(true);
+      toast.success("Message copied successfully.");
+      setTimeout(() => setCopiedSuccess(false), 3000);
+    } catch (e) {
+      toast.error("Failed to copy message.");
+    }
+  };
+
+  const handleOpenWhatsApp = () => {
+    if (!selectedNotifForMsg) return;
+    const cleanMobile = selectedNotifForMsg.borrowerMobile?.replace(/[^0-9]/g, "") || "";
+    if (!cleanMobile) {
+      toast.error("Mobile number unavailable.");
+      return;
+    }
+    const fullMobile = cleanMobile.startsWith("91") ? cleanMobile : `91${cleanMobile}`;
+    const url = `https://wa.me/${fullMobile}?text=${encodeURIComponent(currentMsgObj.body)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const handleSaveNote = () => {
@@ -385,26 +562,25 @@ export function NotificationCenter() {
                           e.stopPropagation();
                           handleMarkCompleted(item);
                         }}
-                        className="flex-1 min-w-[130px] h-7 px-2.5 flex items-center justify-center gap-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold transition-colors border border-emerald-500/20 shadow-xs fx-pressable"
+                        className="flex-1 min-w-[130px] h-7 px-2 flex items-center justify-center gap-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold transition-colors border border-emerald-500/20 shadow-xs fx-pressable"
                         title="Mark Reminder as Completed"
                       >
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                        <CheckCircle2 className="h-3 w-3 text-emerald-500" />
                         <span>✓ Mark as Completed</span>
                       </button>
 
-                      <a
-                        href={`https://wa.me/91${item.borrowerMobile.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
-                          `Hi ${item.borrowerName}, payment reminder for your FINEXA loan. Amount Payable: Rs. ${(item.currentTotalPayable || item.outstandingBalance).toLocaleString("en-IN")}, Due Date: ${item.dueDate}. Thank you.`
-                        )}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="h-7 px-2.5 flex items-center justify-center gap-1 rounded-lg bg-secondary hover:bg-accent/40 text-foreground text-[11px] font-semibold transition-colors border border-border/40"
-                        title="WhatsApp Message"
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openMessageModal(item);
+                        }}
+                        className="h-7 px-2.5 flex items-center justify-center gap-1 rounded-lg bg-secondary hover:bg-accent/40 text-foreground text-[11px] font-semibold transition-colors border border-border/40 fx-pressable"
+                        title="Open Payment Reminder Message"
                       >
                         <MessageSquare className="h-3.5 w-3.5 text-primary" />
                         <span>Message</span>
-                      </a>
+                      </button>
 
                       <Link
                         href={`/loans/${item.loanId}`}
@@ -438,6 +614,60 @@ export function NotificationCenter() {
           </div>
         </PopoverContent>
       </Popover>
+
+      {/* Payment Reminder Message Modal */}
+      <Dialog open={messageModalOpen} onOpenChange={setMessageModalOpen}>
+        <DialogContent className="sm:max-w-[500px] rounded-2xl bg-card border border-border p-6 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+              <MessageSquare className="h-4 w-4 text-primary" />
+              <span>{currentMsgObj.title || "Payment Reminder Message"}</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="py-3">
+            <div className="p-4 rounded-xl bg-secondary/60 border border-border/50 text-xs font-mono whitespace-pre-wrap leading-relaxed text-foreground max-h-[340px] overflow-y-auto select-all shadow-inner">
+              {currentMsgObj.body}
+            </div>
+            {copiedSuccess && (
+              <p className="text-[11px] font-semibold text-emerald-500 mt-2 flex items-center gap-1">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Message copied successfully.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setMessageModalOpen(false)}
+              className="px-3.5 py-2 rounded-xl border border-border/60 hover:bg-accent/40 text-foreground text-xs font-semibold transition-colors fx-pressable"
+            >
+              Close
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCopyMessage}
+              className="px-3.5 py-2 rounded-xl bg-secondary hover:bg-accent/50 text-foreground text-xs font-bold transition-colors border border-border/50 flex items-center justify-center gap-1.5 fx-pressable"
+            >
+              <FileText className="h-3.5 w-3.5 text-primary" />
+              <span>{copiedSuccess ? "Copied!" : "Copy Message"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenWhatsApp}
+              disabled={!selectedNotifForMsg?.borrowerMobile}
+              className="px-3.5 py-2 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-bold transition-colors shadow-sm flex items-center justify-center gap-1.5 fx-pressable"
+              title={!selectedNotifForMsg?.borrowerMobile ? "Mobile number unavailable." : "Open WhatsApp with pre-filled message"}
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              <span>Open WhatsApp</span>
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Admin Note Dialog */}
       <Dialog open={noteModalOpen} onOpenChange={setNoteModalOpen}>

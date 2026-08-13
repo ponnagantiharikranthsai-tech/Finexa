@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, timestamp, boolean, index
+  pgTable, uuid, text, timestamp, boolean, integer, numeric, index
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { loansTable } from "./loans";
@@ -17,9 +17,27 @@ export const adminNotificationsTable = pgTable("admin_notifications", {
     .notNull()
     .references(() => loansTable.loanId, { onDelete: "cascade" }),
 
+  dedupKey: text("dedup_key").unique(), // e.g. "loanId_10d_dueDate" or "loanId_overdue_dueDate_3d"
+  reminderType: text("reminder_type").notNull().default("10d"), // '10d', '3d', 'due_today', 'overdue'
+
   priority: text("priority").notNull().default("blue"), // 'blue', 'amber', 'red'
   title: text("title").notNull(),
   message: text("message").notNull(),
+
+  // Rich Notification Payload Fields
+  borrowerName: text("borrower_name"),
+  borrowerMobile: text("borrower_mobile"),
+  principalAmount: numeric("principal_amount", { precision: 12, scale: 2 }),
+  outstandingAmount: numeric("outstanding_amount", { precision: 12, scale: 2 }),
+  interestRate: numeric("interest_rate", { precision: 8, scale: 4 }),
+  dueDate: text("due_date"),
+  currentDate: text("current_date"),
+  daysRemaining: integer("days_remaining"),
+  overdueDays: integer("overdue_days"),
+  penaltyAmount: numeric("penalty_amount", { precision: 12, scale: 2 }),
+  currentTotalPayable: numeric("current_total_payable", { precision: 12, scale: 2 }),
+  loanStatus: text("loan_status"),
+  paymentStatus: text("payment_status"),
 
   isRead: boolean("is_read").notNull().default(false),
   readAt: timestamp("read_at", { withTimezone: true }),
@@ -30,6 +48,7 @@ export const adminNotificationsTable = pgTable("admin_notifications", {
 }, (table) => [
   index("idx_admin_notifications_is_read").on(table.isRead, table.createdAt),
   index("idx_admin_notifications_loan_id").on(table.loanId),
+  index("idx_admin_notifications_dedup_key").on(table.dedupKey),
 ]);
 
 export type AdminNotification = typeof adminNotificationsTable.$inferSelect;

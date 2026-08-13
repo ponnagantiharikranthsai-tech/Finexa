@@ -11,11 +11,9 @@ import {
   FileText,
   Volume2,
   VolumeX,
-  RefreshCw,
-  Clock,
-  ExternalLink,
-  ChevronRight,
   ShieldCheck,
+  ChevronRight,
+  Info,
 } from "lucide-react";
 import {
   Popover,
@@ -45,14 +43,23 @@ export type AdminNotificationItem = {
   loanId: string;
   borrowerName: string;
   borrowerMobile: string;
+  reminderType?: string;
   priority: string; // 'blue', 'amber', 'red'
   title: string;
   message: string;
   isRead: boolean;
   createdAt: string;
   dueDate: string;
+  currentDate?: string;
   principal: number;
+  interestRate?: number;
   outstandingBalance: number;
+  daysRemaining?: number;
+  overdueDays?: number;
+  penaltyAmount?: number;
+  currentTotalPayable?: number;
+  loanStatus?: string;
+  paymentStatus?: string;
   isContacted: boolean;
   contactedAt?: string | null;
   reminderNotes?: string | null;
@@ -87,7 +94,7 @@ function playNotificationChime() {
     osc2.start(ctx.currentTime + 0.1);
     osc2.stop(ctx.currentTime + 0.35);
   } catch (e) {
-    // Ignore audio autoplay restrictions gracefully
+    // Ignore audio autoplay restrictions
   }
 }
 
@@ -96,6 +103,7 @@ export function NotificationCenter() {
   const [isOpen, setIsOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // Note Modal State
@@ -103,7 +111,7 @@ export function NotificationCenter() {
   const [activeReminderId, setActiveReminderId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
 
-  // Load Sound Preference & Push Permission
+  // Load Preferences & Push Permission
   useEffect(() => {
     try {
       const savedSound = localStorage.getItem("finexa_sound_enabled");
@@ -121,14 +129,19 @@ export function NotificationCenter() {
       const res = await getAdminNotificationsAction();
       if (res.success && res.data) {
         const items = res.data as AdminNotificationItem[];
+        const hasNewUnread = items.some((item) => !item.isRead);
         setNotifications(items);
+
+        if (hasNewUnread && soundEnabled) {
+          playNotificationChime();
+        }
       }
     });
   };
 
   useEffect(() => {
     loadNotifications();
-    const interval = setInterval(loadNotifications, 60000); // Auto-sync every 60s
+    const interval = setInterval(loadNotifications, 30000); // Auto-sync every 30s
     return () => clearInterval(interval);
   }, []);
 
@@ -220,7 +233,7 @@ export function NotificationCenter() {
 
         <PopoverContent
           align="end"
-          className="w-[360px] sm:w-[420px] p-0 rounded-2xl border border-border/50 shadow-2xl bg-card overflow-hidden"
+          className="w-[360px] sm:w-[440px] p-0 rounded-2xl border border-border/50 shadow-2xl bg-card overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-secondary/30">
@@ -274,7 +287,7 @@ export function NotificationCenter() {
           )}
 
           {/* Notifications List */}
-          <div className="max-h-[420px] overflow-y-auto divide-y divide-border/30">
+          <div className="max-h-[460px] overflow-y-auto divide-y divide-border/30">
             {notifications.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-emerald-500/60" />
@@ -289,6 +302,8 @@ export function NotificationCenter() {
                 } else if (item.priority === "red") {
                   badgeColor = "bg-red-500/10 text-red-500 border-red-500/20";
                 }
+
+                const isExpanded = expandedId === item.notificationId;
 
                 return (
                   <div
@@ -312,6 +327,36 @@ export function NotificationCenter() {
                     <p className="text-xs font-bold text-foreground mb-1">{item.borrowerName}</p>
                     <p className="text-xs text-muted-foreground leading-relaxed mb-2.5">{item.message}</p>
 
+                    {/* Rich Loan Breakdown Panel */}
+                    <div className="mb-3 p-2.5 rounded-xl bg-secondary/40 border border-border/40 text-[11px] space-y-1">
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                        <div>
+                          <span className="text-muted-foreground">Mobile:</span>{" "}
+                          <strong className="text-foreground">{item.borrowerMobile}</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Due Date:</span>{" "}
+                          <strong className="text-foreground">{item.dueDate}</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Loan Amount:</span>{" "}
+                          <strong className="text-foreground">₹{item.principal?.toLocaleString("en-IN")}</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Total Payable:</span>{" "}
+                          <strong className="text-primary">₹{(item.currentTotalPayable || item.outstandingBalance)?.toLocaleString("en-IN")}</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Status:</span>{" "}
+                          <strong className="text-emerald-500 uppercase">{item.loanStatus || "ACTIVE"}</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Payment Status:</span>{" "}
+                          <strong className="text-foreground">{item.paymentStatus || "UNPAID"}</strong>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Contacted status indicator if logged */}
                     {item.isContacted && (
                       <div className="mb-2 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10px] font-semibold flex items-center justify-between">
@@ -334,9 +379,7 @@ export function NotificationCenter() {
 
                       <a
                         href={`https://wa.me/91${item.borrowerMobile.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
-                          `Hi ${item.borrowerName}, friendly reminder regarding your FINEXA loan payment of Rs. ${item.outstandingBalance.toLocaleString(
-                            "en-IN"
-                          )} due on ${item.dueDate}. Thank you.`
+                          `Hi ${item.borrowerName}, payment reminder for your FINEXA loan. Amount Payable: Rs. ${(item.currentTotalPayable || item.outstandingBalance).toLocaleString("en-IN")}, Due Date: ${item.dueDate}. Thank you.`
                         )}`}
                         target="_blank"
                         rel="noreferrer"

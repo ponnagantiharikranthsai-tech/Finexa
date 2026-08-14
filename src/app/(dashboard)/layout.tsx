@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { logoutAction } from "@/features/auth/actions/logout.action";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { NotificationCenter } from "@/components/notification-center";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +22,6 @@ import {
   ClipboardList,
   Home,
   Coins,
-  Bell,
 } from "lucide-react";
 
 const navItems = [
@@ -31,7 +29,6 @@ const navItems = [
   { label: "Loan Management",    href: "/loan-management",  icon: CreditCard },
   { label: "Capital Management", href: "/capital-management", icon: Coins },
   { label: "Applications",       href: "/applications",     icon: ClipboardList },
-  { label: "Notifications",      href: "/notifications",    icon: Bell },
   { label: "Reports",            href: "/reports",          icon: BarChart3 },
 ];
 
@@ -48,9 +45,9 @@ export default function DashboardLayout({
     router.prefetch("/loan-management");
     router.prefetch("/capital-management");
     router.prefetch("/applications");
-    router.prefetch("/notifications");
     router.prefetch("/reports");
   }, [router]);
+
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [isLoggingOut, startTransition] = useTransition();
 
@@ -149,7 +146,7 @@ export default function DashboardLayout({
           </Link>
         </div>
 
-        {/* Sign Out + Theme Toggle + Notification Bell */}
+        {/* Sign Out + Theme Toggle */}
         <div className="p-3 border-t border-border/50 flex items-center justify-between gap-2 shrink-0">
           <button
             type="button"
@@ -159,7 +156,6 @@ export default function DashboardLayout({
             <LogOut className="h-4 w-4 mr-2" />
             Sign Out
           </button>
-          <NotificationCenter />
           <ThemeToggle />
         </div>
       </aside>
@@ -213,9 +209,8 @@ export default function DashboardLayout({
           </Link>
         </div>
 
-        {/* Compact Sign Out + Notification Bell + Theme */}
+        {/* Compact Sign Out + Theme */}
         <div className="p-2 border-t border-border/40 flex flex-col items-center gap-2 shrink-0">
-          <NotificationCenter />
           <ThemeToggle />
           <button
             type="button"
@@ -231,7 +226,7 @@ export default function DashboardLayout({
       {/* ─── MAIN WORKSPACE ──────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative z-[1]">
 
-        {/* Top Header Bar — Logo, Search/Controls, Bell, Theme */}
+        {/* Top Header Bar — Logo, Search/Controls, Theme */}
         <header className="h-14 fx-glass-header flex items-center justify-between px-4 shrink-0 border-b border-border/40">
           <div className="flex items-center gap-2 md:hidden">
             <Link href="/home" prefetch={true} className="flex items-center gap-2">
@@ -255,7 +250,6 @@ export default function DashboardLayout({
                 New Loan
               </button>
             </Link>
-            <NotificationCenter />
             <ThemeToggle />
           </div>
         </header>

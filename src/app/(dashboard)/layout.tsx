@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { logoutAction } from "@/features/auth/actions/logout.action";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationCenter } from "@/components/notification-center";
 import {
   Dialog,
   DialogContent,
@@ -226,7 +227,7 @@ export default function DashboardLayout({
       {/* ─── MAIN WORKSPACE ──────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative z-[1]">
 
-        {/* Top Header Bar — Logo, Search/Controls, Theme */}
+        {/* Top Header Bar — Logo, Search/Controls, Bell, Theme */}
         <header className="h-14 fx-glass-header flex items-center justify-between px-4 shrink-0 border-b border-border/40">
           <div className="flex items-center gap-2 md:hidden">
             <Link href="/home" prefetch={true} className="flex items-center gap-2">
@@ -243,6 +244,7 @@ export default function DashboardLayout({
             <span>SMART LOAN MANAGEMENT SYSTEM</span>
           </div>
 
+          {/* TOP RIGHT: + New Loan | 🔔 Notification Bell | ☀️/🌙 Theme */}
           <div className="flex items-center gap-2 ml-auto">
             <Link href="/loans/new" prefetch={true}>
               <button className="flex items-center gap-1.5 h-8 px-3 rounded-lg fx-brand-gradient text-white text-xs font-semibold fx-cta-glow fx-pressable">
@@ -250,6 +252,7 @@ export default function DashboardLayout({
                 New Loan
               </button>
             </Link>
+            <NotificationCenter />
             <ThemeToggle />
           </div>
         </header>

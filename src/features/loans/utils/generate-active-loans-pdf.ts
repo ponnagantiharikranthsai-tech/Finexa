@@ -428,6 +428,5 @@ export function generateActiveLoansPdf(
   }
 
   // ── AUTOMATIC DOWNLOAD ──────────────────────────────────────────────────────
-  const fileTimestamp = format(new Date(), "yyyyMMdd_HHmmss");
-  doc.save(`FINEXA_Active_Loans_Backup_${fileTimestamp}.pdf`);
+  doc.save("FINEXA_Active_Loans_Report.pdf");
 }

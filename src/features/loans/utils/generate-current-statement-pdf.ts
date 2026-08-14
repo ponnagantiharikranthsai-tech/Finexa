@@ -661,7 +661,8 @@ export function generateCurrentStatementPdf(data: CurrentStatementPayload): void
   }
 
   // Trigger File Download
-  const cleanBorrower = data.borrowerName.replace(/[^a-zA-Z0-9]/g, "_");
-  const filename = `FINEXA_Current_Statement_${cleanBorrower}_${format(new Date(), "yyyyMMdd_HHmmss")}.pdf`;
+  const words = (data.borrowerName || "").replace(/[().,_\-\/]/g, " ").replace(/[^\w\s]/gi, "").trim().split(/\s+/).filter(Boolean);
+  const cleanBorrower = words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("_") || "Borrower";
+  const filename = `FINEXA_${cleanBorrower}_Current_Account_Statement.pdf`;
   doc.save(filename);
 }

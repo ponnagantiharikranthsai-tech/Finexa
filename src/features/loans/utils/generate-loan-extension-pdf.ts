@@ -479,6 +479,8 @@ export function generateLoanExtensionPdf(data: PayAndExtendResultPayload): void 
   }
 
   // Trigger Client-Side Download
-  const filename = `FINEXA_Loan_Extension_${data.loanId}_${data.paymentDate || format(new Date(), "yyyyMMdd")}.pdf`;
+  const words = (data.borrowerName || "").replace(/[().,_\-\/]/g, " ").replace(/[^\w\s]/gi, "").trim().split(/\s+/).filter(Boolean);
+  const cleanBorrower = words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("_") || "Borrower";
+  const filename = `FINEXA_${cleanBorrower}_Loan_Extension_Statement.pdf`;
   doc.save(filename);
 }

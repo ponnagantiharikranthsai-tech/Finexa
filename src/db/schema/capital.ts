@@ -12,7 +12,7 @@ export const fundersTable = pgTable("funders", {
     .default(sql`gen_random_uuid()`),
 
   name: text("name").notNull(),
-  mobile: text("mobile").notNull().unique(),
+  mobile: text("mobile").notNull(),
   address: text("address").notNull(),
   capitalAmount: numeric("capital_amount", { precision: 12, scale: 2 }).notNull(),
   investmentDate: date("investment_date").notNull(),

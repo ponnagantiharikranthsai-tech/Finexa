@@ -27,12 +27,6 @@ export async function updateFunderAction(prevState: any, formData: FormData) {
       return { success: false, error: "Capital amount must be a positive number." };
     }
 
-    // Check for duplicate mobile
-    const existing = await capitalRepository.findFunderByMobile(mobile);
-    if (existing && existing.funderId !== funderId) {
-      return { success: false, error: "A funder with this mobile number already exists." };
-    }
-
     const updated = await capitalRepository.updateFunder(funderId, {
       name,
       mobile,
@@ -44,7 +38,7 @@ export async function updateFunderAction(prevState: any, formData: FormData) {
     });
 
     if (!updated) {
-      return { success: false, error: "Funder not found." };
+      return { success: false, error: "Funder investment record not found." };
     }
 
     await auditLog("funder_updated", "funder", funderId, { name: updated.name });

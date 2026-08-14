@@ -20,6 +20,9 @@ export interface FunderWithReturns {
   updatedAt: string;
   totalReturned: number;
   remainingCapital: number;
+  investmentIndex?: number;
+  totalFunderInvestments?: number;
+  totalFunderCapitalProvided?: number;
   returnsList: {
     returnId: string;
     amount: number;
@@ -33,12 +36,12 @@ export async function getCapitalDataAction() {
   try {
     await requireAuth();
 
-    // 1. Fetch all funders
+    // 1. Fetch all funders / investment records
     const rawFunders = await capitalRepository.findAllFunders();
-    // 2. Fetch all returns
+    // 2. Fetch all capital returns
     const rawReturns = await capitalRepository.findAllCapitalReturns();
 
-    // Group returns by funderId
+    // Group returns by funderId (investment ID)
     const returnsByFunder: Record<string, typeof rawReturns> = {};
     rawReturns.forEach((r) => {
       if (!returnsByFunder[r.funderId]) {
@@ -47,8 +50,28 @@ export async function getCapitalDataAction() {
       returnsByFunder[r.funderId].push(r);
     });
 
-    // 3. Map funders with returns summary
+    // Group all investments by normalized mobile number
+    const funderGroupMap: Record<string, typeof rawFunders> = {};
+    rawFunders.forEach((f) => {
+      const cleanMobile = f.mobile.replace(/[^0-9]/g, "").slice(-10) || f.mobile;
+      if (!funderGroupMap[cleanMobile]) {
+        funderGroupMap[cleanMobile] = [];
+      }
+      funderGroupMap[cleanMobile].push(f);
+    });
+
+    // 3. Map investment records with returns summary and portfolio metadata
     const funders: FunderWithReturns[] = rawFunders.map((f) => {
+      const cleanMobile = f.mobile.replace(/[^0-9]/g, "").slice(-10) || f.mobile;
+      const sameFunderInvestments = funderGroupMap[cleanMobile] || [f];
+      
+      // Sort investments of this funder chronologically
+      sameFunderInvestments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      const investmentIndex = sameFunderInvestments.findIndex((inv) => inv.funderId === f.funderId) + 1;
+      const totalFunderInvestments = sameFunderInvestments.length;
+      const totalFunderCapitalProvided = sameFunderInvestments.reduce((sum, inv) => sum + Number(inv.capitalAmount), 0);
+
       const funderReturns = returnsByFunder[f.funderId] || [];
       const totalReturned = funderReturns.reduce((sum, r) => sum + Number(r.amount), 0);
       const remainingCapital = Math.max(0, Number(f.capitalAmount) - totalReturned);
@@ -67,6 +90,9 @@ export async function getCapitalDataAction() {
         updatedAt: f.updatedAt.toISOString(),
         totalReturned,
         remainingCapital,
+        investmentIndex,
+        totalFunderInvestments,
+        totalFunderCapitalProvided,
         returnsList: funderReturns.map((r) => ({
           returnId: r.returnId,
           amount: Number(r.amount),

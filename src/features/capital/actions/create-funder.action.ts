@@ -26,16 +26,14 @@ export async function createFunderAction(prevState: any, formData: FormData) {
       return { success: false, error: "Capital amount must be a positive number." };
     }
 
-    // Check for duplicate mobile
-    const existing = await capitalRepository.findFunderByMobile(mobile);
-    if (existing) {
-      return { success: false, error: "A funder with this mobile number already exists." };
-    }
+    // Check if an existing funder shares this mobile number
+    const existingFunder = await capitalRepository.findFunderByMobile(mobile);
 
+    // Create a new individual investment record under this funder
     const funder = await capitalRepository.createFunder({
-      name,
+      name: existingFunder ? existingFunder.name : name,
       mobile,
-      address,
+      address: existingFunder ? existingFunder.address : address,
       capitalAmount: capitalAmount.toFixed(2),
       investmentDate,
       returnDueDate,
@@ -43,12 +41,21 @@ export async function createFunderAction(prevState: any, formData: FormData) {
       notes: notes || null,
     });
 
-    await auditLog("funder_created", "funder", funder.funderId, { name: funder.name, mobile: funder.mobile });
+    await auditLog("funder_created", "funder", funder.funderId, {
+      name: funder.name,
+      mobile: funder.mobile,
+      isAdditionalInvestment: Boolean(existingFunder),
+    });
 
     revalidatePath("/capital-management");
 
-    return { success: true };
+    return {
+      success: true,
+      message: existingFunder
+        ? `Existing funder found (${existingFunder.name}). New investment of ₹${capitalAmount.toLocaleString("en-IN")} added successfully!`
+        : `Funder registered and investment of ₹${capitalAmount.toLocaleString("en-IN")} created successfully!`,
+    };
   } catch (err) {
-    return { success: false, error: (err as Error).message || "Failed to create funder profile." };
+    return { success: false, error: (err as Error).message || "Failed to create funder investment profile." };
   }
 }

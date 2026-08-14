@@ -6,7 +6,7 @@ export class CapitalRepository {
   async createFunder(data: typeof fundersTable.$inferInsert) {
     const [inserted] = await db.insert(fundersTable).values(data).returning();
     if (!inserted) {
-      throw new Error("Failed to insert funder");
+      throw new Error("Failed to insert funder investment record");
     }
     return inserted;
   }
@@ -38,12 +38,28 @@ export class CapitalRepository {
   }
 
   async findFunderByMobile(mobile: string) {
-    const [funder] = await db
-      .select()
-      .from(fundersTable)
-      .where(eq(fundersTable.mobile, mobile))
-      .limit(1);
-    return funder || null;
+    if (!mobile) return null;
+    const cleanSubmitted = mobile.replace(/[^0-9]/g, "").slice(-10);
+    if (!cleanSubmitted) return null;
+
+    const allFunders = await this.findAllFunders();
+    const found = allFunders.find((f) => {
+      const cleanDb = f.mobile.replace(/[^0-9]/g, "").slice(-10);
+      return cleanDb === cleanSubmitted;
+    });
+    return found || null;
+  }
+
+  async findFundersByMobileList(mobile: string) {
+    if (!mobile) return [];
+    const cleanSubmitted = mobile.replace(/[^0-9]/g, "").slice(-10);
+    if (!cleanSubmitted) return [];
+
+    const allFunders = await this.findAllFunders();
+    return allFunders.filter((f) => {
+      const cleanDb = f.mobile.replace(/[^0-9]/g, "").slice(-10);
+      return cleanDb === cleanSubmitted;
+    });
   }
 
   async findAllFunders() {

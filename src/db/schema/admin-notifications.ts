@@ -60,6 +60,28 @@ export const completedNotificationKeysTable = pgTable("completed_notification_ke
     .default(sql`now()`),
 });
 
+export const pushSubscriptionsTable = pgTable("push_subscriptions", {
+  subscriptionId: uuid("subscription_id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userId: text("user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const pushedNotificationKeysTable = pgTable("pushed_notification_keys", {
+  dedupKey: text("dedup_key").primaryKey(),
+  pushedAt: timestamp("pushed_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+});
+
 export type AdminNotification = typeof adminNotificationsTable.$inferSelect;
 export type InsertAdminNotification = typeof adminNotificationsTable.$inferInsert;
 export type CompletedNotificationKey = typeof completedNotificationKeysTable.$inferSelect;
+export type PushSubscriptionRow = typeof pushSubscriptionsTable.$inferSelect;
+export type InsertPushSubscription = typeof pushSubscriptionsTable.$inferInsert;

@@ -23,6 +23,7 @@ import {
   ClipboardList,
   Home,
   Coins,
+  Bell,
 } from "lucide-react";
 
 const navItems = [
@@ -30,6 +31,7 @@ const navItems = [
   { label: "Loan Management",    href: "/loan-management",  icon: CreditCard },
   { label: "Capital Management", href: "/capital-management", icon: Coins },
   { label: "Applications",       href: "/applications",     icon: ClipboardList },
+  { label: "Notifications",      href: "/notifications",    icon: Bell },
   { label: "Reports",            href: "/reports",          icon: BarChart3 },
 ];
 
@@ -46,6 +48,7 @@ export default function DashboardLayout({
     router.prefetch("/loan-management");
     router.prefetch("/capital-management");
     router.prefetch("/applications");
+    router.prefetch("/notifications");
     router.prefetch("/reports");
   }, [router]);
   const [logoutOpen, setLogoutOpen] = useState(false);

@@ -1,7 +1,16 @@
 import { db } from "@/db/client";
-import { paymentRemindersTable, adminNotificationsTable, completedNotificationKeysTable, loansTable, borrowersTable } from "@/db/schema";
+import {
+  paymentRemindersTable,
+  adminNotificationsTable,
+  completedNotificationKeysTable,
+  pushSubscriptionsTable,
+  pushedNotificationKeysTable,
+  loansTable,
+  borrowersTable,
+} from "@/db/schema";
 import { eq, and, lte, desc, sql, inArray } from "drizzle-orm";
 import { format, subDays, addDays, parseISO, differenceInDays } from "date-fns";
+import { sendWebPushToAllSubscriptions } from "../utils/web-push";
 
 export type ReminderIntervalKey = "10d" | "3d" | "due_date" | "overdue";
 
@@ -41,6 +50,33 @@ export function parseAnyDate(dateInput: any): Date | null {
     return isNaN(d.getTime()) ? null : d;
   }
   return null;
+}
+
+// Format ISO/YYYY-MM-DD date to "15 August 2026"
+function formatDateVerbose(dateInput: any): string {
+  if (!dateInput) return "";
+  try {
+    let year: number, month: number, day: number;
+    if (typeof dateInput === "string" && /^\d{4}-\d{2}-\d{2}/.test(dateInput.trim())) {
+      const parts = dateInput.trim().substring(0, 10).split("-");
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10) - 1;
+      day = parseInt(parts[2], 10);
+    } else {
+      const d = new Date(dateInput);
+      if (isNaN(d.getTime())) return String(dateInput);
+      year = d.getFullYear();
+      month = d.getMonth();
+      day = d.getDate();
+    }
+    const realMonths = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    return `${day} ${realMonths[month]} ${year}`;
+  } catch (e) {
+    return String(dateInput);
+  }
 }
 
 let isTableInitialized = false;
@@ -96,6 +132,20 @@ export async function ensureReminderTablesExist() {
       `CREATE TABLE IF NOT EXISTS completed_notification_keys (
         dedup_key TEXT PRIMARY KEY,
         completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );`,
+
+      `CREATE TABLE IF NOT EXISTS push_subscriptions (
+        subscription_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        user_id TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );`,
+
+      `CREATE TABLE IF NOT EXISTS pushed_notification_keys (
+        dedup_key TEXT PRIMARY KEY,
+        pushed_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );`,
 
       `ALTER TABLE admin_notifications ADD COLUMN IF NOT EXISTS dedup_key TEXT UNIQUE;`,
@@ -174,6 +224,33 @@ export const paymentReminderRepository = {
 
     if (toInsert.length > 0) {
       await db.insert(paymentRemindersTable).values(toInsert);
+    }
+  },
+
+  async savePushSubscription(endpoint: string, p256dh: string, auth: string, userId?: string) {
+    await ensureReminderTablesExist();
+    if (!endpoint || !p256dh || !auth) return;
+
+    try {
+      await db.insert(pushSubscriptionsTable).values({
+        endpoint,
+        p256dh,
+        auth,
+        userId: userId || null,
+        createdAt: new Date(),
+      }).onConflictDoNothing();
+    } catch (e: any) {
+      console.error("Error saving push subscription:", e.message);
+    }
+  },
+
+  async removePushSubscription(endpoint: string) {
+    await ensureReminderTablesExist();
+    if (!endpoint) return;
+    try {
+      await db.delete(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.endpoint, endpoint));
+    } catch (e: any) {
+      console.error("Error removing push subscription:", e.message);
     }
   },
 
@@ -266,6 +343,7 @@ export const paymentReminderRepository = {
 
       const dueNormalized = new Date(dueObj.getFullYear(), dueObj.getMonth(), dueObj.getDate());
       const dueDateStr = format(dueNormalized, "yyyy-MM-dd");
+      const verboseDueDate = formatDateVerbose(dueNormalized);
 
       // EXACT Calendar-Date Difference
       const diffDays = differenceInDays(dueNormalized, today);
@@ -275,10 +353,13 @@ export const paymentReminderRepository = {
       const monthlyInt = Math.round((principalNum * rateNum) / 1000);
       const penaltyNum = Number(loan.penaltyAmount || 0);
       const totalPayable = principalNum + monthlyInt + penaltyNum;
+      const payableFormatted = totalPayable.toLocaleString("en-IN");
 
       let categoryRank = 99; // 1: OVERDUE, 2: DUE TODAY, 3: 3 DAYS LEFT, 4: 10 DAYS LEFT
       let title = "";
       let message = "";
+      let pushTitle = "";
+      let pushBody = "";
       let priority = "blue";
       let reminderType = "";
       let trigger = false;
@@ -295,6 +376,8 @@ export const paymentReminderRepository = {
         priority = "red";
         title = "Payment Overdue";
         message = `${borrowerName}'s payment is overdue by ${overdueDays} ${overdueDays === 1 ? "day" : "days"}.`;
+        pushTitle = "FINEXA — Payment Overdue";
+        pushBody = `${borrowerName}'s payment is overdue by ${overdueDays} ${overdueDays === 1 ? "day" : "days"}. Current payable amount: ₹${payableFormatted}.`;
         dedupKey = `notif_${loan.loanId}_overdue_${dueDateStr}`;
       } else if (diffDays === 0) {
         // CYCLE 3 — DUE TODAY (daysRemaining === 0)
@@ -304,6 +387,8 @@ export const paymentReminderRepository = {
         priority = "red";
         title = "Payment Due Today";
         message = `${borrowerName}'s loan payment is due today.`;
+        pushTitle = "FINEXA — Payment Due Today";
+        pushBody = `${borrowerName}'s payment of ₹${payableFormatted} is due today.`;
         dedupKey = `notif_${loan.loanId}_due_today_${dueDateStr}`;
       } else if (diffDays === 3) {
         // CYCLE 2 — 3 DAYS BEFORE DUE DATE (daysRemaining === 3)
@@ -313,6 +398,8 @@ export const paymentReminderRepository = {
         priority = "amber";
         title = "Payment Due in 3 Days";
         message = `${borrowerName} has a loan payment due on ${dueDateStr}. 3 days remaining.`;
+        pushTitle = "FINEXA — Payment Reminder";
+        pushBody = `${borrowerName}'s loan payment of ₹${payableFormatted} is due on ${verboseDueDate}. 3 days remaining.`;
         dedupKey = `notif_${loan.loanId}_3d_${dueDateStr}`;
       } else if (diffDays === 10) {
         // CYCLE 1 — 10 DAYS BEFORE DUE DATE (daysRemaining === 10)
@@ -322,6 +409,8 @@ export const paymentReminderRepository = {
         priority = "blue";
         title = "Payment Due in 10 Days";
         message = `${borrowerName} has a loan payment due on ${dueDateStr}. 10 days remaining.`;
+        pushTitle = "FINEXA — Payment Reminder";
+        pushBody = `${borrowerName}'s loan payment of ₹${payableFormatted} is due on ${verboseDueDate}. 10 days remaining.`;
         dedupKey = `notif_${loan.loanId}_10d_${dueDateStr}`;
       }
 
@@ -353,6 +442,17 @@ export const paymentReminderRepository = {
           paymentStatus: "UNPAID",
           categoryRank,
         });
+
+        // Trigger Web Push notification asynchronously if new cycle
+        sendWebPushToAllSubscriptions(dedupKey, {
+          title: pushTitle,
+          body: pushBody,
+          icon: "/logo-icon.png",
+          badge: "/logo-icon.png",
+          url: `/loans/${loan.loanId}`,
+          loanId: loan.loanId,
+          tag: dedupKey,
+        }).catch((err) => console.error("Web Push trigger error:", err));
       }
     }
 

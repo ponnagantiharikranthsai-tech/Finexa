@@ -14,6 +14,30 @@ export async function getAdminNotificationsAction(): Promise<ActionResult<any[]>
   }
 }
 
+export async function savePushSubscriptionAction(
+  endpoint: string,
+  p256dh: string,
+  auth: string
+): Promise<ActionResult<null>> {
+  try {
+    const user = await requireAuth();
+    await paymentReminderRepository.savePushSubscription(endpoint, p256dh, auth, (user as any)?.id);
+    return { success: true, data: null };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to save push subscription" };
+  }
+}
+
+export async function removePushSubscriptionAction(endpoint: string): Promise<ActionResult<null>> {
+  try {
+    await requireAuth();
+    await paymentReminderRepository.removePushSubscription(endpoint);
+    return { success: true, data: null };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to remove push subscription" };
+  }
+}
+
 export async function markNotificationCompletedAction(dedupKey: string): Promise<ActionResult<null>> {
   try {
     await requireAuth();

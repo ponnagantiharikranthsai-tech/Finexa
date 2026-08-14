@@ -348,69 +348,119 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-        <button
-          type="button"
-          onClick={() => setActiveTab("ALL")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable ${
-            activeTab === "ALL"
-              ? "bg-primary text-white shadow-md"
-              : "bg-card hover:bg-accent/40 text-muted-foreground border border-border/50"
-          }`}
-        >
-          ALL ({notifications.length})
-        </button>
+      {/* Horizontally Scrollable Pill Filter Bar */}
+      <div className="w-full relative">
+        <div className="flex items-center gap-2.5 overflow-x-auto overflow-y-hidden flex-nowrap py-1 scrollbar-none touch-pan-x -mx-1 px-1">
+          {/* ALL */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("ALL")}
+            className={`h-11 px-5 rounded-full text-xs font-bold transition-all duration-200 shrink-0 whitespace-nowrap flex items-center justify-center gap-2 fx-pressable ${
+              activeTab === "ALL"
+                ? "fx-brand-gradient text-white shadow-lg shadow-amber-500/20 border border-amber-400/30 font-black scale-[1.02]"
+                : "bg-card/90 hover:bg-accent/40 text-muted-foreground hover:text-foreground border border-border/60"
+            }`}
+          >
+            <span>All</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                activeTab === "ALL"
+                  ? "bg-white/20 text-white"
+                  : "bg-secondary text-foreground border border-border/40"
+              }`}
+            >
+              {notifications.length}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab("10_DAYS")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable flex items-center gap-1.5 ${
-            activeTab === "10_DAYS"
-              ? "bg-blue-500 text-white shadow-md"
-              : "bg-card hover:bg-accent/40 text-muted-foreground border border-border/50"
-          }`}
-        >
-          <span>10 DAYS ({tenDaysCount})</span>
-        </button>
+          {/* 10 DAYS */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("10_DAYS")}
+            className={`h-11 px-5 rounded-full text-xs font-bold transition-all duration-200 shrink-0 whitespace-nowrap flex items-center justify-center gap-2 fx-pressable ${
+              activeTab === "10_DAYS"
+                ? "fx-brand-gradient text-white shadow-lg shadow-amber-500/20 border border-amber-400/30 font-black scale-[1.02]"
+                : "bg-card/90 hover:bg-accent/40 text-muted-foreground hover:text-foreground border border-border/60"
+            }`}
+          >
+            <span>10 Days</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                activeTab === "10_DAYS"
+                  ? "bg-white/20 text-white"
+                  : "bg-blue-500/10 text-blue-500 border border-blue-500/20"
+              }`}
+            >
+              {tenDaysCount}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab("3_DAYS")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable flex items-center gap-1.5 ${
-            activeTab === "3_DAYS"
-              ? "bg-amber-500 text-white shadow-md"
-              : "bg-card hover:bg-accent/40 text-muted-foreground border border-border/50"
-          }`}
-        >
-          <span>3 DAYS ({threeDaysCount})</span>
-        </button>
+          {/* 3 DAYS */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("3_DAYS")}
+            className={`h-11 px-5 rounded-full text-xs font-bold transition-all duration-200 shrink-0 whitespace-nowrap flex items-center justify-center gap-2 fx-pressable ${
+              activeTab === "3_DAYS"
+                ? "fx-brand-gradient text-white shadow-lg shadow-amber-500/20 border border-amber-400/30 font-black scale-[1.02]"
+                : "bg-card/90 hover:bg-accent/40 text-muted-foreground hover:text-foreground border border-border/60"
+            }`}
+          >
+            <span>3 Days</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                activeTab === "3_DAYS"
+                  ? "bg-white/20 text-white"
+                  : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+              }`}
+            >
+              {threeDaysCount}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab("DUE_TODAY")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable flex items-center gap-1.5 ${
-            activeTab === "DUE_TODAY"
-              ? "bg-red-500 text-white shadow-md"
-              : "bg-card hover:bg-accent/40 text-muted-foreground border border-border/50"
-          }`}
-        >
-          <Clock className="h-3.5 w-3.5" />
-          <span>DUE TODAY ({dueTodayCount})</span>
-        </button>
+          {/* DUE TODAY */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("DUE_TODAY")}
+            className={`h-11 px-5 rounded-full text-xs font-bold transition-all duration-200 shrink-0 whitespace-nowrap flex items-center justify-center gap-2 fx-pressable ${
+              activeTab === "DUE_TODAY"
+                ? "fx-brand-gradient text-white shadow-lg shadow-amber-500/20 border border-amber-400/30 font-black scale-[1.02]"
+                : "bg-card/90 hover:bg-accent/40 text-muted-foreground hover:text-foreground border border-border/60"
+            }`}
+          >
+            <span>Due Today</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                activeTab === "DUE_TODAY"
+                  ? "bg-white/20 text-white"
+                  : "bg-red-500/10 text-red-500 border border-red-500/20"
+              }`}
+            >
+              {dueTodayCount}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab("OVERDUE")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable flex items-center gap-1.5 ${
-            activeTab === "OVERDUE"
-              ? "bg-red-500 text-white shadow-md"
-              : "bg-card hover:bg-accent/40 text-muted-foreground border border-border/50"
-          }`}
-        >
-          <AlertTriangle className="h-3.5 w-3.5" />
-          <span>OVERDUE ({overdueCount})</span>
-        </button>
+          {/* OVERDUE */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("OVERDUE")}
+            className={`h-11 px-5 rounded-full text-xs font-bold transition-all duration-200 shrink-0 whitespace-nowrap flex items-center justify-center gap-2 fx-pressable ${
+              activeTab === "OVERDUE"
+                ? "fx-brand-gradient text-white shadow-lg shadow-amber-500/20 border border-amber-400/30 font-black scale-[1.02]"
+                : "bg-card/90 hover:bg-accent/40 text-muted-foreground hover:text-foreground border border-border/60"
+            }`}
+          >
+            <span>Overdue</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                activeTab === "OVERDUE"
+                  ? "bg-white/20 text-white"
+                  : "bg-red-500/10 text-red-500 border border-red-500/20"
+              }`}
+            >
+              {overdueCount}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Notifications List */}

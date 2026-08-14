@@ -50,8 +50,8 @@ export type PaymentCompletedResultPayload = {
   }>;
 };
 
-// Canvas Helper: Renders Authentic BLUE Circular Rubber Stamp with Dynamic Selected Payment Date
-function createBlueCircularStampImage(paymentDateStr: string): string {
+// Canvas Helper: Renders Authentic BLUE FINEXA Digital Payment Confirmation Seal with Dynamic Selected Payment Date
+export function createBlueCircularStampImage(paymentDateStr: string): string {
   if (typeof document === "undefined") return "";
 
   const canvas = document.createElement("canvas");
@@ -65,7 +65,7 @@ function createBlueCircularStampImage(paymentDateStr: string): string {
   const cx = size / 2;
   const cy = size / 2;
 
-  // Format Dynamic Payment Date (e.g. "AUGUST 12, 2026")
+  // Format Dynamic Payment Date (e.g. "AUGUST 14, 2026")
   let formattedDate = paymentDateStr;
   try {
     const parts = paymentDateStr.split("-");
@@ -85,14 +85,18 @@ function createBlueCircularStampImage(paymentDateStr: string): string {
     formattedDate = paymentDateStr.toUpperCase();
   }
 
-  // Stamp Blue Ink Palette Tokens (Authentic Physical Rubber Stamp Ink)
-  const stampBlue = "#1E3A8A"; // Deep Blue Ink (#1E3A8A)
+  // Seal Color: Royal Blue Ink Palette (#1D4ED8)
+  const stampBlue = "#1D4ED8";
 
   context.clearRect(0, 0, size, size);
   context.save();
 
-  // Subtle Rubber Stamp Ink Opacity
-  context.globalAlpha = 0.92;
+  // Rotate -3.5 degrees for authentic seal texture
+  context.translate(cx, cy);
+  context.rotate(-0.06);
+  context.translate(-cx, -cy);
+
+  context.globalAlpha = 0.95;
 
   // Outer Thick Circular Ring
   context.strokeStyle = stampBlue;
@@ -114,7 +118,7 @@ function createBlueCircularStampImage(paymentDateStr: string): string {
   context.stroke();
 
   // 1. TOP ARC TEXT: "F I N E X A" (Arched Along Top)
-  function drawTopArcText(text: string, radius: number, startAngleRad: number, endAngleRad: number, fontSize = 38) {
+  function drawTopArcText(text: string, radius: number, startAngleRad: number, endAngleRad: number, fontSize = 42) {
     context.save();
     context.font = `900 ${fontSize}px sans-serif`;
     context.fillStyle = stampBlue;
@@ -135,7 +139,7 @@ function createBlueCircularStampImage(paymentDateStr: string): string {
     context.restore();
   }
 
-  // 2. BOTTOM ARC TEXT (UPRIGHT & READABLE LEFT-TO-RIGHT):
+  // 2. BOTTOM ARC TEXT: "SMART LOAN MANAGEMENT"
   function drawBottomArcText(text: string, radius: number, startAngleRad: number, endAngleRad: number, fontSize = 24) {
     context.save();
     context.font = `bold ${fontSize}px sans-serif`;
@@ -150,7 +154,7 @@ function createBlueCircularStampImage(paymentDateStr: string): string {
       const angle = startAngleRad + idx * step;
       context.save();
       context.translate(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle));
-      context.rotate(angle - Math.PI / 2); // Rotated -90deg so bottom characters stand upright!
+      context.rotate(angle - Math.PI / 2);
       context.fillText(ch, 0, 0);
       context.restore();
     });
@@ -158,29 +162,25 @@ function createBlueCircularStampImage(paymentDateStr: string): string {
   }
 
   // Draw Top Arc: "F I N E X A"
-  drawTopArcText("F  I  N  E  X  A", 258, -Math.PI * 0.76, -Math.PI * 0.24, 40);
+  drawTopArcText("F  I  N  E  X  A", 258, -Math.PI * 0.76, -Math.PI * 0.24, 42);
 
-  // Draw Bottom Outer Arc: "SMART LOAN MANAGEMENT"
-  drawBottomArcText("SMART  LOAN  MANAGEMENT", 258, Math.PI * 0.76, Math.PI * 0.24, 25);
-
-  // Draw Bottom Inner Arc: Dynamic Payment Date (e.g. "AUGUST 12, 2026")
-  drawBottomArcText(formattedDate, 172, Math.PI * 0.74, Math.PI * 0.26, 23);
+  // Draw Bottom Outer Arc: "SMART  LOAN  MANAGEMENT"
+  drawBottomArcText("SMART  LOAN  MANAGEMENT", 256, Math.PI * 0.76, Math.PI * 0.24, 25);
 
   // Decorative Stars on Top Left & Top Right
   context.fillStyle = stampBlue;
-  context.font = "bold 28px sans-serif";
+  context.font = "bold 32px sans-serif";
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText("★", cx - 258 * Math.cos(Math.PI * 0.15), cy - 258 * Math.sin(Math.PI * 0.15));
-  context.fillText("★", cx + 258 * Math.cos(Math.PI * 0.15), cy - 258 * Math.sin(Math.PI * 0.15));
+  context.fillText("★", cx - 258 * Math.cos(Math.PI * 0.14), cy - 258 * Math.sin(Math.PI * 0.14));
+  context.fillText("★", cx + 258 * Math.cos(Math.PI * 0.14), cy - 258 * Math.sin(Math.PI * 0.14));
 
-  // Center Banner Box (Double Blue Border)
+  // Center Content: AMOUNT CLEARED + DYNAMIC DATE + DIGITAL PAYMENT CONFIRMATION
   const boxW = 490;
-  const boxH = 160;
+  const boxH = 175;
   const boxX = cx - boxW / 2;
-  const boxY = cy - boxH / 2 - 10;
+  const boxY = cy - boxH / 2;
 
-  // Mask Inner Lines behind Banner
   context.fillStyle = "#FFFFFF";
   context.fillRect(boxX, boxY, boxW, boxH);
 
@@ -193,13 +193,27 @@ function createBlueCircularStampImage(paymentDateStr: string): string {
   context.lineWidth = 3;
   context.strokeRect(boxX + 7, boxY + 7, boxW - 14, boxH - 14);
 
-  // Banner Content: "AMOUNT CLEARED"
+  // Banner Line 1: "AMOUNT CLEARED"
   context.fillStyle = stampBlue;
-  context.font = "900 52px sans-serif";
+  context.font = "900 44px sans-serif";
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText("AMOUNT", cx, boxY + 48);
-  context.fillText("CLEARED", cx, boxY + 112);
+  context.fillText("AMOUNT CLEARED", cx, boxY + 42);
+
+  // Divider line inside center box
+  context.lineWidth = 3;
+  context.beginPath();
+  context.moveTo(boxX + 25, boxY + 75);
+  context.lineTo(boxX + boxW - 25, boxY + 75);
+  context.stroke();
+
+  // Banner Line 2: Dynamic Payment Date (e.g. "AUGUST 14, 2026")
+  context.font = "bold 28px sans-serif";
+  context.fillText(formattedDate, cx, boxY + 108);
+
+  // Banner Line 3: System Marking "• DIGITAL PAYMENT CONFIRMATION •"
+  context.font = "bold 15px sans-serif";
+  context.fillText("• DIGITAL PAYMENT CONFIRMATION •", cx, boxY + 145);
 
   context.restore();
   return canvas.toDataURL("image/png");
@@ -514,7 +528,7 @@ export function generatePaymentCompletedPdf(data: PaymentCompletedResultPayload)
   y += card02Height + sectionGap;
 
   // ═════════════════════════════════════════════════════════════════════════
-  // (03) RECENT PAYMENT COMPLETION DETAILS (FIXED: EXPANDED HEIGHT TO 78mm WITH COMFORTABLE BOTTOM PADDING)
+  // (03) RECENT PAYMENT COMPLETION DETAILS
   // ═════════════════════════════════════════════════════════════════════════
   const card03Height = 78;
 
@@ -718,53 +732,53 @@ export function generatePaymentCompletedPdf(data: PaymentCompletedResultPayload)
   }
 
   // ═════════════════════════════════════════════════════════════════════════
-  // (06) THANK YOU & ENTERPRISE CLOSING CARD (WITH BLUE RUBBER STAMP EMBEDDED DIRECTLY)
+  // (06) REDESIGNED FINAL THANK YOU & BLUE DIGITAL PAYMENT CONFIRMATION SEAL (FULL PAYMENT ONLY)
   // ═════════════════════════════════════════════════════════════════════════
-  const cardThankYouH = data.isFullyCleared ? 75 : 24;
-  checkPageBreak(cardThankYouH);
-
-  doc.setFillColor(250, 248, 242);
-  doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
-  doc.roundedRect(margin, y, contentWidth, cardThankYouH, 2, 2, "FD");
-
-  // Thank You Text Content (Positioned on Left / Center)
-  const textX = data.isFullyCleared ? margin + 8 : pageWidth / 2;
-  const textAlignAlign = data.isFullyCleared ? "left" : "center";
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(COLOR_GOLD[0], COLOR_GOLD[1], COLOR_GOLD[2]);
-  doc.text("Thank You!", textX, y + 8, { align: textAlignAlign });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
-  doc.text("FINEXA — Smart Loan Management System", textX, y + 14, { align: textAlignAlign });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-  doc.text(
-    "We appreciate your payment settlement and prompt cooperation with FINEXA.",
-    textX,
-    y + 19,
-    { align: textAlignAlign }
-  );
-
-  // If Full Payment (isFullyCleared), place the BLUE RUBBER STAMP on the Thank You card!
   if (data.isFullyCleared) {
-    const stampSize = 52; // 52mm Prominent Rubber Stamp
+    const cardThankYouH = 48; // Clean 48mm height
+    checkPageBreak(cardThankYouH);
+
+    // Warm Ivory Card Container with Gold Border
+    doc.setFillColor(COLOR_CARD_BG[0], COLOR_CARD_BG[1], COLOR_CARD_BG[2]);
+    doc.setDrawColor(COLOR_CARD_BORDER[0], COLOR_CARD_BORDER[1], COLOR_CARD_BORDER[2]);
+    doc.roundedRect(margin, y, contentWidth, cardThankYouH, 2.5, 2.5, "FD");
+
+    // LEFT SIDE: Thank You Title & Message
+    const leftTextX = margin + 8;
+    let cardTextY = y + 11;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.setTextColor(COLOR_GOLD[0], COLOR_GOLD[1], COLOR_GOLD[2]);
+    doc.text("Thank You!", leftTextX, cardTextY);
+
+    cardTextY += 7;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
+    doc.text("FINEXA — Smart Loan Management System", leftTextX, cardTextY);
+
+    cardTextY += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
+    
+    const thankMsg = "We appreciate your payment settlement and prompt cooperation with FINEXA.";
+    const wrappedMsg = doc.splitTextToSize(thankMsg, 105); // Max width 105mm for left text column
+    doc.text(wrappedMsg, leftTextX, cardTextY);
+
+    // RIGHT SIDE: Blue Circular Seal with Dynamic Date & System Marking
+    const stampSize = 40; // 40mm diameter stamp
     const stampImgData = createBlueCircularStampImage(data.paymentDate);
 
     if (stampImgData) {
-      // Position stamp on right side of Thank You card with generous whitespace
-      const stampX = maxRightX - stampSize - 6;
-      const stampY = y + 12;
+      const stampX = maxRightX - stampSize - 8;
+      const stampY = y + (cardThankYouH - stampSize) / 2; // Vertically centered
       doc.addImage(stampImgData, "PNG", stampX, stampY, stampSize, stampSize);
     }
-  }
 
-  y += cardThankYouH + sectionGap;
+    y += cardThankYouH + sectionGap;
+  }
 
   // Render Header & Footer Across All Pages
   const totalPages = doc.getNumberOfPages();

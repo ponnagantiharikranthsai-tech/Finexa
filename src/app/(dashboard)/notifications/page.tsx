@@ -11,26 +11,26 @@ import {
   Volume2,
   VolumeX,
   FileText,
-  Filter,
   RefreshCw,
   Clock,
   AlertTriangle,
+  ArrowLeft,
+  CheckCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   getAdminNotificationsAction,
   markNotificationCompletedAction,
-  markNotificationReadAction,
   markAllNotificationsReadAction,
   savePushSubscriptionAction,
 } from "@/features/notifications/actions/payment-reminders.action";
 import {
   generateBorrowerReminderMessage,
+  playNotificationChime,
   type AdminNotificationItem,
 } from "@/components/notification-center";
 
-// Helper to convert base64 URL to Uint8Array for VAPID key subscription
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/\-/g, "+").replace(/_/g, "/");
@@ -44,7 +44,8 @@ function urlBase64ToUint8Array(base64String: string) {
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<AdminNotificationItem[]>([]);
-  const [activeTab, setActiveTab] = useState<"all" | "overdue" | "due_today" | "3d" | "10d">("all");
+  const [activeTab, setActiveTab] = useState<"ALL" | "10_DAYS" | "3_DAYS" | "DUE_TODAY" | "OVERDUE">("ALL");
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -54,24 +55,58 @@ export default function NotificationsPage() {
   const [selectedNotifForMsg, setSelectedNotifForMsg] = useState<AdminNotificationItem | null>(null);
   const [copiedSuccess, setCopiedSuccess] = useState(false);
 
-  const loadNotifications = () => {
+  // Sound preference load
+  useEffect(() => {
+    try {
+      const savedSound = localStorage.getItem("finexa_sound_enabled");
+      if (savedSound !== null) setSoundEnabled(savedSound === "true");
+
+      if (typeof window !== "undefined" && "Notification" in window) {
+        setPushPermission(Notification.permission);
+      }
+    } catch (e) {}
+  }, []);
+
+  const loadNotifications = (triggerSoundCheck = false) => {
     startTransition(async () => {
       const res = await getAdminNotificationsAction();
       if (res.success && res.data) {
-        setNotifications(res.data as AdminNotificationItem[]);
+        const items = res.data as AdminNotificationItem[];
+        setNotifications(items);
+
+        // Zero-Loop Sound System: Play sound ONCE ONLY if genuinely NEW notification arrived
+        if (triggerSoundCheck && soundEnabled && items.length > 0) {
+          try {
+            const deliveredRaw = sessionStorage.getItem("finexa_delivered_notif_keys");
+            const deliveredSet = new Set<string>(deliveredRaw ? JSON.parse(deliveredRaw) : []);
+
+            const newKeys = items.map((i) => i.dedupKey || i.notificationId);
+            const hasGenuinelyNew = newKeys.some((k) => !deliveredSet.has(k));
+
+            if (hasGenuinelyNew) {
+              playNotificationChime();
+              newKeys.forEach((k) => deliveredSet.add(k));
+              sessionStorage.setItem("finexa_delivered_notif_keys", JSON.stringify(Array.from(deliveredSet)));
+            }
+          } catch (e) {}
+        }
       }
     });
   };
 
   useEffect(() => {
-    loadNotifications();
-
-    if (typeof window !== "undefined" && "Notification" in window) {
-      setPushPermission(Notification.permission);
-    }
+    loadNotifications(true);
   }, []);
 
-  // Web Push Subscription Helper
+  const toggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    try {
+      localStorage.setItem("finexa_sound_enabled", String(next));
+    } catch (e) {}
+    toast.info(`Notification Sound: ${next ? "ON 🔊" : "OFF 🔇"}`);
+  };
+
   const enableWebPush = async () => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
       toast.error("Web Push notifications are not supported in this browser environment.");
@@ -89,13 +124,12 @@ export default function NotificationsPage() {
         return;
       }
 
-      // Register Service Worker
       const reg = await navigator.serviceWorker.register("/sw.js");
       await navigator.serviceWorker.ready;
 
       const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!vapidPublicKey) {
-        toast.error("VAPID public key is missing.");
+        toast.error("VAPID public key configuration missing.");
         setIsSubscribing(false);
         return;
       }
@@ -113,9 +147,9 @@ export default function NotificationsPage() {
       if (endpoint && p256dh && auth) {
         const res = await savePushSubscriptionAction(endpoint, p256dh, auth);
         if (res.success) {
-          toast.success("Web Push Notifications enabled! You will receive reminders even when FINEXA is closed.");
+          toast.success("Web Push Notifications enabled! Receive alerts even when FINEXA is closed.");
         } else {
-          toast.error("Failed to save push subscription.");
+          toast.error("Failed to store push subscription.");
         }
       }
     } catch (err: any) {
@@ -136,8 +170,8 @@ export default function NotificationsPage() {
   };
 
   const handleMarkAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    toast.success("All notifications marked as read.");
+    setNotifications([]);
+    toast.success("All notifications marked as read/completed.");
     startTransition(async () => {
       await markAllNotificationsReadAction();
     });
@@ -177,45 +211,59 @@ export default function NotificationsPage() {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  // Filtered Items
-  const filteredNotifications = notifications.filter((item) => {
-    if (activeTab === "overdue") return item.reminderType === "overdue" || (item.daysRemaining !== undefined && item.daysRemaining < 0);
-    if (activeTab === "due_today") return item.reminderType === "due_today" || item.daysRemaining === 0;
-    if (activeTab === "3d") return item.reminderType === "3d" || item.daysRemaining === 3;
-    if (activeTab === "10d") return item.reminderType === "10d" || item.daysRemaining === 10;
-    return true;
-  });
-
+  // Counters
   const overdueCount = notifications.filter((n) => n.reminderType === "overdue" || (n.daysRemaining !== undefined && n.daysRemaining < 0)).length;
   const dueTodayCount = notifications.filter((n) => n.reminderType === "due_today" || n.daysRemaining === 0).length;
   const threeDaysCount = notifications.filter((n) => n.reminderType === "3d" || n.daysRemaining === 3).length;
   const tenDaysCount = notifications.filter((n) => n.reminderType === "10d" || n.daysRemaining === 10).length;
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  // Filtered List
+  const filteredNotifications = notifications.filter((item) => {
+    if (activeTab === "OVERDUE") return item.reminderType === "overdue" || (item.daysRemaining !== undefined && item.daysRemaining < 0);
+    if (activeTab === "DUE_TODAY") return item.reminderType === "due_today" || item.daysRemaining === 0;
+    if (activeTab === "3_DAYS") return item.reminderType === "3d" || item.daysRemaining === 3;
+    if (activeTab === "10_DAYS") return item.reminderType === "10d" || item.daysRemaining === 10;
+    return true;
+  });
 
   return (
     <div className="container max-w-5xl mx-auto py-6 px-4 space-y-6">
-      {/* Top Banner & Title */}
+      {/* Top Header Card */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-6 rounded-3xl bg-card border border-border shadow-xl backdrop-blur-xl">
         <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 rounded-2xl bg-primary/10 text-primary">
-              <Bell className="h-6 w-6" />
-            </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/loan-management"
+              className="p-2 rounded-xl border border-border/60 hover:bg-accent/40 text-muted-foreground hover:text-foreground transition-colors fx-pressable shrink-0"
+              title="Back to Loan Management"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
             <div>
-              <h1 className="text-xl md:text-2xl font-black text-foreground tracking-tight">
-                Payment Reminders & Notifications
+              <h1 className="text-xl md:text-2xl font-black text-foreground tracking-tight flex items-center gap-2">
+                <span>Payment Reminders & Notifications</span>
               </h1>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Automated Web Push alerts and daily payment reminder logs for FINEXA Admin.
+                Stay updated with upcoming and overdue loan payments.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={loadNotifications}
+            onClick={toggleSound}
+            className="p-2.5 rounded-xl border border-border/60 hover:bg-accent/40 text-foreground transition-colors fx-pressable flex items-center gap-1.5 text-xs font-semibold"
+            title={soundEnabled ? "Mute notification sound" : "Enable notification sound"}
+          >
+            {soundEnabled ? <Volume2 className="h-4 w-4 text-emerald-500" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
+            <span>{soundEnabled ? "Sound ON" : "Sound OFF"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => loadNotifications(false)}
             className="p-2.5 rounded-xl border border-border/60 hover:bg-accent/40 text-foreground transition-colors fx-pressable flex items-center gap-1.5 text-xs font-semibold"
             title="Refresh notifications"
           >
@@ -223,19 +271,20 @@ export default function NotificationsPage() {
             <span>Sync</span>
           </button>
 
-          {unreadCount > 0 && (
+          {notifications.length > 0 && (
             <button
               type="button"
               onClick={handleMarkAllRead}
-              className="px-3.5 py-2.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 text-xs font-bold transition-colors fx-pressable"
+              className="px-3.5 py-2.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 text-xs font-bold transition-colors fx-pressable flex items-center gap-1.5"
             >
-              Mark All Read ({unreadCount})
+              <CheckCheck className="h-4 w-4" />
+              <span>Mark All as Read</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Web Push Permission Bar */}
+      {/* Web Push Permission Banner */}
       <div className="p-4 rounded-2xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-primary/20 text-primary shrink-0">
@@ -243,7 +292,7 @@ export default function NotificationsPage() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-xs font-bold text-foreground">Browser Web Push Notifications</h3>
+              <h3 className="text-xs font-bold text-foreground">Browser Push Notifications</h3>
               <span
                 className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
                   pushPermission === "granted"
@@ -257,7 +306,7 @@ export default function NotificationsPage() {
               </span>
             </div>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Receive OS & browser push alerts when payments are 10 days left, 3 days left, due today, or overdue — even when FINEXA is closed.
+              Receive OS & browser notifications even when FINEXA is closed.
             </p>
           </div>
         </div>
@@ -270,107 +319,134 @@ export default function NotificationsPage() {
             className="px-4 py-2 rounded-xl bg-primary text-white hover:bg-primary/90 text-xs font-bold shadow-md transition-all fx-pressable shrink-0 flex items-center justify-center gap-1.5"
           >
             <Bell className="h-3.5 w-3.5" />
-            <span>{isSubscribing ? "Enabling..." : "Enable Web Push"}</span>
+            <span>{isSubscribing ? "Enabling..." : "Enable Push Notifications"}</span>
           </button>
         )}
+      </div>
+
+      {/* Counter Cards Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="p-3.5 rounded-2xl bg-card border border-border/60 shadow-xs space-y-1">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Active Reminders</p>
+          <p className="text-xl font-black text-foreground">{notifications.length}</p>
+        </div>
+        <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/20 shadow-xs space-y-1">
+          <p className="text-[11px] font-semibold text-red-500 uppercase tracking-wider">Overdue</p>
+          <p className="text-xl font-black text-red-500">{overdueCount}</p>
+        </div>
+        <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/20 shadow-xs space-y-1">
+          <p className="text-[11px] font-semibold text-red-500 uppercase tracking-wider">Due Today</p>
+          <p className="text-xl font-black text-red-500">{dueTodayCount}</p>
+        </div>
+        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 shadow-xs space-y-1">
+          <p className="text-[11px] font-semibold text-amber-500 uppercase tracking-wider">3 Days Left</p>
+          <p className="text-xl font-black text-amber-500">{threeDaysCount}</p>
+        </div>
+        <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 shadow-xs space-y-1">
+          <p className="text-[11px] font-semibold text-blue-500 uppercase tracking-wider">10 Days Left</p>
+          <p className="text-xl font-black text-blue-500">{tenDaysCount}</p>
+        </div>
       </div>
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
         <button
           type="button"
-          onClick={() => setActiveTab("all")}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable ${
-            activeTab === "all"
+          onClick={() => setActiveTab("ALL")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable ${
+            activeTab === "ALL"
               ? "bg-primary text-white shadow-md"
               : "bg-card hover:bg-accent/40 text-muted-foreground border border-border/50"
           }`}
         >
-          All Notifications ({notifications.length})
+          ALL ({notifications.length})
         </button>
 
         <button
           type="button"
-          onClick={() => setActiveTab("overdue")}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable flex items-center gap-1.5 ${
-            activeTab === "overdue"
-              ? "bg-red-500 text-white shadow-md"
+          onClick={() => setActiveTab("10_DAYS")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable flex items-center gap-1.5 ${
+            activeTab === "10_DAYS"
+              ? "bg-blue-500 text-white shadow-md"
               : "bg-card hover:bg-accent/40 text-muted-foreground border border-border/50"
           }`}
         >
-          <AlertTriangle className="h-3.5 w-3.5" />
-          <span>Overdue ({overdueCount})</span>
+          <span>10 DAYS ({tenDaysCount})</span>
         </button>
 
         <button
           type="button"
-          onClick={() => setActiveTab("due_today")}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable flex items-center gap-1.5 ${
-            activeTab === "due_today"
+          onClick={() => setActiveTab("3_DAYS")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable flex items-center gap-1.5 ${
+            activeTab === "3_DAYS"
+              ? "bg-amber-500 text-white shadow-md"
+              : "bg-card hover:bg-accent/40 text-muted-foreground border border-border/50"
+          }`}
+        >
+          <span>3 DAYS ({threeDaysCount})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("DUE_TODAY")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable flex items-center gap-1.5 ${
+            activeTab === "DUE_TODAY"
               ? "bg-red-500 text-white shadow-md"
               : "bg-card hover:bg-accent/40 text-muted-foreground border border-border/50"
           }`}
         >
           <Clock className="h-3.5 w-3.5" />
-          <span>Due Today ({dueTodayCount})</span>
+          <span>DUE TODAY ({dueTodayCount})</span>
         </button>
 
         <button
           type="button"
-          onClick={() => setActiveTab("3d")}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable flex items-center gap-1.5 ${
-            activeTab === "3d"
-              ? "bg-amber-500 text-white shadow-md"
+          onClick={() => setActiveTab("OVERDUE")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable flex items-center gap-1.5 ${
+            activeTab === "OVERDUE"
+              ? "bg-red-500 text-white shadow-md"
               : "bg-card hover:bg-accent/40 text-muted-foreground border border-border/50"
           }`}
         >
-          <span>3 Days Left ({threeDaysCount})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("10d")}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap fx-pressable flex items-center gap-1.5 ${
-            activeTab === "10d"
-              ? "bg-blue-500 text-white shadow-md"
-              : "bg-card hover:bg-accent/40 text-muted-foreground border border-border/50"
-          }`}
-        >
-          <span>10 Days Left ({tenDaysCount})</span>
+          <AlertTriangle className="h-3.5 w-3.5" />
+          <span>OVERDUE ({overdueCount})</span>
         </button>
       </div>
 
-      {/* Notifications Grid List */}
+      {/* Notifications List */}
       {filteredNotifications.length === 0 ? (
         <div className="p-12 text-center rounded-3xl bg-card border border-border shadow-xl">
           <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-emerald-500/80" />
           <h2 className="text-base font-bold text-foreground">All Clear!</h2>
           <p className="text-xs text-muted-foreground mt-1">
-            No active loan payment reminders match the selected tab right now.
+            No active loan payment reminders match the selected filter right now.
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredNotifications.map((item) => {
             let badgeColor = "bg-blue-500/10 text-blue-500 border-blue-500/20";
-            if (item.priority === "amber") {
-              badgeColor = "bg-amber-500/10 text-amber-500 border-amber-500/20";
-            } else if (item.priority === "red") {
+            let displayHeaderTitle = "PAYMENT DUE IN 10 DAYS";
+
+            if (item.reminderType === "overdue" || (item.daysRemaining !== undefined && item.daysRemaining < 0)) {
               badgeColor = "bg-red-500/10 text-red-500 border-red-500/20";
+              displayHeaderTitle = "PAYMENT OVERDUE";
+            } else if (item.reminderType === "due_today" || item.daysRemaining === 0) {
+              badgeColor = "bg-red-500/10 text-red-500 border-red-500/20";
+              displayHeaderTitle = "PAYMENT DUE TODAY";
+            } else if (item.reminderType === "3d" || item.daysRemaining === 3) {
+              badgeColor = "bg-amber-500/10 text-amber-500 border-amber-500/20";
+              displayHeaderTitle = "PAYMENT DUE IN 3 DAYS";
             }
 
             return (
               <div
                 key={item.notificationId}
-                className={`p-5 rounded-2xl border transition-all shadow-md space-y-3 ${
-                  item.isRead
-                    ? "bg-card hover:bg-accent/20 border-border/60"
-                    : "bg-primary/5 hover:bg-primary/10 border-primary/30"
-                }`}
+                className="p-5 rounded-2xl border bg-card border-border/60 hover:border-primary/40 transition-all shadow-md space-y-3"
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className={`px-2.5 py-1 rounded-md border text-[10px] font-black uppercase tracking-wider ${badgeColor}`}>
-                    {item.title}
+                    {displayHeaderTitle}
                   </span>
                   <span className="text-[11px] text-muted-foreground">
                     {new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -382,7 +458,7 @@ export default function NotificationsPage() {
                   <p className="text-xs text-muted-foreground leading-relaxed mt-1">{item.message}</p>
                 </div>
 
-                {/* Rich Breakdown Table */}
+                {/* Breakdown Details Grid */}
                 <div className="p-3 rounded-xl bg-secondary/50 border border-border/50 text-xs grid grid-cols-2 gap-x-4 gap-y-1.5">
                   <div>
                     <span className="text-muted-foreground">Mobile:</span>{" "}
@@ -403,7 +479,7 @@ export default function NotificationsPage() {
                     </strong>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Loan Status:</span>{" "}
+                    <span className="text-muted-foreground">Status:</span>{" "}
                     <strong className="text-emerald-500 uppercase">{item.loanStatus || "ACTIVE"}</strong>
                   </div>
                   <div>

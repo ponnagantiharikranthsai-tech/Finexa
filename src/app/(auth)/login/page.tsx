@@ -80,30 +80,32 @@ export default function LoginPage() {
       {/* ─── STYLING & BACKGROUND GLOW ─── */}
       <style jsx global>{`
         .login-glass-card {
-          background-color: rgba(23, 24, 29, 0.65);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          backdrop-filter: blur(20px);
+          position: relative;
+          background-color: rgba(23, 24, 29, 0.94);
+          border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 20px;
-          box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.6);
+          box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.7);
+        }
+        @supports (backdrop-filter: blur(20px)) {
+          .login-glass-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 20px;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            pointer-events: none;
+            z-index: 0;
+          }
         }
         .login-input-glass {
-          background-color: rgba(0, 0, 0, 0.35);
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          background-color: rgba(0, 0, 0, 0.45);
+          border: 1px solid rgba(255, 255, 255, 0.08);
           transition: all 0.2s ease;
         }
         .login-input-glass:focus-within {
-          border-color: rgba(255, 213, 74, 0.4);
-          box-shadow: 0 0 15px rgba(255, 213, 74, 0.1);
-        }
-        .btn-gold-action {
-          background-color: #FFD54A;
-          color: #0B0F19;
-          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .btn-gold-action:hover {
-          background-color: #FFE082;
-          transform: translateY(-2px);
-          box-shadow: 0 10px 25px -5px rgba(255, 213, 74, 0.4);
+          border-color: rgba(255, 213, 74, 0.5);
+          box-shadow: 0 0 15px rgba(255, 213, 74, 0.15);
         }
       `}</style>
 
@@ -230,11 +232,12 @@ export default function LoginPage() {
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
+                      console.log("[LOGIN] Password eye icon clicked");
                       setShowPassword((prev) => !prev);
                     }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 h-10 w-10 flex items-center justify-center text-zinc-400 hover:text-white cursor-pointer z-20 bg-transparent border-none outline-none focus:outline-none"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 h-11 w-11 flex items-center justify-center text-zinc-400 hover:text-white cursor-pointer z-30 pointer-events-auto touch-manipulation bg-transparent border-none outline-none focus:outline-none"
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? <EyeOff className="h-4 w-4 pointer-events-none" /> : <Eye className="h-4 w-4 pointer-events-none" />}
                   </button>
                 </div>
               </div>
@@ -243,8 +246,11 @@ export default function LoginPage() {
               <button
                 type="button"
                 disabled={isPending}
-                onClick={handleSubmit}
-                className="w-full h-12 rounded-xl bg-[#FFD54A] text-[#0B0F19] hover:bg-[#FFE082] active:scale-[0.98] transition-all duration-300 shadow-lg shadow-[#FFD54A]/20 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed mt-2 z-30 relative cursor-pointer"
+                onClick={(e) => {
+                  console.log("[LOGIN] Login button clicked");
+                  handleSubmit(e);
+                }}
+                className="w-full h-12 rounded-xl bg-[#FFD54A] text-[#0B0F19] hover:bg-[#FFE082] active:scale-[0.98] transition-all duration-300 shadow-lg shadow-[#FFD54A]/20 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed mt-2 z-30 relative pointer-events-auto touch-manipulation cursor-pointer"
               >
                 {isPending ? (
                   <>
@@ -254,7 +260,7 @@ export default function LoginPage() {
                 ) : (
                   <>
                     Login
-                    <ArrowRight className="h-4.5 w-4.5" />
+                    <ArrowRight className="h-4.5 w-4.5 pointer-events-none" />
                   </>
                 )}
               </button>

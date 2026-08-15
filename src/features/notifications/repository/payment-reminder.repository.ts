@@ -307,12 +307,14 @@ export const paymentReminderRepository = {
     await ensureReminderTablesExist();
   },
 
-  async getAdminNotifications() {
+  async getAdminNotifications(overrideTodayStr?: string) {
     await ensureReminderTablesExist();
 
     // 1. Fetch completed notification dedup keys from database
-    const completedRows = await db.select({ dedupKey: completedNotificationKeysTable.dedupKey }).from(completedNotificationKeysTable);
-    const completedKeysSet = new Set(completedRows.map(r => r.dedupKey));
+    const completedRows = await db
+      .select({ dedupKey: completedNotificationKeysTable.dedupKey })
+      .from(completedNotificationKeysTable);
+    const completedKeysSet = new Set(completedRows.map((r) => r.dedupKey));
 
     // 2. Fetch ALL active, overdue, extended, or submitted loans in the database
     const activeLoans = await db
@@ -325,18 +327,29 @@ export const paymentReminderRepository = {
       .innerJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
       .where(inArray(loansTable.status, ["submitted", "active", "overdue", "extended"]));
 
-    // Local Midnight Date (Asia/Kolkata)
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayStr = format(today, "yyyy-MM-dd");
+    if (activeLoans.length === 0) return [];
+
+    // Compute actual outstanding balances for all active loans to filter out fully paid ones
+    const loansOnly = activeLoans.map((item) => item.loan);
+    const { loanRepository } = await import("@/features/loans/repository/loan.repository");
+    const balancesMap = await loanRepository.getOutstandingBalancesForLoans(loansOnly);
+
+    // Local Midnight Date (Date-only comparison)
+    const todayStr = overrideTodayStr || format(new Date(), "yyyy-MM-dd");
+    const [tY, tM, tD] = todayStr.split("-").map(Number);
+    const today = new Date(tY, tM - 1, tD);
 
     const dynamicNotifications: any[] = [];
 
     for (const item of activeLoans) {
       const { loan, borrowerName, borrowerMobile } = item;
 
-      // Exclude CLOSED or PAID loans
+      // Exclude CLOSED loans
       if (loan.status === "closed") continue;
+
+      // Exclude FULLY PAID loans (outstanding <= 0)
+      const outstanding = balancesMap.get(loan.loanId) ?? Number(loan.principal || 0);
+      if (outstanding <= 0) continue;
 
       const dueObj = parseAnyDate(loan.dueDate);
       if (!dueObj) continue;
@@ -345,14 +358,14 @@ export const paymentReminderRepository = {
       const dueDateStr = format(dueNormalized, "yyyy-MM-dd");
       const verboseDueDate = formatDateVerbose(dueNormalized);
 
-      // EXACT Calendar-Date Difference
-      const diffDays = differenceInDays(dueNormalized, today);
+      // EXACT Calendar-Date Difference (ignoring hours/minutes/seconds)
+      const diffDays = Math.round((dueNormalized.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
       const principalNum = Number(loan.principal || 0);
       const rateNum = Number(loan.interestRate || 0);
       const monthlyInt = Math.round((principalNum * rateNum) / 1000);
       const penaltyNum = Number(loan.penaltyAmount || 0);
-      const totalPayable = principalNum + monthlyInt + penaltyNum;
+      const totalPayable = Math.max(outstanding, principalNum + monthlyInt + penaltyNum);
       const payableFormatted = totalPayable.toLocaleString("en-IN");
 
       let categoryRank = 99; // 1: OVERDUE, 2: DUE TODAY, 3: 3 DAYS LEFT, 4: 10 DAYS LEFT
@@ -366,9 +379,9 @@ export const paymentReminderRepository = {
       let overdueDays = 0;
       let dedupKey = "";
 
-      // STRICT 4 NOTIFICATION CYCLES ONLY: 10D, 3D, DUE TODAY, OVERDUE
+      // STRICT NOTIFICATION CYCLES: 10D, 3D, DUE TODAY, OVERDUE
       if (diffDays < 0) {
-        // CYCLE 4 — OVERDUE (daysRemaining < 0)
+        // OVERDUE: Appears every day until loan is paid in full!
         trigger = true;
         categoryRank = 1;
         overdueDays = Math.abs(diffDays);
@@ -378,9 +391,9 @@ export const paymentReminderRepository = {
         message = `${borrowerName}'s payment is overdue by ${overdueDays} ${overdueDays === 1 ? "day" : "days"}.`;
         pushTitle = "FINEXA — Payment Overdue";
         pushBody = `${borrowerName}'s payment is overdue by ${overdueDays} ${overdueDays === 1 ? "day" : "days"}. Current payable amount: ₹${payableFormatted}.`;
-        dedupKey = `notif_${loan.loanId}_overdue_${dueDateStr}`;
+        dedupKey = `notif_${loan.loanId}_overdue_${dueDateStr}_${todayStr}`;
       } else if (diffDays === 0) {
-        // CYCLE 3 — DUE TODAY (daysRemaining === 0)
+        // DUE TODAY
         trigger = true;
         categoryRank = 2;
         reminderType = "due_today";
@@ -391,7 +404,7 @@ export const paymentReminderRepository = {
         pushBody = `${borrowerName}'s payment of ₹${payableFormatted} is due today.`;
         dedupKey = `notif_${loan.loanId}_due_today_${dueDateStr}`;
       } else if (diffDays === 3) {
-        // CYCLE 2 — 3 DAYS BEFORE DUE DATE (daysRemaining === 3)
+        // 3 DAYS BEFORE DUE DATE
         trigger = true;
         categoryRank = 3;
         reminderType = "3d";
@@ -402,7 +415,7 @@ export const paymentReminderRepository = {
         pushBody = `${borrowerName}'s loan payment of ₹${payableFormatted} is due on ${verboseDueDate}. 3 days remaining.`;
         dedupKey = `notif_${loan.loanId}_3d_${dueDateStr}`;
       } else if (diffDays === 10) {
-        // CYCLE 1 — 10 DAYS BEFORE DUE DATE (daysRemaining === 10)
+        // 10 DAYS BEFORE DUE DATE
         trigger = true;
         categoryRank = 4;
         reminderType = "10d";

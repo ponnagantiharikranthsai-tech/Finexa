@@ -4,10 +4,10 @@ import { paymentReminderRepository, ReminderScheduleOptions } from "../repositor
 import { requireAuth } from "@/lib/auth";
 import type { ActionResult } from "@/types/api.types";
 
-export async function getAdminNotificationsAction(): Promise<ActionResult<any[]>> {
+export async function getAdminNotificationsAction(overrideTodayStr?: string): Promise<ActionResult<any[]>> {
   try {
     await requireAuth();
-    const notifications = await paymentReminderRepository.getAdminNotifications();
+    const notifications = await paymentReminderRepository.getAdminNotifications(overrideTodayStr);
     return { success: true, data: notifications };
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to fetch admin notifications" };

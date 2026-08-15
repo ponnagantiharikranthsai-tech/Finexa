@@ -35,12 +35,12 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (data.success) {
+        document.cookie = "finexa_session=true; path=/; max-age=604800; SameSite=Lax";
+        document.cookie = "finexa_user_email=" + encodeURIComponent(email.trim()) + "; path=/; max-age=604800; SameSite=Lax";
         sessionStorage.setItem("session_active", "true");
         setShowMoneyEffect(true);
         toast.success("Welcome back to FINEXA!");
-        setTimeout(() => {
-          window.location.href = "/home";
-        }, 600);
+        window.location.replace("/home");
       } else {
         const errorMsg = typeof data.error === "string" 
           ? data.error 

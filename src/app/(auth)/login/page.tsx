@@ -25,8 +25,16 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsPending(true);
     setError(null);
+
+    if (!email.trim() || !password) {
+      const msg = "Please enter your email/mobile and password.";
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    setIsPending(true);
     try {
       const res = await fetch("/api/login", {
         method: "POST",
@@ -160,7 +168,7 @@ export default function LoginPage() {
               <span className="text-xs font-semibold text-[#D4AF37] tracking-wider uppercase">Welcome Back</span>
             </div>
 
-            <form onSubmit={handleSubmit} method="POST" className="space-y-5 text-left mt-6">
+            <form onSubmit={handleSubmit} noValidate method="POST" className="space-y-5 text-left mt-6">
               {/* Global error */}
               {error && (
                 <div className="rounded-xl bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive flex items-start gap-2">
@@ -187,16 +195,12 @@ export default function LoginPage() {
                     placeholder="Enter email or mobile"
                     autoComplete="email"
                     autoCapitalize="none"
-                    required
                     disabled={isPending}
                     onFocus={() => setFocused("email")}
                     onBlur={() => setFocused(null)}
                     className="w-full h-12 px-4 rounded-xl bg-transparent text-white text-sm placeholder:text-zinc-500 focus:outline-none disabled:opacity-50"
                   />
                 </div>
-                {error && typeof error !== "string" && error.email && (
-                  <p className="text-xs text-destructive mt-1">{error.email[0]}</p>
-                )}
               </div>
 
               {/* Password */}
@@ -216,7 +220,6 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     autoCapitalize="none"
-                    required
                     disabled={isPending}
                     onFocus={() => setFocused("password")}
                     onBlur={() => setFocused(null)}
@@ -234,16 +237,18 @@ export default function LoginPage() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {error && typeof error !== "string" && error.password && (
-                  <p className="text-xs text-destructive mt-1">{error.password[0]}</p>
-                )}
               </div>
 
               {/* Submit Button */}
               <button
                 type="submit"
                 disabled={isPending}
-                className="w-full h-12 rounded-xl bg-[#FFD54A] text-[#0B0F19] hover:bg-[#FFE082] active:scale-[0.98] transition-all duration-300 shadow-lg shadow-[#FFD54A]/20 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
+                onClick={(e) => {
+                  if (!isPending) {
+                    handleSubmit(e);
+                  }
+                }}
+                className="w-full h-12 rounded-xl bg-[#FFD54A] text-[#0B0F19] hover:bg-[#FFE082] active:scale-[0.98] transition-all duration-300 shadow-lg shadow-[#FFD54A]/20 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed mt-2 z-30 relative cursor-pointer"
               >
                 {isPending ? (
                   <>

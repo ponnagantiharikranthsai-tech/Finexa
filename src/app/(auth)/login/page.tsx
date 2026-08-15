@@ -241,13 +241,9 @@ export default function LoginPage() {
 
               {/* Submit Button */}
               <button
-                type="submit"
+                type="button"
                 disabled={isPending}
-                onClick={(e) => {
-                  if (!isPending) {
-                    handleSubmit(e);
-                  }
-                }}
+                onClick={handleSubmit}
                 className="w-full h-12 rounded-xl bg-[#FFD54A] text-[#0B0F19] hover:bg-[#FFE082] active:scale-[0.98] transition-all duration-300 shadow-lg shadow-[#FFD54A]/20 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed mt-2 z-30 relative cursor-pointer"
               >
                 {isPending ? (

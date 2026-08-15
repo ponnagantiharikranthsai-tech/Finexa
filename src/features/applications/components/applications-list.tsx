@@ -50,8 +50,10 @@ function StatusBadge({ status }: { status: string }) {
 
   const labelMap: Record<string, string> = {
     active: "Active Link",
-    pending_verification: "Pending Verification",
+    pending_verification: "PENDING REVIEW",
+    submitted: "PENDING REVIEW",
     approved: "Approved",
+    rejected: "Rejected",
     expired: "Expired",
   };
 

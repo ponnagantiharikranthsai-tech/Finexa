@@ -7,6 +7,7 @@ import {
   pushedNotificationKeysTable,
   loansTable,
   borrowersTable,
+  loanApplicationsTable,
 } from "@/db/schema";
 import { eq, and, lte, desc, sql, inArray } from "drizzle-orm";
 import { format, subDays, addDays, parseISO, differenceInDays } from "date-fns";
@@ -469,7 +470,47 @@ export const paymentReminderRepository = {
       }
     }
 
-    // Sort Notifications by Urgency Rank (1: OVERDUE, 2: DUE TODAY, 3: 3 DAYS, 4: 10 DAYS), then nearest due date
+    // Also query submitted borrower loan applications
+    const pendingApplications = await db
+      .select()
+      .from(loanApplicationsTable)
+      .where(inArray(loanApplicationsTable.status, ["pending_verification", "submitted"]));
+
+    for (const app of pendingApplications) {
+      const dedupKey = `notif_APP_${app.applicationId}_submitted`;
+      if (!completedKeysSet.has(dedupKey) && app.customerName) {
+        const principalVal = Number(app.principal || 0);
+        const subDate = app.updatedAt ? format(new Date(app.updatedAt), "yyyy-MM-dd") : todayStr;
+        dynamicNotifications.push({
+          notificationId: dedupKey,
+          loanId: app.applicationId,
+          dedupKey,
+          borrowerName: app.customerName,
+          borrowerMobile: app.customerMobile || "N/A",
+          reminderType: "application_submitted",
+          priority: "blue",
+          title: "New Loan Application Received",
+          message: `${app.customerName} has submitted a new loan application.`,
+          isRead: false,
+          isCompleted: false,
+          createdAt: app.updatedAt ? new Date(app.updatedAt).toISOString() : new Date().toISOString(),
+          dueDate: app.dueDate || todayStr,
+          currentDate: todayStr,
+          principal: principalVal,
+          interestRate: 0,
+          outstandingBalance: principalVal,
+          daysRemaining: 0,
+          overdueDays: 0,
+          penaltyAmount: 0,
+          currentTotalPayable: principalVal,
+          loanStatus: "PENDING REVIEW",
+          paymentStatus: "UNPAID",
+          categoryRank: 0, // Top Priority!
+        });
+      }
+    }
+
+    // Sort Notifications by Urgency Rank (0: NEW APPLICATION, 1: OVERDUE, 2: DUE TODAY, 3: 3 DAYS, 4: 10 DAYS), then nearest due date
     dynamicNotifications.sort((a, b) => {
       if (a.categoryRank !== b.categoryRank) {
         return a.categoryRank - b.categoryRank;

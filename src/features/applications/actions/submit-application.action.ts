@@ -4,6 +4,9 @@ import { applicationRepository } from "../repository/application.repository";
 import { encrypt } from "@/lib/encryption";
 import { auditLog } from "@/lib/audit-log";
 import type { ActionResult } from "@/types/api.types";
+import { db } from "@/db/client";
+import { adminNotificationsTable } from "@/db/schema";
+import { sendWebPushToAllSubscriptions } from "@/features/notifications/utils/web-push";
 
 export async function submitLoanApplicationAction(
   _prevState: ActionResult<{ code: string }> | null,
@@ -21,7 +24,7 @@ export async function submitLoanApplicationAction(
     }
 
     if (app.status !== "active") {
-      return { success: false, error: "This link is no longer active." };
+      return { success: false, error: "This link is no longer active or has already been submitted." };
     }
 
     // Extract fields
@@ -64,13 +67,25 @@ export async function submitLoanApplicationAction(
       customerPanEncrypted: panEncrypted,
     });
 
+    // Trigger Web Push notification to admin devices
+    const dedupKey = `notif_APP_${app.applicationId}_submitted`;
+    const principalFormatted = Number(app.principal).toLocaleString("en-IN");
+    sendWebPushToAllSubscriptions(dedupKey, {
+      title: "🔔 New Loan Application Received",
+      body: `${name} has submitted a new loan application for ₹${principalFormatted}.`,
+      icon: "/logo-icon.png",
+      badge: "/logo-icon.png",
+      url: `/applications`,
+      tag: dedupKey,
+    }).catch((err) => console.error("Web Push trigger error:", err));
+
     // Notify the admin by generating an audit log
     await auditLog("application_submitted", "loan_application", app.applicationId, {
       code,
       customerName: name,
       customerMobile: mobile,
       principal: app.principal,
-      status: "Pending Verification",
+      status: "PENDING REVIEW",
     });
 
     return { success: true, data: { code } };

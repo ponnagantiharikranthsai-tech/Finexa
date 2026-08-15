@@ -1,11 +1,18 @@
-﻿import { addMonths, endOfMonth, getDate, setDate } from "date-fns";
+import { addMonths, addDays, endOfMonth, getDate, setDate } from "date-fns";
 
 /**
  * Calculates due date for a loan term (BR-2).
- * The due date is exactly one month after the date given.
- * Handles month boundaries, e.g. Jan 31 + 1 month = Feb 28 (or Feb 29 on leap years).
+ * For "weekly", adds 7 days.
+ * For "monthly", adds 1 month handling month boundaries.
  */
-export function calculateDueDate(dateGiven: Date): Date {
+export function calculateDueDate(dateGiven: Date, interestType: "monthly" | "daily" | "weekly" = "monthly"): Date {
+  if (interestType === "weekly") {
+    return addDays(dateGiven, 7);
+  }
+  if (interestType === "daily") {
+    return addDays(dateGiven, 30);
+  }
+
   const targetMonth = addMonths(dateGiven, 1);
   const givenDay = getDate(dateGiven);
   const endOfTargetMonth = endOfMonth(targetMonth);

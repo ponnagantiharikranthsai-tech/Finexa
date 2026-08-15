@@ -1,9 +1,19 @@
-﻿import { DomainError } from "@/lib/errors";
+import { DomainError } from "@/lib/errors";
 import { differenceInCalendarMonths } from "date-fns";
 
-export function calculatePeriods(dateGiven: Date | string, dueDate: Date | string): number {
+export function calculatePeriods(dateGiven: Date | string, dueDate: Date | string, interestType?: string): number {
   const given = new Date(dateGiven);
   const due = new Date(dueDate);
+
+  if (interestType === "weekly") {
+    const totalDays = Math.ceil((due.getTime() - given.getTime()) / (1000 * 3600 * 24));
+    return Math.max(1, Math.round(totalDays / 7));
+  }
+  if (interestType === "daily") {
+    const totalDays = Math.ceil((due.getTime() - given.getTime()) / (1000 * 3600 * 24));
+    return Math.max(1, totalDays);
+  }
+
   return Math.max(1, differenceInCalendarMonths(due, given));
 }
 
@@ -19,6 +29,14 @@ export function calculateMonthlyInterest(principal: number, ratePerThousand: num
     return 0;
   }
   return (principal / 1000) * ratePerThousand;
+}
+
+/**
+ * Calculates weekly interest (rate per thousand per week).
+ * interest = (principal / 1000) * ratePerThousand
+ */
+export function calculateWeeklyInterest(principal: number, ratePerThousand: number): number {
+  return calculateMonthlyInterest(principal, ratePerThousand);
 }
 
 /**

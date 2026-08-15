@@ -84,9 +84,9 @@ export async function payAndExtendAction(
         : `[Pay & Extend | ${documentId}] Monthly interest payment of ₹${interestAmountPaid.toLocaleString("en-IN")}`,
     });
 
-    // 2. Extend Due Date by 1 month
+    // 2. Extend Due Date by period (7 days for weekly, 1 month for monthly)
     const currentDueDate = new Date(loan.dueDate);
-    const newDueDateObj = calculateDueDate(currentDueDate);
+    const newDueDateObj = calculateDueDate(currentDueDate, loan.interestType);
     const newDueDateStr = newDueDateObj.toISOString().split("T")[0]!;
 
     await loanRepository.updateDueDate(loanId, newDueDateObj);

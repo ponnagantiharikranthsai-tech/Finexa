@@ -15,6 +15,7 @@ export const loanStatusEnum = pgEnum("loan_status", [
 export const interestTypeEnum = pgEnum("interest_type", [
   "monthly",
   "daily",
+  "weekly",
 ]);
 
 export const penaltyTypeEnum = pgEnum("penalty_type", [
@@ -93,7 +94,7 @@ export const penaltyLedgerTable = pgTable("penalty_ledger", {
 export type Loan = typeof loansTable.$inferSelect;
 export type InsertLoan = typeof loansTable.$inferInsert;
 export type LoanStatus = "active" | "overdue" | "extended" | "closed";
-export type InterestType = "monthly" | "daily";
+export type InterestType = "monthly" | "daily" | "weekly";
 export type PenaltyType = "fixed" | "percentage";
 
 export type PenaltyLedger = typeof penaltyLedgerTable.$inferSelect;

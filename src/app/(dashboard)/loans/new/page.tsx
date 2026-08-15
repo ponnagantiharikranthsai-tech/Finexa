@@ -29,18 +29,18 @@ export default function NewLoanPage() {
   const [locationUrl, setLocationUrl]     = useState("");
 
   const [principal, setPrincipal]         = useState("10000");
-  const [interestType, setInterestType]   = useState<"monthly" | "daily">("monthly");
+  const [interestType, setInterestType]   = useState<"monthly" | "daily" | "weekly">("monthly");
   const [interestRate, setInterestRate]   = useState("20");
   const [dateGiven, setDateGiven]         = useState(new Date().toISOString().split("T")[0]!);
   const [dueDate, setDueDate]             = useState("");
 
-  // Sync auto-calculated due date when dateGiven changes
+  // Sync auto-calculated due date when dateGiven or interestType changes
   useEffect(() => {
     if (dateGiven) {
-      const computedDue = calculateDueDate(new Date(dateGiven));
+      const computedDue = calculateDueDate(new Date(dateGiven), interestType);
       setDueDate(computedDue.toISOString().split("T")[0]!);
     }
-  }, [dateGiven]);
+  }, [dateGiven, interestType]);
 
   const clearBorrowerSelection = () => {
     setBorrowerId(""); setBorrowerName(""); setMobile(""); setEmail("");
@@ -64,9 +64,11 @@ export default function NewLoanPage() {
   const numericPrincipal = Number(principal || 0);
   const numericRate      = Number(interestRate || 0);
   const monthlyInterest  = calculateMonthlyInterest(numericPrincipal, numericRate);
+  const weeklyInterest   = (numericPrincipal / 1000) * numericRate;
   const dailyInterest    = monthlyInterest / 30;
-  const formattedDueDate = dueDate || (dateGiven ? calculateDueDate(new Date(dateGiven)).toISOString().split("T")[0]! : "");
-  const totalDue         = numericPrincipal + monthlyInterest;
+  const computedInterest = interestType === "weekly" ? weeklyInterest : interestType === "daily" ? dailyInterest * 30 : monthlyInterest;
+  const formattedDueDate = dueDate || (dateGiven ? calculateDueDate(new Date(dateGiven), interestType).toISOString().split("T")[0]! : "");
+  const totalDue         = numericPrincipal + computedInterest;
 
   const inputClass = "h-11 rounded-xl border-border focus:ring-2 focus:ring-primary/20 focus:border-primary";
   const labelClass = "text-xs font-semibold uppercase tracking-wider text-muted-foreground";
@@ -183,7 +185,9 @@ export default function NewLoanPage() {
 
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="interestRate" className={labelClass}>Rate (₹ per ₹1k / month)*</Label>
+                  <Label htmlFor="interestRate" className={labelClass}>
+                    {interestType === "weekly" ? "Rate (₹ per ₹1k / week)*" : interestType === "daily" ? "Rate (₹ per ₹1k / day)*" : "Rate (₹ per ₹1k / month)*"}
+                  </Label>
                   <Input id="interestRate" name="interestRate" type="number" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} required className={inputClass} />
                 </div>
                 <div className="space-y-1.5">
@@ -192,6 +196,7 @@ export default function NewLoanPage() {
                     <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
                       <SelectItem value="daily">Daily</SelectItem>
                     </SelectContent>
                   </Select>
@@ -265,8 +270,12 @@ export default function NewLoanPage() {
             <div className="p-5 space-y-3 text-sm">
               {[
                 { label: "Principal",       value: `₹${numericPrincipal.toLocaleString("en-IN")}` },
-                { label: "Monthly Interest", value: `₹${monthlyInterest.toLocaleString("en-IN")}`, gold: true },
-                ...(interestType === "daily" ? [{ label: "Daily Interest", value: `₹${dailyInterest.toFixed(2)}` }] : []),
+                ...(interestType === "weekly"
+                  ? [{ label: "Weekly Interest", value: `₹${weeklyInterest.toLocaleString("en-IN")}`, gold: true }]
+                  : interestType === "daily"
+                  ? [{ label: "Daily Interest", value: `₹${dailyInterest.toFixed(2)}` }, { label: "Est. Monthly (30 days)", value: `₹${monthlyInterest.toLocaleString("en-IN")}`, gold: true }]
+                  : [{ label: "Monthly Interest", value: `₹${monthlyInterest.toLocaleString("en-IN")}`, gold: true }]
+                ),
                 { label: "Due Date",        value: formattedDueDate, gold: true },
               ].map(({ label, value, gold }) => (
                 <div key={label} className="flex justify-between border-b border-border pb-3">

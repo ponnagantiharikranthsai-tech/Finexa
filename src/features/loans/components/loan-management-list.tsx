@@ -294,11 +294,15 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     try {
       const given = new Date(dateGiven);
       const due = new Date(dueDate);
-      if (interestType === "daily") {
+      if (interestType === "weekly") {
+        const days = differenceInDays(due, given);
+        const weeks = Math.max(1, Math.round(days / 7));
+        return `${weeks} Week${weeks !== 1 ? "s" : ""}`;
+      } else if (interestType === "daily") {
         const days = differenceInDays(due, given);
         return `${days} Day${days !== 1 ? "s" : ""}`;
       } else {
-        const months = calculatePeriods(dateGiven, dueDate);
+        const months = calculatePeriods(dateGiven, dueDate, interestType);
         return `${months} Month${months !== 1 ? "s" : ""}`;
       }
     } catch {
@@ -307,9 +311,9 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   };
 
   const getInterestAmount = (loan: LoanManagementDetailResult) => {
-    const periods = calculatePeriods(loan.dateGiven, loan.dueDate);
-    const monthlyInt = calculateMonthlyInterest(Number(loan.principal), Number(loan.interestRate));
-    return periods * monthlyInt;
+    const periods = calculatePeriods(loan.dateGiven, loan.dueDate, loan.interestType);
+    const periodicInt = calculateMonthlyInterest(Number(loan.principal), Number(loan.interestRate));
+    return periods * periodicInt;
   };
 
   // ── Search & Filter & Sort logics ──────────────────────────────────────────

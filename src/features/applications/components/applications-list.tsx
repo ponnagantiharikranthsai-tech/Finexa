@@ -62,7 +62,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function calculateDurationText(startStr: string, dueStr: string, interestType: "monthly" | "daily"): string {
+function calculateDurationText(startStr: string, dueStr: string, interestType: "monthly" | "daily" | "weekly"): string {
   if (!startStr || !dueStr) return "";
   
   const parseDate = (dStr: string) => {
@@ -77,7 +77,10 @@ function calculateDurationText(startStr: string, dueStr: string, interestType: "
   
   const totalDays = Math.ceil((due.getTime() - start.getTime()) / (1000 * 3600 * 24));
   
-  if (interestType === "daily") {
+  if (interestType === "weekly") {
+    const totalWeeks = Math.max(1, Math.round(totalDays / 7));
+    return `${totalWeeks} ${totalWeeks === 1 ? "Week" : "Weeks"}`;
+  } else if (interestType === "daily") {
     return `${totalDays} ${totalDays === 1 ? "Day" : "Days"}`;
   } else {
     const totalMonths = Math.round(totalDays / 30.417);
@@ -102,33 +105,43 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
   // Link Generation Form States
   const [principal, setPrincipal] = useState("50000");
   const [interestRate, setInterestRate] = useState("20");
-  const [interestType, setInterestType] = useState<"monthly" | "daily">("monthly");
+  const [interestType, setInterestType] = useState<"monthly" | "daily" | "weekly">("monthly");
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]!);
   const [dueDate, setDueDate] = useState("");
   const [loanDuration, setLoanDuration] = useState("30 Days");
   const [expiryDays, setExpiryDays] = useState("7");
   const [notes, setNotes] = useState("");
 
-  // Live interest calculation (BR-1: ₹ per ₹1,000 / month)
+  // Live interest calculation (BR-1: ₹ per ₹1,000 / period)
   const numericPrincipal = Number(principal || 0);
   const numericRate = Number(interestRate || 0);
   const monthlyInterest = calculateMonthlyInterest(numericPrincipal, numericRate);
+  const weeklyInterest = (numericPrincipal / 1000) * numericRate;
   const dailyInterest = monthlyInterest / 30;
-  const computedInterestAmount = Math.max(0, Math.round(interestType === "daily" ? dailyInterest * 30 : monthlyInterest));
+  const computedInterestAmount = Math.max(
+    0,
+    Math.round(
+      interestType === "weekly"
+        ? weeklyInterest
+        : interestType === "daily"
+        ? dailyInterest * 30
+        : monthlyInterest
+    )
+  );
   const totalDueAtTerm = numericPrincipal + computedInterestAmount;
 
   // Result Link State
   const [generatedLinkData, setGeneratedLinkData] = useState<{ code: string; url: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Auto-calculate Due Date if Start Date changes
+  // Auto-calculate Due Date if Start Date or Interest Type changes
   useEffect(() => {
     if (startDate) {
       const start = new Date(startDate);
-      const computedDue = calculateDueDate(start);
+      const computedDue = calculateDueDate(start, interestType);
       setDueDate(computedDue.toISOString().split("T")[0]!);
     }
-  }, [startDate]);
+  }, [startDate, interestType]);
 
   // Auto-calculate Loan Duration when Start Date, Due Date, or Interest Type changes
   useEffect(() => {
@@ -472,6 +485,7 @@ Thank you for choosing **FINEXA – Smart Loan Management.**`;
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="monthly">Monthly Interest</SelectItem>
+                    <SelectItem value="weekly">Weekly Interest</SelectItem>
                     <SelectItem value="daily">Daily Interest</SelectItem>
                   </SelectContent>
                 </Select>
@@ -533,11 +547,11 @@ Thank you for choosing **FINEXA – Smart Loan Management.**`;
             <div className="p-3.5 rounded-xl bg-secondary/80 border border-border space-y-1.5 text-xs">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Rate Configuration:</span>
-                <span className="font-semibold text-foreground">₹{numericRate} per ₹1,000 / month</span>
+                <span className="font-semibold text-foreground">₹{numericRate} per ₹1,000 / {interestType === "weekly" ? "week" : interestType === "daily" ? "day" : "month"}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Monthly Interest:</span>
-                <span className="font-semibold text-primary">₹{monthlyInterest.toLocaleString("en-IN")}</span>
+                <span className="text-muted-foreground">{interestType === "weekly" ? "Weekly Interest:" : interestType === "daily" ? "Daily Interest:" : "Monthly Interest:"}</span>
+                <span className="font-semibold text-primary">₹{computedInterestAmount.toLocaleString("en-IN")}</span>
               </div>
               <div className="flex justify-between font-bold pt-1.5 border-t border-border/50 text-foreground">
                 <span>Total Amount at Term:</span>

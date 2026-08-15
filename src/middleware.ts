@@ -48,32 +48,25 @@ export async function middleware(request: NextRequest) {
   );
 
   const isPublicPath = pathname === "/" || pathname === "/login" || pathname.startsWith("/apply/");
-  const allCookies = request.cookies.getAll();
-  const hasAuthCookie = allCookies.some((c) => c.name.includes("auth-token") || c.name.startsWith("sb-") || c.name === "finexa_session");
-
-  if (!hasAuthCookie && !isPublicPath) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
 
   let user = null;
-  if (hasAuthCookie) {
-    try {
-      const { data: { user: supabaseUser } } = await supabase.auth.getUser();
-      user = supabaseUser || null;
-    } catch (error) {
-      user = null;
-    }
+  try {
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+    user = supabaseUser || null;
+  } catch (error) {
+    user = null;
   }
 
-  const isSessionValid = Boolean(user) || request.cookies.has("finexa_session") || hasAuthCookie;
+  const hasFinexaSession = request.cookies.has("finexa_session") && request.cookies.get("finexa_session")?.value === "true";
+  const isSessionValid = Boolean(user) || hasFinexaSession;
 
-  // 2. Unauthenticated user attempting to access a protected page -> Redirect to /login
+  // 2. Unauthenticated user attempting to access ANY protected page -> Redirect to /login
   if (!isSessionValid && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     const redirectResponse = NextResponse.redirect(url);
+    redirectResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+    redirectResponse.headers.set("Pragma", "no-cache");
     supabaseResponse.cookies.getAll().forEach((c) => redirectResponse.cookies.set(c.name, c.value, c));
     return redirectResponse;
   }
@@ -83,27 +76,27 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/home";
     const redirectResponse = NextResponse.redirect(url);
+    redirectResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
     supabaseResponse.cookies.getAll().forEach((c) => redirectResponse.cookies.set(c.name, c.value, c));
     return redirectResponse;
   }
 
-  // 4. If user is authenticated, forward x-user-id header while preserving cookies
+  // 4. Forward authenticated request with security and zero-cache headers
+  const requestHeaders = new Headers(request.headers);
   if (user) {
-    const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-user-id", user.id);
-    const finalResponse = NextResponse.next({
-      request: {
-        headers: requestHeaders,
-      },
-    });
-    finalResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    finalResponse.headers.set("Pragma", "no-cache");
-    finalResponse.headers.set("X-Content-Type-Options", "nosniff");
-    finalResponse.headers.set("X-Frame-Options", "DENY");
-    return finalResponse;
   }
 
-  return supabaseResponse;
+  const finalResponse = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
+  finalResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+  finalResponse.headers.set("Pragma", "no-cache");
+  finalResponse.headers.set("X-Content-Type-Options", "nosniff");
+  finalResponse.headers.set("X-Frame-Options", "DENY");
+  return finalResponse;
 }
 
 export const config = {

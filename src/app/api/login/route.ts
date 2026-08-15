@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { loginSchema } from "@/features/auth/schemas/login.schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { auditLog } from "@/lib/audit-log";
@@ -32,15 +33,31 @@ export async function POST(req: NextRequest) {
     // Fire-and-forget audit log
     auditLog("admin_login", "admin", undefined, { email: parsed.data.email });
 
+    const cookieStore = await cookies();
+    cookieStore.set("finexa_session", "true", {
+      path: "/",
+      sameSite: "lax",
+      secure: false,
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    });
+    cookieStore.set("finexa_user_email", parsed.data.email, {
+      path: "/",
+      sameSite: "lax",
+      secure: false,
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
     const res = NextResponse.json({ success: true, data: null });
     res.cookies.set("finexa_session", "true", {
       path: "/",
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      secure: false,
+      maxAge: 60 * 60 * 24 * 7,
     });
     res.cookies.set("finexa_user_email", parsed.data.email, {
       path: "/",
       sameSite: "lax",
+      secure: false,
       maxAge: 60 * 60 * 24 * 7,
     });
     return res;

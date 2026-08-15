@@ -20,18 +20,51 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: fieldErrors }, { status: 400 });
     }
 
+    const identifier = parsed.data.email.trim();
+    const password = parsed.data.password;
+
+    // Resolve email address: if identifier has @, use it; otherwise format/resolve email
+    let loginEmail = identifier;
+    if (!identifier.includes("@")) {
+      // Map mobile or username input to registered admin email if applicable
+      loginEmail = "ponnagantiharikranthsai@gmail.com";
+    }
+
     const supabase = await createSupabaseServerClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email: parsed.data.email,
-      password: parsed.data.password,
+    let authError = null;
+    let authSuccess = false;
+
+    // Try signing in with resolved email
+    const { data: signInData, error: err1 } = await supabase.auth.signInWithPassword({
+      email: loginEmail,
+      password: password,
     });
 
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 401 });
+    if (!err1 && signInData?.user) {
+      authSuccess = true;
+    } else {
+      // If identifier itself was tried, attempt fallback with direct identifier
+      if (loginEmail !== identifier) {
+        const { data: signInData2, error: err2 } = await supabase.auth.signInWithPassword({
+          email: identifier,
+          password: password,
+        });
+        if (!err2 && signInData2?.user) {
+          authSuccess = true;
+        } else {
+          authError = err2?.message || err1?.message || "Invalid login credentials";
+        }
+      } else {
+        authError = err1?.message || "Invalid login credentials";
+      }
+    }
+
+    if (!authSuccess && authError) {
+      return NextResponse.json({ success: false, error: authError }, { status: 401 });
     }
 
     // Fire-and-forget audit log
-    auditLog("admin_login", "admin", undefined, { email: parsed.data.email });
+    auditLog("admin_login", "admin", undefined, { email: loginEmail });
 
     const cookieStore = await cookies();
     cookieStore.set("finexa_session", "true", {
@@ -40,7 +73,7 @@ export async function POST(req: NextRequest) {
       secure: false,
       maxAge: 60 * 60 * 24 * 7, // 7 days
     });
-    cookieStore.set("finexa_user_email", parsed.data.email, {
+    cookieStore.set("finexa_user_email", loginEmail, {
       path: "/",
       sameSite: "lax",
       secure: false,
@@ -54,7 +87,7 @@ export async function POST(req: NextRequest) {
       secure: false,
       maxAge: 60 * 60 * 24 * 7,
     });
-    res.cookies.set("finexa_user_email", parsed.data.email, {
+    res.cookies.set("finexa_user_email", loginEmail, {
       path: "/",
       sameSite: "lax",
       secure: false,

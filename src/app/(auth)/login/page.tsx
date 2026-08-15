@@ -31,7 +31,7 @@ export default function LoginPage() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
       const data = await res.json();
       if (data.success) {
@@ -40,13 +40,21 @@ export default function LoginPage() {
         toast.success("Welcome back to FINEXA!");
         setTimeout(() => {
           window.location.href = "/home";
-        }, 800);
+        }, 600);
       } else {
-        setError(data.error);
+        const errorMsg = typeof data.error === "string" 
+          ? data.error 
+          : (typeof data.error === "object" && data.error !== null)
+            ? Object.values(data.error).flat().join(", ")
+            : "Invalid email/mobile or password.";
+        setError(errorMsg);
+        toast.error(errorMsg);
         setIsPending(false);
       }
     } catch (err: any) {
-      setError(err.message || "Failed to log in");
+      const msg = err.message || "Failed to log in. Please check your connection.";
+      setError(msg);
+      toast.error(msg);
       setIsPending(false);
     }
   };
@@ -154,10 +162,10 @@ export default function LoginPage() {
 
             <form onSubmit={handleSubmit} method="POST" className="space-y-5 text-left mt-6">
               {/* Global error */}
-              {error && typeof error === "string" && (
+              {error && (
                 <div className="rounded-xl bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive flex items-start gap-2">
                   <span className="mt-0.5 shrink-0">⚠</span>
-                  {error}
+                  {typeof error === "string" ? error : JSON.stringify(error)}
                 </div>
               )}
 

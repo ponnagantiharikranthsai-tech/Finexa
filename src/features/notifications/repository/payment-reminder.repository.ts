@@ -390,7 +390,7 @@ export const paymentReminderRepository = {
         title = "Payment Overdue";
         message = `${borrowerName}'s payment is overdue by ${overdueDays} ${overdueDays === 1 ? "day" : "days"}.`;
         pushTitle = "FINEXA — Payment Overdue";
-        pushBody = `${borrowerName}'s payment is overdue by ${overdueDays} ${overdueDays === 1 ? "day" : "days"}. Current payable amount: ₹${payableFormatted}.`;
+        pushBody = `${borrowerName}'s payment is overdue by ${overdueDays} ${overdueDays === 1 ? "day" : "days"}. Outstanding amount: ₹${payableFormatted}.`;
         dedupKey = `notif_${loan.loanId}_overdue_${dueDateStr}_${todayStr}`;
       } else if (diffDays === 0) {
         // DUE TODAY
@@ -401,7 +401,7 @@ export const paymentReminderRepository = {
         title = "Payment Due Today";
         message = `${borrowerName}'s loan payment is due today.`;
         pushTitle = "FINEXA — Payment Due Today";
-        pushBody = `${borrowerName}'s payment of ₹${payableFormatted} is due today.`;
+        pushBody = `${borrowerName}'s loan payment is due today, ${verboseDueDate}. Amount payable: ₹${payableFormatted}.`;
         dedupKey = `notif_${loan.loanId}_due_today_${dueDateStr}`;
       } else if (diffDays === 3) {
         // 3 DAYS BEFORE DUE DATE
@@ -411,8 +411,8 @@ export const paymentReminderRepository = {
         priority = "amber";
         title = "Payment Due in 3 Days";
         message = `${borrowerName} has a loan payment due on ${dueDateStr}. 3 days remaining.`;
-        pushTitle = "FINEXA — Payment Reminder";
-        pushBody = `${borrowerName}'s loan payment of ₹${payableFormatted} is due on ${verboseDueDate}. 3 days remaining.`;
+        pushTitle = "FINEXA — Payment Due in 3 Days";
+        pushBody = `${borrowerName}'s loan payment is due on ${verboseDueDate}. Amount payable: ₹${payableFormatted}.`;
         dedupKey = `notif_${loan.loanId}_3d_${dueDateStr}`;
       } else if (diffDays === 10) {
         // 10 DAYS BEFORE DUE DATE
@@ -422,8 +422,8 @@ export const paymentReminderRepository = {
         priority = "blue";
         title = "Payment Due in 10 Days";
         message = `${borrowerName} has a loan payment due on ${dueDateStr}. 10 days remaining.`;
-        pushTitle = "FINEXA — Payment Reminder";
-        pushBody = `${borrowerName}'s loan payment of ₹${payableFormatted} is due on ${verboseDueDate}. 10 days remaining.`;
+        pushTitle = "FINEXA — Payment Reminder — 10 Days";
+        pushBody = `${borrowerName}'s loan payment is due on ${verboseDueDate}. Please arrange the payment in advance.`;
         dedupKey = `notif_${loan.loanId}_10d_${dueDateStr}`;
       }
 
@@ -462,7 +462,7 @@ export const paymentReminderRepository = {
           body: pushBody,
           icon: "/logo-icon.png",
           badge: "/logo-icon.png",
-          url: `/loans/${loan.loanId}`,
+          url: `/notifications?highlight=${dedupKey}`,
           loanId: loan.loanId,
           tag: dedupKey,
         }).catch((err) => console.error("Web Push trigger error:", err));

@@ -1,51 +1,37 @@
 import React from "react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Landmark } from "lucide-react";
 
 export default function CapitalManagementLoading() {
   return (
-    <div className="space-y-6 animate-pulse p-1">
-      {/* Header Skeleton */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-            <Landmark className="h-5 w-5 text-primary/40" />
-          </div>
-          <div className="space-y-1.5">
-            <Skeleton className="h-6 w-48 rounded-lg" />
-            <Skeleton className="h-3.5 w-72 rounded-md" />
-          </div>
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto animate-pulse">
+      {/* Header skeleton */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-border/50 pb-5">
+        <div className="space-y-2">
+          <div className="h-8 w-60 bg-muted/60 rounded-xl" />
+          <div className="h-4 w-80 bg-muted/40 rounded-lg" />
         </div>
-        <Skeleton className="h-10 w-36 rounded-xl" />
+        <div className="h-11 w-40 bg-muted/60 rounded-xl" />
       </div>
 
-      {/* Capital Summary Cards Skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="p-5 rounded-2xl border border-border/40 bg-card/50 space-y-3">
-            <div className="flex justify-between items-center">
-              <Skeleton className="h-3.5 w-28 rounded" />
-              <Skeleton className="h-9 w-9 rounded-xl" />
-            </div>
-            <Skeleton className="h-8 w-36 rounded-lg" />
-            <Skeleton className="h-3 w-40 rounded" />
+      {/* Capital Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="p-5 rounded-2xl bg-card border border-border/60 space-y-3">
+            <div className="h-3.5 w-28 bg-muted/60 rounded" />
+            <div className="h-7 w-32 bg-muted/80 rounded-lg" />
           </div>
         ))}
       </div>
 
-      {/* Funders Grid Skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="p-5 rounded-2xl border border-border/50 bg-card/60 space-y-4">
+      {/* Funder Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="p-5 rounded-2xl bg-card border border-border/60 space-y-4">
             <div className="flex justify-between items-center">
-              <Skeleton className="h-5 w-32 rounded" />
-              <Skeleton className="h-6 w-16 rounded-full" />
+              <div className="h-5 w-32 bg-muted/70 rounded-lg" />
+              <div className="h-6 w-16 bg-muted/50 rounded-full" />
             </div>
-            <div className="space-y-2 border-t border-border/30 pt-3">
-              <Skeleton className="h-4 w-full rounded" />
-              <Skeleton className="h-4 w-3/4 rounded" />
-            </div>
-            <Skeleton className="h-9 w-full rounded-xl" />
+            <div className="h-12 bg-muted/30 rounded-xl border border-border/40" />
+            <div className="h-9 w-full bg-muted/50 rounded-xl" />
           </div>
         ))}
       </div>

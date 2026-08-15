@@ -1,4 +1,3 @@
-import { jsPDF } from "jspdf";
 import { format } from "date-fns";
 
 export type CurrentStatementPayload = {
@@ -53,7 +52,8 @@ export type CurrentStatementPayload = {
   notes?: string;
 };
 
-export function generateCurrentStatementPdf(data: CurrentStatementPayload): void {
+export async function generateCurrentStatementPdf(data: CurrentStatementPayload): Promise<void> {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",

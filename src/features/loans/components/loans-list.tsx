@@ -210,7 +210,7 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
       const paidAmt = Number(paymentAmount);
 
       try {
-        generatePaymentCompletedPdf(data);
+        await generatePaymentCompletedPdf(data);
         toast.success(`Payment of ₹${paidAmt.toLocaleString("en-IN")} recorded! Receipt downloaded.`, {
           action: {
             label: "📄 Download PDF",
@@ -240,7 +240,7 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
       }
       const data = res.data;
       try {
-        generateLoanExtensionPdf(data);
+        await generateLoanExtensionPdf(data);
         toast.success(`Pay & Extend processed! Next cycle due: ${data.newDueDate}`, {
           action: {
             label: "📄 Download PDF",

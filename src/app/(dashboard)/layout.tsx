@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DataCacheProvider } from "@/components/providers/data-cache-provider";
 import {
   CreditCard,
   Users,
@@ -259,9 +260,11 @@ export default function DashboardLayout({
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6">
-          <div key={pathname} className="mx-auto max-w-5xl fx-slide-up page-transition">
-            {children}
-          </div>
+          <DataCacheProvider>
+            <div key={pathname} className="mx-auto max-w-5xl fx-slide-up page-transition">
+              {children}
+            </div>
+          </DataCacheProvider>
         </main>
       </div>
 

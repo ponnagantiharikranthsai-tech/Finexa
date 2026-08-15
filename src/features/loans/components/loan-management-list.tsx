@@ -551,7 +551,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
       // Automatic PDF Generation & Success Toast with Retry Button
       try {
-        generatePaymentCompletedPdf(data);
+        await generatePaymentCompletedPdf(data);
         toast.success(`Payment of ₹${paidAmt.toLocaleString("en-IN")} recorded! Receipt downloaded.`, {
           action: {
             label: "📄 Download PDF",
@@ -590,7 +590,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
       // Automatic PDF Generation & Retry Toast Handling
       try {
-        generateLoanExtensionPdf(data);
+        await generateLoanExtensionPdf(data);
         toast.success(`Loan extension completed successfully! Next cycle due: ${data.newDueDate}`, {
           action: {
             label: "📄 Download PDF",

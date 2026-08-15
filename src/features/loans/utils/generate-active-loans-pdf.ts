@@ -1,4 +1,3 @@
-import { jsPDF } from "jspdf";
 import type { LoanManagementDetailResult } from "../actions/get-loan-management-data.action";
 import { calculatePeriods, calculateMonthlyInterest } from "@/domain/interest-calculator";
 import { calculateAccruedPenalty } from "@/domain/penalty-calculator";
@@ -34,10 +33,10 @@ function getDurationText(dateGiven: string, dueDate: string, interestType: strin
   }
 }
 
-export function generateActiveLoansPdf(
+export async function generateActiveLoansPdf(
   allLoans: LoanManagementDetailResult[],
   generatedByEmail?: string
-): void {
+): Promise<void> {
   const todayStr = new Date().toISOString().split("T")[0]!;
   const today = new Date(todayStr);
 
@@ -58,6 +57,7 @@ export function generateActiveLoansPdf(
   const timestampStr = format(new Date(), "dd MMMM yyyy, HH:mm:ss");
 
   // 2. Initialize jsPDF Document (A4 portrait: 210mm x 297mm)
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",

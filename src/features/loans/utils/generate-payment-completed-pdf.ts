@@ -1,4 +1,3 @@
-import { jsPDF } from "jspdf";
 import { format } from "date-fns";
 
 export type PaymentCompletedResultPayload = {
@@ -219,7 +218,8 @@ export function createBlueCircularStampImage(paymentDateStr: string): string {
   return canvas.toDataURL("image/png");
 }
 
-export function generatePaymentCompletedPdf(data: PaymentCompletedResultPayload): void {
+export async function generatePaymentCompletedPdf(data: PaymentCompletedResultPayload): Promise<void> {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",

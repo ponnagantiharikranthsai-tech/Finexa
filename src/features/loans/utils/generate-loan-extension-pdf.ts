@@ -1,8 +1,8 @@
-import { jsPDF } from "jspdf";
 import { format } from "date-fns";
 import type { PayAndExtendResultPayload } from "../actions/pay-and-extend.action";
 
-export function generateLoanExtensionPdf(data: PayAndExtendResultPayload): void {
+export async function generateLoanExtensionPdf(data: PayAndExtendResultPayload): Promise<void> {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",

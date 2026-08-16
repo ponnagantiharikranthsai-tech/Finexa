@@ -70,18 +70,24 @@ export async function submitLoanApplicationAction(
     // Trigger Web Push notification to admin devices immediately after successful database update
     const dedupKey = `notif_APP_${app.applicationId}_submitted`;
     const principalFormatted = Number(app.principal).toLocaleString("en-IN");
+    const duration = app.loanDuration || "Standard";
+    const interestTypeStr = app.interestType ? `${app.interestType.toUpperCase()} Interest` : "Monthly";
     
     console.log(`[APPLICATION SUBMISSION SUCCESS] Application ${app.applicationId} saved for ${name}.`);
-    console.log(`[INSTANT WEB PUSH] Dispatching Web Push alert to registered admin devices...`);
+    console.log(`[INSTANT WEB PUSH] Dispatching Executive Style Web Push alert to registered admin devices...`);
 
     try {
       const pushSuccess = await sendWebPushToAllSubscriptions(dedupKey, {
-        title: "FINEXA — New Loan Application",
-        body: `New loan application received from ${name} for ₹${principalFormatted}.`,
+        title: "New Loan Application",
+        body: `${name} applied for ₹${principalFormatted}\nRepayment: ${interestTypeStr} • ${duration}`,
         icon: "/icon-192.png",
         badge: "/badge.png",
-        url: "/applications",
+        url: `/applications`,
         tag: dedupKey,
+        actions: [
+          { action: "review", title: "Review Application" },
+          { action: "dismiss", title: "Dismiss" },
+        ],
       });
       console.log(`[INSTANT WEB PUSH RESULT] Web Push status for ${name}: ${pushSuccess ? "DELIVERED" : "FAILED / NO SUBSCRIPTIONS"}`);
     } catch (pushErr: any) {

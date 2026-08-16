@@ -52,6 +52,7 @@ export type WebPushPayload = {
   url?: string;
   loanId?: string;
   tag?: string;
+  actions?: { action: string; title: string }[];
 };
 
 export async function sendTestWebPushNotification(): Promise<{ success: boolean; count: number; error?: string }> {

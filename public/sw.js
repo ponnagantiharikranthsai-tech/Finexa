@@ -132,8 +132,8 @@ self.addEventListener("push", function (event) {
         url: payload.url || "/notifications",
         loanId: payload.loanId || null,
       },
-      actions: [
-        { action: "open_loan", title: "View Details" },
+      actions: payload.actions || [
+        { action: "review", title: "Review Application" },
         { action: "dismiss", title: "Dismiss" },
       ],
       vibrate: [200, 100, 200],

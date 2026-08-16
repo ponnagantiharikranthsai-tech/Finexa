@@ -1,5 +1,5 @@
 // FINEXA Production-Safe Progressive Web App (PWA) Service Worker
-const CACHE_NAME = "finexa-pwa-v1.0.0";
+const CACHE_NAME = "finexa-pwa-v1.0.1";
 const STATIC_ASSETS = [
   "/",
   "/login",
@@ -111,7 +111,7 @@ self.addEventListener("fetch", function (event) {
   }
 });
 
-// Native Android Web Push Notification Event (Clean System Notification Layout)
+// Native Android Web Push Notification Event (Official FINEXA Brand Avatar & Monochrome Badge)
 self.addEventListener("push", function (event) {
   if (!event.data) return;
 
@@ -119,11 +119,12 @@ self.addEventListener("push", function (event) {
     const payload = event.data.json();
     const title = payload.title || "FINEXA — Payment Reminder";
 
-    // Clean Native System Notification Options
-    // NOTE: 'icon' (setLargeIcon) and 'image' (setBigPicture) are intentionally omitted
-    // to prevent Android from forcing a right-side thumbnail box, allowing full-width text card layout.
+    // Official FINEXA Notification Options
+    // 'icon' points to the official gold FINEXA logo (/icon-192.png) to replace grey 'F' fallback
+    // 'badge' points to the monochrome white alpha badge (/badge.png) for top-left header tinting
     const options = {
       body: payload.body || "You have a new loan payment notification.",
+      icon: payload.icon || "/icon-192.png",
       badge: payload.badge || "/badge.png",
       tag: payload.tag || `finexa-${Date.now()}`,
       renotify: true,

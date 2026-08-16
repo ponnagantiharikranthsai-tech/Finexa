@@ -11,6 +11,7 @@ const STATIC_ASSETS = [
   "/icon-192-maskable.png",
   "/icon-512-maskable.png",
   "/apple-touch-icon.png",
+  "/badge.png",
 ];
 
 // Install Event — Cache core static shell assets and skip waiting
@@ -110,16 +111,19 @@ self.addEventListener("fetch", function (event) {
   }
 });
 
-// Real Web Push Notification Event (Android System Notification)
+// Native Android Web Push Notification Event (Clean System Notification Layout)
 self.addEventListener("push", function (event) {
   if (!event.data) return;
 
   try {
     const payload = event.data.json();
     const title = payload.title || "FINEXA — Payment Reminder";
+
+    // Clean Native System Notification Options
+    // NOTE: 'icon' (setLargeIcon) and 'image' (setBigPicture) are intentionally omitted
+    // to prevent Android from forcing a right-side thumbnail box, allowing full-width text card layout.
     const options = {
       body: payload.body || "You have a new loan payment notification.",
-      icon: payload.icon || "/icon-192.png",
       badge: payload.badge || "/badge.png",
       tag: payload.tag || `finexa-${Date.now()}`,
       renotify: true,

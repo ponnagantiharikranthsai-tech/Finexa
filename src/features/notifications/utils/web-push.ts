@@ -142,7 +142,6 @@ export async function sendWebPushToAllSubscriptions(
       .onConflictDoNothing();
 
     const pushPayloadString = JSON.stringify({
-      icon: "/icon-192.png",
       badge: "/badge.png",
       ...payload,
     });

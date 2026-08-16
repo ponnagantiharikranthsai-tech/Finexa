@@ -67,17 +67,26 @@ export async function submitLoanApplicationAction(
       customerPanEncrypted: panEncrypted,
     });
 
-    // Trigger Web Push notification to admin devices
+    // Trigger Web Push notification to admin devices immediately after successful database update
     const dedupKey = `notif_APP_${app.applicationId}_submitted`;
     const principalFormatted = Number(app.principal).toLocaleString("en-IN");
-    sendWebPushToAllSubscriptions(dedupKey, {
-      title: "🔔 New Loan Application Received",
-      body: `${name} has submitted a new loan application for ₹${principalFormatted}.`,
-      icon: "/logo-icon.png",
-      badge: "/logo-icon.png",
-      url: `/applications`,
-      tag: dedupKey,
-    }).catch((err) => console.error("Web Push trigger error:", err));
+    
+    console.log(`[APPLICATION SUBMISSION SUCCESS] Application ${app.applicationId} saved for ${name}.`);
+    console.log(`[INSTANT WEB PUSH] Dispatching Web Push alert to registered admin devices...`);
+
+    try {
+      const pushSuccess = await sendWebPushToAllSubscriptions(dedupKey, {
+        title: "FINEXA — New Loan Application",
+        body: `New loan application received from ${name} for ₹${principalFormatted}.`,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        url: "/applications",
+        tag: dedupKey,
+      });
+      console.log(`[INSTANT WEB PUSH RESULT] Web Push status for ${name}: ${pushSuccess ? "DELIVERED" : "FAILED / NO SUBSCRIPTIONS"}`);
+    } catch (pushErr: any) {
+      console.error("[INSTANT WEB PUSH ERROR] Failed to send Web Push alert:", pushErr?.message || pushErr);
+    }
 
     // Notify the admin by generating an audit log
     await auditLog("application_submitted", "loan_application", app.applicationId, {

@@ -79,7 +79,7 @@ export async function submitLoanApplicationAction(
         title: "FINEXA — New Loan Application",
         body: `New loan application received from ${name} for ₹${principalFormatted}.`,
         icon: "/icon-192.png",
-        badge: "/icon-192.png",
+        badge: "/badge.png",
         url: "/applications",
         tag: dedupKey,
       });

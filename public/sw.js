@@ -10,6 +10,7 @@ const STATIC_ASSETS = [
   "/icon-512.png",
   "/icon-192-maskable.png",
   "/icon-512-maskable.png",
+  "/apple-touch-icon.png",
 ];
 
 // Install Event — Cache core static shell assets and skip waiting
@@ -118,8 +119,8 @@ self.addEventListener("push", function (event) {
     const title = payload.title || "FINEXA — Payment Reminder";
     const options = {
       body: payload.body || "You have a new loan payment notification.",
-      icon: payload.icon || "/logo-icon.png",
-      badge: payload.badge || "/logo-icon.png",
+      icon: payload.icon || "/icon-192.png",
+      badge: payload.badge || "/icon-192.png",
       tag: payload.tag || `finexa-${Date.now()}`,
       renotify: true,
       data: {

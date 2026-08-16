@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Smart Loan Management System for secure loan, borrower, payment and financial record management.",
     start_url: "/home",
     display: "standalone",
-    background_color: "#0B0F19",
-    theme_color: "#FFD54A",
+    background_color: "#FFFFFF",
+    theme_color: "#FFFFFF",
     orientation: "portrait",
     scope: "/",
     icons: [

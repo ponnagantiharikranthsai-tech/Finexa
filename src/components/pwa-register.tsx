@@ -94,9 +94,9 @@ export function PwaRegister() {
     <div className="fixed bottom-20 md:bottom-6 left-4 right-4 md:left-auto md:right-6 z-50 max-w-sm rounded-2xl bg-[#17181D]/95 border border-[#FFD54A]/30 p-4 shadow-2xl backdrop-blur-xl animate-in slide-in-from-bottom duration-300">
       <div className="flex items-center gap-3">
         <img
-          src="/logo-icon.png"
-          alt="Finexa App"
-          className="h-10 w-10 object-contain rounded-xl bg-[#0B0F19] p-1.5 border border-[#FFD54A]/30 shrink-0"
+          src="/icon-192.png"
+          alt="Finexa App Icon"
+          className="h-10 w-10 object-contain rounded-xl bg-white border border-border/50 shrink-0 shadow-sm"
         />
         <div className="flex-1 min-w-0 text-left">
           <p className="text-xs font-black uppercase tracking-wider text-white">Install FINEXA App</p>

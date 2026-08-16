@@ -6,7 +6,7 @@ import { auditLog } from "@/lib/audit-log";
 import type { ActionResult } from "@/types/api.types";
 import { db } from "@/db/client";
 import { adminNotificationsTable } from "@/db/schema";
-import { sendWebPushToAllSubscriptions } from "@/features/notifications/utils/web-push";
+import { sendWebPushToAllSubscriptions, toUnicodeBold } from "@/features/notifications/utils/web-push";
 
 export async function submitLoanApplicationAction(
   _prevState: ActionResult<{ code: string }> | null,
@@ -74,11 +74,11 @@ export async function submitLoanApplicationAction(
     const interestTypeStr = app.interestType ? `${app.interestType.toUpperCase()} Interest` : "Monthly";
     
     console.log(`[APPLICATION SUBMISSION SUCCESS] Application ${app.applicationId} saved for ${name}.`);
-    console.log(`[INSTANT WEB PUSH] Dispatching Executive Style Web Push alert to registered admin devices...`);
+    console.log(`[INSTANT WEB PUSH] Dispatching High-Prominence Unicode Bold Push alert to registered admin devices...`);
 
     try {
       const pushSuccess = await sendWebPushToAllSubscriptions(dedupKey, {
-        title: "New Loan Application",
+        title: `🔔 ${toUnicodeBold("NEW LOAN APPLICATION")}`,
         body: `${name} applied for ₹${principalFormatted}\nRepayment: ${interestTypeStr} • ${duration}`,
         icon: "/icon-192.png",
         badge: "/badge.png",

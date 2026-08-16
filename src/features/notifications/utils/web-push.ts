@@ -3,6 +3,19 @@ import { db } from "@/db/client";
 import { pushSubscriptionsTable, pushedNotificationKeysTable } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
+export function toUnicodeBold(str: string): string {
+  return str
+    .split("")
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      if (code >= 65 && code <= 90) return String.fromCodePoint(0x1d5d4 + (code - 65));
+      if (code >= 97 && code <= 122) return String.fromCodePoint(0x1d5ee + (code - 97));
+      if (code >= 48 && code <= 57) return String.fromCodePoint(0x1d7ce + (code - 48));
+      return char;
+    })
+    .join("");
+}
+
 export function getVapidPublicKey(): string {
   return (
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||

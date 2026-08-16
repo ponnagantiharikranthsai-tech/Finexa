@@ -42,32 +42,34 @@ const filterOptions: { value: FilterType; label: string }[] = [
 ];
 
 function AnimatedCounter({ value, isCurrency = false }: { value: number; isCurrency?: boolean }) {
-  const [count, setCount] = React.useState(0);
+  const [count, setCount] = React.useState(value);
 
   React.useEffect(() => {
-    let start = 0;
     const end = Math.floor(value);
     if (end === 0) {
       setCount(0);
       return;
     }
-    
-    const duration = 800;
-    const stepTime = 16;
-    const steps = duration / stepTime;
-    const increment = end / steps;
 
-    const timer = setInterval(() => {
-      start += increment;
-      if (start >= end) {
-        clearInterval(timer);
-        setCount(end);
+    let startTimestamp: number | null = null;
+    const duration = 400; // Fast 400ms smooth count-up
+    let animationFrameId: number;
+
+    const step = (timestamp: number) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+      const current = Math.floor(progress * end);
+      setCount(current);
+
+      if (progress < 1) {
+        animationFrameId = requestAnimationFrame(step);
       } else {
-        setCount(Math.floor(start));
+        setCount(end);
       }
-    }, stepTime);
+    };
 
-    return () => clearInterval(timer);
+    animationFrameId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(animationFrameId);
   }, [value]);
 
   return (

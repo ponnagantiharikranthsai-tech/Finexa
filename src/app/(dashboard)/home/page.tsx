@@ -11,18 +11,22 @@ import {
 import { FinexaCard3D, FinexaStaggerContainer, FinexaStaggerItem } from "@/components/motion/finexa-motion";
 
 export default function HomePage() {
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const logoRef = React.useRef<HTMLDivElement | null>(null);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!logoRef.current) return;
     const { clientX, clientY } = e;
     const { innerWidth, innerHeight } = window;
     const x = ((clientX / innerWidth) - 0.5) * 16;
     const y = ((clientY / innerHeight) - 0.5) * -16;
-    setTilt({ x, y });
+    logoRef.current.style.transform = `rotateX(${y}deg) rotateY(${x}deg) translateZ(50px)`;
+    logoRef.current.style.transition = "none";
   };
 
   const handleMouseLeave = () => {
-    setTilt({ x: 0, y: 0 });
+    if (!logoRef.current) return;
+    logoRef.current.style.transform = "rotateX(0deg) rotateY(0deg) translateZ(50px)";
+    logoRef.current.style.transition = "transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)";
   };
 
   const navCards = [
@@ -101,10 +105,7 @@ export default function HomePage() {
         style={{ perspective: "1000px" }}
       >
         <div
-          style={{
-            transform: `rotateX(${tilt.y}deg) rotateY(${tilt.x}deg) translateZ(50px)`,
-            transition: tilt.x === 0 && tilt.y === 0 ? "transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)" : "none"
-          }}
+          ref={logoRef}
           className="floating-logo-img-large mb-6 w-[280px] sm:w-[480px] px-6"
         >
           <img 

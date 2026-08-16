@@ -308,8 +308,24 @@ export const paymentReminderRepository = {
     await ensureReminderTablesExist();
   },
 
+  _notificationsCache: null as { data: any[]; timestamp: number; key: string } | null,
+
+  invalidateCache() {
+    this._notificationsCache = null;
+  },
+
   async getAdminNotifications(overrideTodayStr?: string) {
     await ensureReminderTablesExist();
+
+    const cacheKey = overrideTodayStr || "today";
+    const now = Date.now();
+    if (
+      this._notificationsCache &&
+      this._notificationsCache.key === cacheKey &&
+      now - this._notificationsCache.timestamp < 15000
+    ) {
+      return this._notificationsCache.data;
+    }
 
     // 1. Fetch completed notification dedup keys from database
     const completedRows = await db
@@ -518,10 +534,17 @@ export const paymentReminderRepository = {
       return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
     });
 
+    this._notificationsCache = {
+      data: dynamicNotifications,
+      timestamp: Date.now(),
+      key: cacheKey,
+    };
+
     return dynamicNotifications;
   },
 
   async markNotificationCompleted(dedupKey: string) {
+    this.invalidateCache();
     await ensureReminderTablesExist();
     if (!dedupKey) return;
 

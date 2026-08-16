@@ -93,180 +93,179 @@ export default function DashboardLayout({
   }, []);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground fx-mesh-bg">
+    <DataCacheProvider>
+      <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground fx-mesh-bg">
 
-      {/* ─── SIDEBAR — DESKTOP (≥ 1024px) ───────────────────────────────── */}
-      <aside className="hidden lg:flex flex-col w-60 fx-glass-sidebar shrink-0 relative z-10">
+        {/* ─── SIDEBAR — DESKTOP (≥ 1024px) ───────────────────────────────── */}
+        <aside className="hidden lg:flex flex-col w-60 fx-glass-sidebar shrink-0 relative z-10">
 
-        {/* Brand */}
-        <Link
-          href="/home"
-          className="h-16 flex items-center gap-3 px-5 border-b border-border/40 shrink-0 hover:opacity-90 transition-opacity"
-        >
-          <img
-            src="/logo-icon.png"
-            alt="Finexa"
-            className="h-8 w-8 object-contain filter drop-shadow-[0_0_10px_rgba(212,175,55,0.45)]"
-          />
-          <span className="font-black text-sm tracking-[0.15em] text-foreground uppercase">FINEXA</span>
-        </Link>
-
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              pathname === item.href ||
-              (item.href !== "/home" && pathname.startsWith(item.href));
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                prefetch={true}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-                  isActive
-                    ? "fx-nav-active"
-                    : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
-                }`}
-              >
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg shrink-0">
-                  <Icon className={`h-4 w-4 ${isActive ? "text-primary" : ""}`} />
-                </span>
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* New Loan CTA */}
-        <div className="px-3 pb-3">
-          <Link href="/loans/new">
-            <button className="w-full flex items-center justify-center gap-2 h-10 rounded-xl fx-brand-gradient text-white text-sm font-semibold fx-cta-glow fx-pressable">
-              <Plus className="h-4 w-4" />
-              New Loan
-            </button>
-          </Link>
-        </div>
-
-        {/* Sign Out + Theme Toggle */}
-        <div className="p-3 border-t border-border/50 flex items-center justify-between gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setLogoutOpen(true)}
-            className="flex-1 flex items-center justify-center h-9 px-3 rounded-xl text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
+          {/* Brand */}
+          <Link
+            href="/home"
+            className="h-16 flex items-center gap-3 px-5 border-b border-border/40 shrink-0 hover:opacity-90 transition-opacity"
           >
-            <LogOut className="h-4 w-4 mr-2" />
-            Sign Out
-          </button>
-          <ThemeToggle />
-        </div>
-      </aside>
-
-      {/* ─── SIDEBAR — TABLET (768px – 1023px) ──────────────────────────── */}
-      <aside className="hidden md:flex lg:hidden flex-col w-16 fx-glass-sidebar shrink-0 relative z-10 border-r border-border/40">
-
-        {/* Compact Brand */}
-        <Link
-          href="/home"
-          className="h-16 flex items-center justify-center border-b border-border/40 shrink-0 hover:opacity-90 transition-opacity"
-        >
-          <img
-            src="/logo-icon.png"
-            alt="Finexa"
-            className="h-8 w-8 object-contain filter drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]"
-          />
-        </Link>
-
-        {/* Compact Nav */}
-        <nav className="flex-1 flex flex-col items-center px-2 py-4 gap-1 overflow-y-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              pathname === item.href ||
-              (item.href !== "/home" && pathname.startsWith(item.href));
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                prefetch={true}
-                title={item.label}
-                className={`flex items-center justify-center h-11 w-11 rounded-xl transition-all duration-200 ${
-                  isActive
-                    ? "fx-nav-active"
-                    : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
-                }`}
-              >
-                <Icon className={`h-5 w-5 ${isActive ? "text-primary" : ""}`} />
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Compact New Loan */}
-        <div className="px-2 pb-2">
-          <Link href="/loans/new" prefetch={true} title="New Loan">
-            <button className="flex items-center justify-center h-11 w-11 rounded-xl fx-brand-gradient text-white fx-cta-glow fx-pressable">
-              <Plus className="h-5 w-5" />
-            </button>
+            <img
+              src="/logo-icon.png"
+              alt="Finexa"
+              className="h-8 w-8 object-contain filter drop-shadow-[0_0_10px_rgba(212,175,55,0.45)]"
+            />
+            <span className="font-black text-sm tracking-[0.15em] text-foreground uppercase">FINEXA</span>
           </Link>
-        </div>
 
-        {/* Compact Sign Out + Theme */}
-        <div className="p-2 border-t border-border/40 flex flex-col items-center gap-2 shrink-0">
-          <ThemeToggle />
-          <button
-            type="button"
-            onClick={() => setLogoutOpen(true)}
-            title="Sign Out"
-            className="h-10 w-10 flex items-center justify-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
-          >
-            <LogOut className="h-5 w-5" />
-          </button>
-        </div>
-      </aside>
+          {/* Nav */}
+          <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                pathname === item.href ||
+                (item.href !== "/home" && pathname.startsWith(item.href));
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  prefetch={true}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+                    isActive
+                      ? "fx-nav-active"
+                      : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+                  }`}
+                >
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg shrink-0">
+                    <Icon className={`h-4 w-4 ${isActive ? "text-primary" : ""}`} />
+                  </span>
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
 
-      {/* ─── MAIN WORKSPACE ──────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative z-[1]">
-
-        {/* Top Header Bar — Logo, Search/Controls, Bell, Theme */}
-        <header className="h-14 fx-glass-header flex items-center justify-between px-4 shrink-0 border-b border-border/40">
-          <div className="flex items-center gap-2 md:hidden">
-            <Link href="/home" prefetch={true} className="flex items-center gap-2">
-              <img
-                src="/logo-icon.png"
-                alt="Finexa"
-                className="h-7 w-7 object-contain filter drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]"
-              />
-              <span className="font-black text-xs tracking-[0.15em] text-foreground uppercase">FINEXA</span>
-            </Link>
-          </div>
-
-          <div className="hidden md:flex items-center gap-2 font-bold text-xs text-muted-foreground">
-            <span>SMART LOAN MANAGEMENT SYSTEM</span>
-          </div>
-
-          {/* TOP RIGHT: + New Loan | 🔔 Notification Bell | ☀️/🌙 Theme */}
-          <div className="flex items-center gap-2 ml-auto">
-            <Link href="/loans/new" prefetch={true}>
-              <button className="flex items-center gap-1.5 h-8 px-3 rounded-lg fx-brand-gradient text-white text-xs font-semibold fx-cta-glow fx-pressable">
-                <Plus className="h-3.5 w-3.5" />
+          {/* New Loan CTA */}
+          <div className="px-3 pb-3">
+            <Link href="/loans/new">
+              <button className="w-full flex items-center justify-center gap-2 h-10 rounded-xl fx-brand-gradient text-white text-sm font-semibold fx-cta-glow fx-pressable">
+                <Plus className="h-4 w-4" />
                 New Loan
               </button>
             </Link>
-            <NotificationCenter />
+          </div>
+
+          {/* Sign Out + Theme Toggle */}
+          <div className="p-3 border-t border-border/50 flex items-center justify-between gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setLogoutOpen(true)}
+              className="flex-1 flex items-center justify-center h-9 px-3 rounded-xl text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </button>
             <ThemeToggle />
           </div>
-        </header>
+        </aside>
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6">
-          <DataCacheProvider>
-            <div key={pathname} className="mx-auto max-w-5xl fx-slide-up page-transition">
+        {/* ─── SIDEBAR — TABLET (768px – 1023px) ──────────────────────────── */}
+        <aside className="hidden md:flex lg:hidden flex-col w-16 fx-glass-sidebar shrink-0 relative z-10 border-r border-border/40">
+
+          {/* Compact Brand */}
+          <Link
+            href="/home"
+            className="h-16 flex items-center justify-center border-b border-border/40 shrink-0 hover:opacity-90 transition-opacity"
+          >
+            <img
+              src="/logo-icon.png"
+              alt="Finexa"
+              className="h-8 w-8 object-contain filter drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]"
+            />
+          </Link>
+
+          {/* Compact Nav */}
+          <nav className="flex-1 flex flex-col items-center px-2 py-4 gap-1 overflow-y-auto">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                pathname === item.href ||
+                (item.href !== "/home" && pathname.startsWith(item.href));
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  prefetch={true}
+                  title={item.label}
+                  className={`flex items-center justify-center h-11 w-11 rounded-xl transition-all duration-200 ${
+                    isActive
+                      ? "fx-nav-active"
+                      : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+                  }`}
+                >
+                  <Icon className={`h-5 w-5 ${isActive ? "text-primary" : ""}`} />
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Compact New Loan */}
+          <div className="px-2 pb-2">
+            <Link href="/loans/new" prefetch={true} title="New Loan">
+              <button className="flex items-center justify-center h-11 w-11 rounded-xl fx-brand-gradient text-white fx-cta-glow fx-pressable">
+                <Plus className="h-5 w-5" />
+              </button>
+            </Link>
+          </div>
+
+          {/* Compact Sign Out + Theme */}
+          <div className="p-2 border-t border-border/40 flex flex-col items-center gap-2 shrink-0">
+            <ThemeToggle />
+            <button
+              type="button"
+              onClick={() => setLogoutOpen(true)}
+              title="Sign Out"
+              className="h-10 w-10 flex items-center justify-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
+          </div>
+        </aside>
+
+        {/* ─── MAIN WORKSPACE ──────────────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative z-[1]">
+
+          {/* Top Header Bar — Logo, Search/Controls, Bell, Theme */}
+          <header className="h-14 fx-glass-header flex items-center justify-between px-4 shrink-0 border-b border-border/40">
+            <div className="flex items-center gap-2 md:hidden">
+              <Link href="/home" prefetch={true} className="flex items-center gap-2">
+                <img
+                  src="/logo-icon.png"
+                  alt="Finexa"
+                  className="h-7 w-7 object-contain filter drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]"
+                />
+                <span className="font-black text-xs tracking-[0.15em] text-foreground uppercase">FINEXA</span>
+              </Link>
+            </div>
+
+            <div className="hidden md:flex items-center gap-2 font-bold text-xs text-muted-foreground">
+              <span>SMART LOAN MANAGEMENT SYSTEM</span>
+            </div>
+
+            {/* TOP RIGHT: + New Loan | 🔔 Notification Bell | ☀️/🌙 Theme */}
+            <div className="flex items-center gap-2 ml-auto">
+              <Link href="/loans/new" prefetch={true}>
+                <button className="flex items-center gap-1.5 h-8 px-3 rounded-lg fx-brand-gradient text-white text-xs font-semibold fx-cta-glow fx-pressable">
+                  <Plus className="h-3.5 w-3.5" />
+                  New Loan
+                </button>
+              </Link>
+              <NotificationCenter />
+              <ThemeToggle />
+            </div>
+          </header>
+
+          {/* Page Content */}
+          <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6">
+            <div className="mx-auto max-w-5xl fx-slide-up page-transition">
               {children}
             </div>
-          </DataCacheProvider>
-        </main>
-      </div>
+          </main>
+        </div>
 
       {/* ─── MOBILE BOTTOM TAB BAR (LinkedIn-style) — < 768px ───────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 fx-glass-header border-t border-border/40">
@@ -349,5 +348,6 @@ export default function DashboardLayout({
       </Dialog>
 
     </div>
+    </DataCacheProvider>
   );
 }

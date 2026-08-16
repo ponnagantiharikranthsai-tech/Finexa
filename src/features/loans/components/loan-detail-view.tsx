@@ -15,7 +15,6 @@ import { deletePaymentAction } from "@/features/payments/actions/delete-payment.
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "../actions/extend-loan.action";
 import { payAndExtendAction } from "../actions/pay-and-extend.action";
-import { generateLoanExtensionPdf } from "../utils/generate-loan-extension-pdf";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { getExtraLoanDetailsAction } from "@/features/loans/actions/get-extra-loan-details.action";
 import { getReminderHistoryAction } from "@/features/notifications/actions/payment-reminders.action";
@@ -108,11 +107,15 @@ export function LoanDetailView({ initialLoan, initialPayments, initialNotifs }: 
       }
       const data = res.data;
       try {
+        const { generateLoanExtensionPdf } = await import("../utils/generate-loan-extension-pdf");
         generateLoanExtensionPdf(data);
         toast.success(`Pay & Extend processed! Next cycle due: ${data.newDueDate}`, {
           action: {
             label: "📄 Download PDF",
-            onClick: () => generateLoanExtensionPdf(data),
+            onClick: async () => {
+              const { generateLoanExtensionPdf: genPdf } = await import("../utils/generate-loan-extension-pdf");
+              genPdf(data);
+            },
           },
           duration: 8000,
         });
@@ -121,7 +124,10 @@ export function LoanDetailView({ initialLoan, initialPayments, initialNotifs }: 
         toast.error("Loan extension completed, but the PDF could not be generated.", {
           action: {
             label: "🔄 Retry PDF",
-            onClick: () => generateLoanExtensionPdf(data),
+            onClick: async () => {
+              const { generateLoanExtensionPdf: genPdf } = await import("../utils/generate-loan-extension-pdf");
+              genPdf(data);
+            },
           },
           duration: 10000,
         });

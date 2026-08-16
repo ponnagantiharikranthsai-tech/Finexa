@@ -69,7 +69,7 @@ export async function sendTestWebPushNotification(): Promise<{ success: boolean;
       title: "FINEXA Test Push Notification 🔔",
       body: "Web Push notifications are working successfully on your Android device!",
       icon: "/icon-192.png",
-      badge: "/icon-192.png",
+      badge: "/badge.png",
       tag: `test-push-${Date.now()}`,
       url: "/notifications",
     });
@@ -143,7 +143,7 @@ export async function sendWebPushToAllSubscriptions(
 
     const pushPayloadString = JSON.stringify({
       icon: "/icon-192.png",
-      badge: "/icon-192.png",
+      badge: "/badge.png",
       ...payload,
     });
 

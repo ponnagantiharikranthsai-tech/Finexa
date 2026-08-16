@@ -120,7 +120,7 @@ self.addEventListener("push", function (event) {
     const options = {
       body: payload.body || "You have a new loan payment notification.",
       icon: payload.icon || "/icon-192.png",
-      badge: payload.badge || "/icon-192.png",
+      badge: payload.badge || "/badge.png",
       tag: payload.tag || `finexa-${Date.now()}`,
       renotify: true,
       data: {

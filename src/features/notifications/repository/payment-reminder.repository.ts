@@ -573,10 +573,26 @@ export const paymentReminderRepository = {
 
   async markReminderContacted(reminderId: string, notes?: string) {
     await ensureReminderTablesExist();
+    if (!reminderId) return;
+    try {
+      await db.update(paymentRemindersTable).set({
+        isContacted: true,
+        contactedAt: new Date(),
+        notes: notes || undefined,
+        updatedAt: new Date(),
+      }).where(eq(paymentRemindersTable.reminderId, reminderId));
+    } catch (e) {}
   },
 
   async addReminderNote(reminderId: string, notes: string) {
     await ensureReminderTablesExist();
+    if (!reminderId) return;
+    try {
+      await db.update(paymentRemindersTable).set({
+        notes,
+        updatedAt: new Date(),
+      }).where(eq(paymentRemindersTable.reminderId, reminderId));
+    } catch (e) {}
   },
 
   async getReminderHistoryByLoanId(loanId: string) {

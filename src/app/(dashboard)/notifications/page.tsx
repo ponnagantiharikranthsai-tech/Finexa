@@ -16,6 +16,8 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCheck,
+  Send,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -24,6 +26,8 @@ import {
   markNotificationCompletedAction,
   markAllNotificationsReadAction,
   savePushSubscriptionAction,
+  getVapidPublicKeyAction,
+  sendTestPushNotificationAction,
 } from "@/features/notifications/actions/payment-reminders.action";
 import {
   generateBorrowerReminderMessage,
@@ -46,8 +50,9 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<AdminNotificationItem[]>([]);
   const [activeTab, setActiveTab] = useState<"ALL" | "10_DAYS" | "3_DAYS" | "DUE_TODAY" | "OVERDUE">("ALL");
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
-  const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
+  const [pushState, setPushState] = useState<"CHECKING" | "ACTIVE" | "NOT_CONFIGURED" | "VAPID_MISSING" | "BLOCKED" | "UNSUPPORTED">("CHECKING");
   const [isSubscribing, setIsSubscribing] = useState(false);
+  const [isSendingTestPush, setIsSendingTestPush] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   // Message Modal State
@@ -55,17 +60,52 @@ export default function NotificationsPage() {
   const [selectedNotifForMsg, setSelectedNotifForMsg] = useState<AdminNotificationItem | null>(null);
   const [copiedSuccess, setCopiedSuccess] = useState(false);
 
-  // Sound preference load
+  // Sound preference & Push status check on mount
   useEffect(() => {
     try {
       const savedSound = localStorage.getItem("finexa_sound_enabled");
       if (savedSound !== null) setSoundEnabled(savedSound === "true");
-
-      if (typeof window !== "undefined" && "Notification" in window) {
-        setPushPermission(Notification.permission);
-      }
     } catch (e) {}
+
+    checkPushStatus();
   }, []);
+
+  const checkPushStatus = async () => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setPushState("UNSUPPORTED");
+      return;
+    }
+
+    try {
+      // 1. Check Notification permission
+      if (Notification.permission === "denied") {
+        setPushState("BLOCKED");
+        return;
+      }
+
+      // 2. Fetch VAPID key from server
+      const vapidRes = await getVapidPublicKeyAction();
+      const vapidKey = vapidRes.success && vapidRes.data?.vapidPublicKey ? vapidRes.data.vapidPublicKey : "";
+      if (!vapidKey) {
+        setPushState("VAPID_MISSING");
+        return;
+      }
+
+      // 3. Register & inspect actual PushSubscription
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.ready;
+
+      const existingSub = await reg.pushManager.getSubscription();
+      if (existingSub && Notification.permission === "granted") {
+        setPushState("ACTIVE");
+      } else {
+        setPushState("NOT_CONFIGURED");
+      }
+    } catch (err) {
+      console.warn("Push status check notice:", err);
+      setPushState("NOT_CONFIGURED");
+    }
+  };
 
   const loadNotifications = (triggerSoundCheck = false) => {
     startTransition(async () => {
@@ -116,10 +156,19 @@ export default function NotificationsPage() {
     setIsSubscribing(true);
     try {
       const permission = await Notification.requestPermission();
-      setPushPermission(permission);
-
       if (permission !== "granted") {
+        setPushState("BLOCKED");
         toast.error("Notification permission was denied.");
+        setIsSubscribing(false);
+        return;
+      }
+
+      const vapidRes = await getVapidPublicKeyAction();
+      const vapidPublicKey = vapidRes.success && vapidRes.data?.vapidPublicKey ? vapidRes.data.vapidPublicKey : "";
+
+      if (!vapidPublicKey) {
+        setPushState("VAPID_MISSING");
+        toast.error("VAPID public key configuration missing on server.");
         setIsSubscribing(false);
         return;
       }
@@ -127,17 +176,13 @@ export default function NotificationsPage() {
       const reg = await navigator.serviceWorker.register("/sw.js");
       await navigator.serviceWorker.ready;
 
-      const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!vapidPublicKey) {
-        toast.error("VAPID public key configuration missing.");
-        setIsSubscribing(false);
-        return;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        });
       }
-
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-      });
 
       const subJson = sub.toJSON();
       const endpoint = subJson.endpoint || "";
@@ -147,16 +192,38 @@ export default function NotificationsPage() {
       if (endpoint && p256dh && auth) {
         const res = await savePushSubscriptionAction(endpoint, p256dh, auth);
         if (res.success) {
-          toast.success("Web Push Notifications enabled! Receive alerts even when FINEXA is closed.");
+          setPushState("ACTIVE");
+          toast.success("Web Push Notifications enabled! Alerts will arrive even when FINEXA is closed.");
         } else {
-          toast.error("Failed to store push subscription.");
+          toast.error("Failed to store push subscription on server: " + (res.error || ""));
         }
+      } else {
+        toast.error("Failed to generate push subscription keys from browser.");
       }
     } catch (err: any) {
       console.error("Web Push registration error:", err);
       toast.error("Unable to enable push notifications: " + (err.message || "Unknown error"));
     } finally {
       setIsSubscribing(false);
+    }
+  };
+
+  const handleSendTestPush = async () => {
+    setIsSendingTestPush(true);
+    toast.info("Sending Test Web Push Notification to registered Android devices...");
+
+    try {
+      const res = await sendTestPushNotificationAction();
+      if (res.success) {
+        toast.success("Test Web Push sent! Check your Android notification bar.");
+      } else {
+        const errStr = typeof res.error === "string" ? res.error : "Failed to send test push notification.";
+        toast.error(errStr);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Unable to send test push notification.");
+    } finally {
+      setIsSendingTestPush(false);
     }
   };
 
@@ -294,34 +361,58 @@ export default function NotificationsPage() {
             <div className="flex items-center gap-2">
               <h3 className="text-xs font-bold text-foreground">Browser Push Notifications</h3>
               <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                  pushPermission === "granted"
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                  pushState === "ACTIVE"
                     ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                    : pushPermission === "denied"
+                    : pushState === "BLOCKED"
                     ? "bg-red-500/10 text-red-500 border border-red-500/20"
-                    : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                    : pushState === "VAPID_MISSING"
+                    ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                    : "bg-muted text-muted-foreground border border-border"
                 }`}
               >
-                {pushPermission === "granted" ? "ACTIVE 🟢" : pushPermission === "denied" ? "BLOCKED 🔴" : "NOT CONFIGURED 🔔"}
+                {pushState === "ACTIVE"
+                  ? "ACTIVE 🟢"
+                  : pushState === "BLOCKED"
+                  ? "BLOCKED 🔴"
+                  : pushState === "VAPID_MISSING"
+                  ? "VAPID MISSING ⚠️"
+                  : pushState === "CHECKING"
+                  ? "CHECKING... ⌛"
+                  : "NOT CONFIGURED 🔔"}
               </span>
             </div>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Receive OS & browser notifications even when FINEXA is closed.
+              Receive OS & Android system notifications even when FINEXA is closed.
             </p>
           </div>
         </div>
 
-        {pushPermission !== "granted" && (
-          <button
-            type="button"
-            onClick={enableWebPush}
-            disabled={isSubscribing}
-            className="px-4 py-2 rounded-xl bg-primary text-white hover:bg-primary/90 text-xs font-bold shadow-md transition-all fx-pressable shrink-0 flex items-center justify-center gap-1.5"
-          >
-            <Bell className="h-3.5 w-3.5" />
-            <span>{isSubscribing ? "Enabling..." : "Enable Push Notifications"}</span>
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {pushState === "ACTIVE" && (
+            <button
+              type="button"
+              onClick={handleSendTestPush}
+              disabled={isSendingTestPush}
+              className="px-3.5 py-2 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-bold shadow-xs transition-all fx-pressable flex items-center gap-1.5"
+            >
+              <Send className={`h-3.5 w-3.5 ${isSendingTestPush ? "animate-pulse" : ""}`} />
+              <span>{isSendingTestPush ? "Sending..." : "Send Test Push"}</span>
+            </button>
+          )}
+
+          {pushState !== "ACTIVE" && (
+            <button
+              type="button"
+              onClick={enableWebPush}
+              disabled={isSubscribing || pushState === "BLOCKED" || pushState === "VAPID_MISSING"}
+              className="px-4 py-2 rounded-xl bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-bold shadow-md transition-all fx-pressable flex items-center gap-1.5"
+            >
+              <Bell className="h-3.5 w-3.5" />
+              <span>{isSubscribing ? "Enabling..." : "Enable Push Notifications"}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Counter Cards Row */}

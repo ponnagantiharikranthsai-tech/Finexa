@@ -4,6 +4,32 @@ import { paymentReminderRepository, ReminderScheduleOptions } from "../repositor
 import { requireAuth } from "@/lib/auth";
 import type { ActionResult } from "@/types/api.types";
 
+import { getVapidPublicKey, sendTestWebPushNotification } from "../utils/web-push";
+
+export async function getVapidPublicKeyAction(): Promise<ActionResult<{ vapidPublicKey: string }>> {
+  try {
+    await requireAuth();
+    const key = getVapidPublicKey();
+    return { success: true, data: { vapidPublicKey: key } };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to fetch VAPID public key" };
+  }
+}
+
+export async function sendTestPushNotificationAction(): Promise<ActionResult<{ count: number }>> {
+  try {
+    await requireAuth();
+    const result = await sendTestWebPushNotification();
+    if (result.success) {
+      return { success: true, data: { count: result.count } };
+    } else {
+      return { success: false, error: result.error || "Failed to send test push notification" };
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to send test push notification" };
+  }
+}
+
 export async function getAdminNotificationsAction(overrideTodayStr?: string): Promise<ActionResult<any[]>> {
   try {
     await requireAuth();

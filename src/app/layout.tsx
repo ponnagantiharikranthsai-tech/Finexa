@@ -18,6 +18,7 @@ const geistMono = Geist_Mono({
 import { RealtimeSyncProvider } from "@/components/realtime-sync-provider";
 import { SessionTimeoutProvider } from "@/components/session-timeout-provider";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { PwaRegister } from "@/components/pwa-register";
 
 export const metadata: Metadata = {
   title: {
@@ -26,6 +27,15 @@ export const metadata: Metadata = {
   },
   description: "FINEXA – Smart Loan Management System for secure loan, borrower, payment and financial record management.",
   keywords: ["FINEXA", "Loan Management System", "FinTech", "Borrower Management", "Payment Tracking", "Financial Records"],
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "FINEXA",
+  },
+  formatDetection: {
+    telephone: false,
+  },
   openGraph: {
     title: "FINEXA – Smart Loan Management System",
     description: "FINEXA – Smart Loan Management System for secure loan, borrower, payment and financial record management.",
@@ -42,9 +52,9 @@ export const metadata: Metadata = {
     follow: true,
   },
   icons: {
-    icon: "/logo-icon.png",
+    icon: "/icon-192.png",
     shortcut: "/logo-icon.png",
-    apple: "/logo-icon.png",
+    apple: "/icon-192.png",
   },
 };
 
@@ -66,6 +76,7 @@ export default function RootLayout({
             <RealtimeSyncProvider>
               <SessionTimeoutProvider>
                 {children}
+                <PwaRegister />
               </SessionTimeoutProvider>
             </RealtimeSyncProvider>
           </ErrorBoundary>

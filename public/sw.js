@@ -1,12 +1,115 @@
-// FINEXA Service Worker for Real Web Push Notifications
+// FINEXA Production-Safe Progressive Web App (PWA) Service Worker
+const CACHE_NAME = "finexa-pwa-v1.0.0";
+const STATIC_ASSETS = [
+  "/",
+  "/login",
+  "/home",
+  "/logo.png",
+  "/logo-icon.png",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/icon-192-maskable.png",
+  "/icon-512-maskable.png",
+];
+
+// Install Event — Cache core static shell assets and skip waiting
 self.addEventListener("install", function (event) {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(function (cache) {
+      return cache.addAll(STATIC_ASSETS).catch(function (err) {
+        console.warn("PWA static asset caching notice:", err);
+      });
+    })
+  );
   self.skipWaiting();
 });
 
+// Activate Event — Clean up old caches and claim clients
 self.addEventListener("activate", function (event) {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then(function (cacheNames) {
+      return Promise.all(
+        cacheNames.map(function (cacheName) {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(function () {
+      return self.clients.claim();
+    })
+  );
 });
 
+// Fetch Event — Production-safe caching strategies
+self.addEventListener("fetch", function (event) {
+  const request = event.request;
+  const url = new URL(request.url);
+
+  // 1. NEVER cache sensitive financial API endpoints or authentication routes (Network-Only)
+  if (
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/_next/data/") ||
+    request.method !== "GET"
+  ) {
+    return; // Pass directly to network without service worker caching
+  }
+
+  // 2. Cache-First strategy for static images, icons, and fonts
+  if (
+    request.destination === "image" ||
+    request.destination === "font" ||
+    url.pathname.endsWith(".png") ||
+    url.pathname.endsWith(".jpg") ||
+    url.pathname.endsWith(".ico") ||
+    url.pathname.endsWith(".svg")
+  ) {
+    event.respondWith(
+      caches.match(request).then(function (cachedResponse) {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(request).then(function (networkResponse) {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then(function (cache) {
+              cache.put(request, responseToCache);
+            });
+          }
+          return networkResponse;
+        });
+      })
+    );
+    return;
+  }
+
+  // 3. Network-First strategy for HTML document pages with fallback to cache
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then(function (networkResponse) {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then(function (cache) {
+              cache.put(request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(function () {
+          return caches.match(request).then(function (cachedResponse) {
+            if (cachedResponse) {
+              return cachedResponse;
+            }
+            return caches.match("/home") || caches.match("/login");
+          });
+        })
+    );
+    return;
+  }
+});
+
+// Real Web Push Notification Event (Android System Notification)
 self.addEventListener("push", function (event) {
   if (!event.data) return;
 
@@ -36,6 +139,7 @@ self.addEventListener("push", function (event) {
   }
 });
 
+// Notification Click Event — Navigates Android user to the target FINEXA page
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
 

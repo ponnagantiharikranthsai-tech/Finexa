@@ -16,6 +16,16 @@ export function toUnicodeBold(str: string): string {
     .join("");
 }
 
+export function formatExecutivePushBody(
+  borrowerName: string,
+  amountFormatted: string,
+  interestTypeStr: string,
+  duration: string
+): string {
+  const cleanName = borrowerName.replace(/\./g, "").trim();
+  return `👤 ${cleanName} · ₹${amountFormatted}\n⏱ ${interestTypeStr} (${duration})`;
+}
+
 export function getVapidPublicKey(): string {
   return (
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||

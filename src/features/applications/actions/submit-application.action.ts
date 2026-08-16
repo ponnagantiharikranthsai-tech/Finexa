@@ -6,7 +6,7 @@ import { auditLog } from "@/lib/audit-log";
 import type { ActionResult } from "@/types/api.types";
 import { db } from "@/db/client";
 import { adminNotificationsTable } from "@/db/schema";
-import { sendWebPushToAllSubscriptions, toUnicodeBold } from "@/features/notifications/utils/web-push";
+import { sendWebPushToAllSubscriptions, toUnicodeBold, formatExecutivePushBody } from "@/features/notifications/utils/web-push";
 
 export async function submitLoanApplicationAction(
   _prevState: ActionResult<{ code: string }> | null,
@@ -79,7 +79,7 @@ export async function submitLoanApplicationAction(
     try {
       const pushSuccess = await sendWebPushToAllSubscriptions(dedupKey, {
         title: `🔔 ${toUnicodeBold("NEW LOAN APPLICATION")}`,
-        body: `${name} applied for ₹${principalFormatted}\nRepayment: ${interestTypeStr} • ${duration}`,
+        body: formatExecutivePushBody(name, principalFormatted, interestTypeStr, duration),
         icon: "/icon-192.png",
         badge: "/badge.png",
         url: `/applications`,

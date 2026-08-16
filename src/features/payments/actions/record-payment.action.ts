@@ -51,9 +51,36 @@ export async function recordPaymentAction(
       notes: notes || null,
     });
 
-    const remainingOutstanding = await paymentRepository.getOutstandingBalance(loanId);
+    const allPayments = await paymentRepository.findByLoanId(loanId);
 
-    const isFullyCleared = remainingOutstanding <= 0;
+    const dateFormatted = paymentDate.replace(/-/g, "");
+    const randomSeq = Math.floor(1000 + Math.random() * 9000).toString();
+    const documentId = `FIN-PAY-${dateFormatted}-${randomSeq}`;
+    const transactionId = createdPayment.paymentId || (createdPayment as any).id || `TXN-${dateFormatted}-${randomSeq}`;
+
+    const borrower = loan.borrower;
+    const principalNum = Number(loan.principal || 0);
+    const rateNum = Number(loan.interestRate || 0);
+    const monthlyInterestAmount = Math.round((principalNum * rateNum) / 1000);
+    const penaltyNum = Number(loan.penaltyAmount || 0);
+
+    // Total Payable = Principal + Accrued Interest + Penalty
+    const totalPayable = principalNum + monthlyInterestAmount + penaltyNum;
+
+    // Find position of current payment in history
+    const createdIndex = allPayments.findIndex(
+      (p) => (p.paymentId || (p as any).id) === (createdPayment.paymentId || (createdPayment as any).id)
+    );
+
+    const previousPaidAmount = allPayments
+      .slice(0, createdIndex >= 0 ? createdIndex : allPayments.length - 1)
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+    const currentPaymentAmount = Number(amount);
+    const totalAmountPaidToDate = allPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    const remainingBalance = Math.max(0, totalPayable - totalAmountPaidToDate);
+
+    const isFullyCleared = remainingBalance <= 0;
     let finalStatus: string = loan.status;
 
     if (isFullyCleared) {
@@ -67,28 +94,44 @@ export async function recordPaymentAction(
       loanId,
       amount,
       paymentType,
-      outstandingBalance: remainingOutstanding,
+      outstandingBalance: remainingBalance,
     });
 
-    const allPayments = await paymentRepository.findByLoanId(loanId);
-    const totalAmountPaidToDate = allPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    // Compute cumulative history for every payment row
+    let accumPaid = 0;
+    const paymentsHistory = allPayments.map((p, idx) => {
+      const pAmt = Number(p.amount || 0);
+      accumPaid += pAmt;
+      const pBal = Math.max(0, totalPayable - accumPaid);
+      const rcNo = `RC-${(p.paymentDate || "").replace(/-/g, "")}-${String(idx + 1).padStart(3, "0")}`;
+      return {
+        paymentId: p.paymentId || (p as any).id,
+        paymentDate: p.paymentDate,
+        date: p.paymentDate,
+        receiptNo: rcNo,
+        amount: pAmt,
+        amountPaid: pAmt,
+        totalPaid: accumPaid,
+        balance: pBal,
+        paymentType: p.paymentType,
+        notes: p.notes,
+      };
+    });
 
-    const dateFormatted = paymentDate.replace(/-/g, "");
-    const randomSeq = Math.floor(1000 + Math.random() * 9000).toString();
-    const documentId = `FIN-PAY-${dateFormatted}-${randomSeq}`;
-    const transactionId = createdPayment.paymentId || (createdPayment as any).id || `TXN-${dateFormatted}-${randomSeq}`;
+    const paymentStatus: "PARTIAL PAYMENT" | "PAID / COMPLETED" = isFullyCleared
+      ? "PAID / COMPLETED"
+      : "PARTIAL PAYMENT";
 
-    const borrower = loan.borrower;
-    const principalNum = Number(loan.principal || 0);
-    const rateNum = Number(loan.interestRate || 0);
+    const currentReceiptNo = `RC-${dateFormatted}-${String(createdIndex >= 0 ? createdIndex + 1 : allPayments.length).padStart(3, "0")}`;
 
     return {
       success: true,
       data: {
         documentId,
+        receiptNumber: currentReceiptNo,
         transactionId,
         paymentDate,
-        paymentAmount: Number(amount),
+        paymentAmount: currentPaymentAmount,
         paymentType,
         notes,
 
@@ -108,29 +151,29 @@ export async function recordPaymentAction(
         principal: principalNum,
         interestRate: rateNum,
         interestType: loan.interestType || "monthly",
-        monthlyInterestAmount: Math.round((principalNum * rateNum) / 1000),
+        monthlyInterestAmount,
 
-        principalPaid: paymentType === "principal" ? Number(amount) : 0,
-        interestPaid: paymentType === "interest" ? Number(amount) : 0,
-        penaltyPaid: paymentType === "penalty" ? Number(amount) : 0,
+        principalPaid: paymentType === "principal" ? currentPaymentAmount : 0,
+        interestPaid: paymentType === "interest" ? currentPaymentAmount : 0,
+        penaltyPaid: paymentType === "penalty" ? currentPaymentAmount : 0,
 
         previousOutstanding,
-        remainingOutstanding,
-        totalPayableAfterPayment: remainingOutstanding,
+        remainingOutstanding: remainingBalance,
+        totalPayableAfterPayment: remainingBalance,
         totalAmountPaidToDate,
-        totalInterestAccrued: Math.round((principalNum * rateNum) / 1000),
-        totalPenaltyAccrued: Number(loan.penaltyAmount || 0),
+        totalInterestAccrued: monthlyInterestAmount,
+        totalPenaltyAccrued: penaltyNum,
+
+        totalPayable,
+        previousPaidAmount,
+        currentPaymentAmount,
+        remainingBalance,
+        paymentStatus,
 
         loanStatus: finalStatus.toUpperCase(),
         isFullyCleared,
 
-        paymentsHistory: allPayments.map((p) => ({
-          paymentId: p.paymentId || (p as any).id,
-          paymentDate: p.paymentDate,
-          amount: Number(p.amount),
-          paymentType: p.paymentType,
-          notes: p.notes,
-        })),
+        paymentsHistory,
       },
     };
   } catch (err: any) {

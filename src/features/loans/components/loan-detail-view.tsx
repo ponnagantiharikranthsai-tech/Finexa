@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Eye, EyeOff, Send, Landmark, Calendar, Trash2, ArrowLeft, CheckCircle2, XCircle } from "lucide-react";
+import { Eye, EyeOff, Send, Landmark, Calendar, Trash2, ArrowLeft, CheckCircle2, XCircle, Printer, Download, FileText } from "lucide-react";
 import { deletePaymentAction } from "@/features/payments/actions/delete-payment.action";
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "../actions/extend-loan.action";
@@ -18,6 +18,8 @@ import { payAndExtendAction } from "../actions/pay-and-extend.action";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { getExtraLoanDetailsAction } from "@/features/loans/actions/get-extra-loan-details.action";
 import { getReminderHistoryAction } from "@/features/notifications/actions/payment-reminders.action";
+import { downloadPartialPaymentPdf, viewPartialPaymentPdf, printPartialPaymentPdf } from "../utils/generate-partial-payment-pdf";
+import { downloadPaymentCompletedPdf, viewPaymentCompletedPdf, printPaymentCompletedPdf } from "../utils/generate-payment-completed-pdf";
 import { useRouter } from "next/navigation";
 import type { LoanDetailResult } from "../actions/get-loan-by-id.action";
 import type { Payment, NotificationLog } from "@/db/schema";
@@ -76,6 +78,92 @@ export function LoanDetailView({ initialLoan, initialPayments, initialNotifs }: 
   const maskAadhaar = (aadhaar: string) =>
     showSensitive ? aadhaar : `••••••••${aadhaar.slice(-4)}`;
 
+  // ── Helper to build PDF Payload for any historical payment record ──────
+  const buildPayloadForPayment = (pIdx: number) => {
+    const p = payments[pIdx];
+    const principalNum = Number(loan.principal || 0);
+    const rateNum = Number(loan.interestRate || 0);
+    const monthlyInterestAmount = loan.monthlyInterestAmount || Math.round((principalNum * rateNum) / 1000);
+    const penaltyNum = Number(loan.penaltyAmount || 0);
+    const totalPayable = principalNum + monthlyInterestAmount + penaltyNum;
+
+    const historyUpToCurrent = payments.slice(0, pIdx + 1);
+    const previousPaidAmount = payments.slice(0, pIdx).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const currentPaymentAmount = Number(p.amount || 0);
+    const totalAmountPaidToDate = previousPaidAmount + currentPaymentAmount;
+    const remainingBalance = Math.max(0, totalPayable - totalAmountPaidToDate);
+    const isFullyCleared = remainingBalance <= 0;
+    const paymentStatus: "PARTIAL PAYMENT" | "PAID / COMPLETED" = isFullyCleared ? "PAID / COMPLETED" : "PARTIAL PAYMENT";
+
+    const dateFormatted = (p.paymentDate || "").replace(/-/g, "");
+    const currentReceiptNo = `RC-${dateFormatted}-${String(pIdx + 1).padStart(3, "0")}`;
+
+    let accumPaid = 0;
+    const paymentsHistory = historyUpToCurrent.map((item, idx) => {
+      const itemAmt = Number(item.amount || 0);
+      accumPaid += itemAmt;
+      const itemBal = Math.max(0, totalPayable - accumPaid);
+      return {
+        paymentId: item.paymentId,
+        paymentDate: item.paymentDate,
+        date: item.paymentDate,
+        receiptNo: `RC-${(item.paymentDate || "").replace(/-/g, "")}-${String(idx + 1).padStart(3, "0")}`,
+        amount: itemAmt,
+        amountPaid: itemAmt,
+        totalPaid: accumPaid,
+        balance: itemBal,
+        paymentType: item.paymentType,
+        notes: item.notes,
+      };
+    });
+
+    return {
+      documentId: `FIN-PAY-${dateFormatted}-${pIdx + 1001}`,
+      receiptNumber: currentReceiptNo,
+      transactionId: p.paymentId,
+      paymentDate: p.paymentDate,
+      paymentAmount: currentPaymentAmount,
+      paymentType: p.paymentType,
+      notes: p.notes,
+
+      loanId: loan.loanId,
+      borrowerName: loan.borrower.name,
+      borrowerMobile: loan.borrower.mobile,
+      email: loan.borrower.email || undefined,
+      locationUrl: loan.borrower.locationUrl || undefined,
+
+      dateGiven: loan.dateGiven,
+      dueDate: loan.dueDate,
+      principal: principalNum,
+      interestRate: rateNum,
+      interestType: loan.interestType || "monthly",
+      monthlyInterestAmount,
+      loanType: loan.interestType || "Monthly",
+
+      principalPaid: p.paymentType === "principal" ? currentPaymentAmount : 0,
+      interestPaid: p.paymentType === "interest" ? currentPaymentAmount : 0,
+      penaltyPaid: p.paymentType === "penalty" ? currentPaymentAmount : 0,
+
+      previousOutstanding: Math.max(0, totalPayable - previousPaidAmount),
+      remainingOutstanding: remainingBalance,
+      totalPayableAfterPayment: remainingBalance,
+      totalAmountPaidToDate,
+      totalInterestAccrued: monthlyInterestAmount,
+      totalPenaltyAccrued: penaltyNum,
+
+      totalPayable,
+      previousPaidAmount,
+      currentPaymentAmount,
+      remainingBalance,
+      paymentStatus,
+
+      loanStatus: isFullyCleared ? "CLOSED" : loan.status.toUpperCase(),
+      isFullyCleared,
+
+      paymentsHistory,
+    };
+  };
+
   // ── actions ──────────────────────────────────────────────────────────────
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,12 +175,35 @@ export function LoanDetailView({ initialLoan, initialPayments, initialNotifs }: 
     fd.append("notes", paymentNotes);
     startTransition(async () => {
       const res = await recordPaymentAction(null, fd);
-      if (res.success) {
-        toast.success(`Payment recorded!`);
-        setPaymentOpen(false); setPaymentAmount(""); setPaymentNotes("");
+      if (res.success && res.data) {
+        const payload = res.data;
+        setPaymentOpen(false);
+        setPaymentAmount("");
+        setPaymentNotes("");
+
+        if (payload.isFullyCleared) {
+          downloadPaymentCompletedPdf(payload as any);
+          toast.success("FULL PAYMENT COMPLETED! PDF receipt generated.", {
+            action: {
+              label: "📄 View PDF",
+              onClick: () => viewPaymentCompletedPdf(payload as any),
+            },
+            duration: 8000,
+          });
+        } else {
+          downloadPartialPaymentPdf(payload as any);
+          toast.success(`PARTIAL PAYMENT RECORDED! Remaining: ₹${Number(payload.remainingBalance || 0).toLocaleString("en-IN")}`, {
+            action: {
+              label: "📄 View Receipt",
+              onClick: () => viewPartialPaymentPdf(payload as any),
+            },
+            duration: 8000,
+          });
+        }
         router.refresh();
       } else {
-        toast.error(typeof res.error === "string" ? res.error : "Failed to record payment");
+        const errText = (res as any)?.error;
+        toast.error(typeof errText === "string" ? errText : "Failed to record payment");
       }
     });
   };
@@ -253,34 +364,98 @@ export function LoanDetailView({ initialLoan, initialPayments, initialNotifs }: 
                 <p className="text-center text-sm text-muted-foreground py-8">No payments recorded yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {payments.map((p) => (
-                    <div key={p.paymentId} className="flex items-center justify-between p-3 rounded-xl bg-accent/20 border border-border/30 fx-row-hover">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                            p.paymentType === "interest" ? "bg-secondary text-primary" :
-                            p.paymentType === "principal" ? "bg-accent text-primary" :
-                            "bg-destructive/10 text-destructive"
-                          }`}>
-                            {p.paymentType}
-                          </span>
-                          <span className="text-xs text-muted-foreground">{p.paymentDate}</span>
+                  {payments.map((p, pIdx) => {
+                    const payload = buildPayloadForPayment(pIdx);
+                    const isCompleted = payload.isFullyCleared;
+
+                    const handleView = () => {
+                      if (isCompleted) {
+                        viewPaymentCompletedPdf(payload as any);
+                      } else {
+                        viewPartialPaymentPdf(payload as any);
+                      }
+                    };
+
+                    const handleDownload = () => {
+                      if (isCompleted) {
+                        downloadPaymentCompletedPdf(payload as any);
+                      } else {
+                        downloadPartialPaymentPdf(payload as any);
+                      }
+                    };
+
+                    const handlePrint = () => {
+                      if (isCompleted) {
+                        printPaymentCompletedPdf(payload as any);
+                      } else {
+                        printPartialPaymentPdf(payload as any);
+                      }
+                    };
+
+                    return (
+                      <div key={p.paymentId} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-accent/20 border border-border/30 fx-row-hover">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                              {payload.receiptNumber}
+                            </span>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                              p.paymentType === "interest" ? "bg-secondary text-primary" :
+                              p.paymentType === "principal" ? "bg-amber-500/10 text-amber-600 border border-amber-500/20" :
+                              "bg-destructive/10 text-destructive"
+                            }`}>
+                              {p.paymentType}
+                            </span>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                              isCompleted ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20" : "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                            }`}>
+                              {isCompleted ? "FULL PAYMENT" : "PARTIAL"}
+                            </span>
+                            <span className="text-xs text-muted-foreground ml-auto sm:ml-0">{p.paymentDate}</span>
+                          </div>
+                          {p.notes && <p className="text-xs text-muted-foreground truncate">{p.notes}</p>}
                         </div>
-                        {p.notes && <p className="text-xs text-muted-foreground truncate">{p.notes}</p>}
+                        <div className="flex items-center justify-between sm:justify-end gap-3 ml-0 sm:ml-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40">
+                          <span className="font-extrabold text-sm text-primary">
+                            +₹{Number(p.amount).toLocaleString("en-IN")}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={handleView}
+                              title="View PDF Receipt"
+                              className="text-primary/70 hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-primary/10 flex items-center gap-1 text-xs font-semibold"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              <span className="hidden md:inline">View</span>
+                            </button>
+                            <button
+                              onClick={handleDownload}
+                              title="Download PDF Receipt"
+                              className="text-primary/70 hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-primary/10 flex items-center gap-1 text-xs font-semibold"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              <span className="hidden md:inline">Download</span>
+                            </button>
+                            <button
+                              onClick={handlePrint}
+                              title="Print PDF Receipt"
+                              className="text-primary/70 hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-primary/10 flex items-center gap-1 text-xs font-semibold"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                              <span className="hidden md:inline">Print</span>
+                            </button>
+                            <button
+                              onClick={() => handleDeletePayment(p.paymentId)}
+                              title="Delete Payment Record"
+                              className="text-destructive/60 hover:text-destructive transition-colors p-1.5 rounded-lg hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 ml-3 shrink-0">
-                        <span className="font-bold text-sm text-primary">
-                          +₹{Number(p.amount).toLocaleString("en-IN")}
-                        </span>
-                        <button
-                          onClick={() => handleDeletePayment(p.paymentId)}
-                          className="text-destructive/60 hover:text-destructive transition-colors p-1 rounded-lg hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

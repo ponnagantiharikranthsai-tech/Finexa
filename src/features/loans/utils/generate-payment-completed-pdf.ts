@@ -40,12 +40,25 @@ export type PaymentCompletedResultPayload = {
   loanStatus: string;
   isFullyCleared: boolean; // True ONLY if remainingOutstanding <= 0 and totalPayable <= 0
 
+  receiptNumber?: string;
+  applicationCode?: string;
+  totalPayable?: number;
+  previousPaidAmount?: number;
+  currentPaymentAmount?: number;
+  remainingBalance?: number;
+  paymentStatus?: "PARTIAL PAYMENT" | "PAID / COMPLETED";
+
   paymentsHistory: Array<{
     paymentId: string;
     paymentDate: string;
     amount: number | string;
     paymentType: string;
     notes?: string | null;
+    receiptNo?: string;
+    date?: string;
+    amountPaid?: number;
+    totalPaid?: number;
+    balance?: number;
   }>;
 };
 
@@ -218,7 +231,7 @@ export function createBlueCircularStampImage(paymentDateStr: string): string {
   return canvas.toDataURL("image/png");
 }
 
-export async function generatePaymentCompletedPdf(data: PaymentCompletedResultPayload): Promise<void> {
+export async function buildPaymentCompletedJsPdfDoc(data: PaymentCompletedResultPayload) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({
     orientation: "portrait",
@@ -787,9 +800,52 @@ export async function generatePaymentCompletedPdf(data: PaymentCompletedResultPa
     renderHeaderFooter(i, totalPages);
   }
 
-  // Trigger File Download
-  const words = (data.borrowerName || "").replace(/[().,_\-\/]/g, " ").replace(/[^\w\s]/gi, "").trim().split(/\s+/).filter(Boolean);
+  return doc;
+}
+
+export async function downloadPaymentCompletedPdf(data: PaymentCompletedResultPayload): Promise<void> {
+  const doc = await buildPaymentCompletedJsPdfDoc(data);
+  const words = (data.borrowerName || "")
+    .replace(/[().,_\-\/]/g, " ")
+    .replace(/[^\w\s]/gi, "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
   const cleanBorrower = words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("_") || "Borrower";
   const filename = `FINEXA_${cleanBorrower}_Payment_Completed.pdf`;
   doc.save(filename);
+}
+
+export async function generatePaymentCompletedPdf(data: PaymentCompletedResultPayload): Promise<void> {
+  return downloadPaymentCompletedPdf(data);
+}
+
+export async function viewPaymentCompletedPdf(data: PaymentCompletedResultPayload): Promise<void> {
+  const doc = await buildPaymentCompletedJsPdfDoc(data);
+  const blob = doc.output("blob");
+  const blobUrl = URL.createObjectURL(blob);
+  window.open(blobUrl, "_blank");
+}
+
+export async function printPaymentCompletedPdf(data: PaymentCompletedResultPayload): Promise<void> {
+  const doc = await buildPaymentCompletedJsPdfDoc(data);
+  const blob = doc.output("blob");
+  const blobUrl = URL.createObjectURL(blob);
+
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.src = blobUrl;
+  document.body.appendChild(iframe);
+
+  iframe.onload = () => {
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    }, 300);
+  };
 }

@@ -67,32 +67,32 @@ export async function submitLoanApplicationAction(
       customerPanEncrypted: panEncrypted,
     });
 
-    // Trigger Web Push notification to admin devices immediately after successful database update
+    // Trigger Web Push notification to admin devices asynchronously in background
     const dedupKey = `notif_APP_${app.applicationId}_submitted`;
     const principalFormatted = Number(app.principal).toLocaleString("en-IN");
     const duration = app.loanDuration || "Standard";
     const interestTypeStr = app.interestType ? `${app.interestType.toUpperCase()} Interest` : "Monthly";
     
     console.log(`[APPLICATION SUBMISSION SUCCESS] Application ${app.applicationId} saved for ${name}.`);
-    console.log(`[INSTANT WEB PUSH] Dispatching High-Prominence Unicode Bold Push alert to registered admin devices...`);
+    console.log(`[INSTANT WEB PUSH] Dispatching background Push alert to registered admin devices...`);
 
-    try {
-      const pushSuccess = await sendWebPushToAllSubscriptions(dedupKey, {
-        title: `🔔 ${toUnicodeBold("NEW LOAN APPLICATION")}`,
-        body: formatExecutivePushBody(name, principalFormatted, interestTypeStr, duration),
-        icon: "/icon-192.png",
-        badge: "/badge.png",
-        url: `/applications`,
-        tag: dedupKey,
-        actions: [
-          { action: "review", title: "Review Application" },
-          { action: "dismiss", title: "Dismiss" },
-        ],
-      });
+    // Fire Web Push asynchronously in background so response to borrower is near-instant
+    sendWebPushToAllSubscriptions(dedupKey, {
+      title: `🔔 ${toUnicodeBold("NEW LOAN APPLICATION")}`,
+      body: formatExecutivePushBody(name, principalFormatted, interestTypeStr, duration),
+      icon: "/icon-192.png",
+      badge: "/badge.png",
+      url: `/applications`,
+      tag: dedupKey,
+      actions: [
+        { action: "review", title: "Review Application" },
+        { action: "dismiss", title: "Dismiss" },
+      ],
+    }).then((pushSuccess) => {
       console.log(`[INSTANT WEB PUSH RESULT] Web Push status for ${name}: ${pushSuccess ? "DELIVERED" : "FAILED / NO SUBSCRIPTIONS"}`);
-    } catch (pushErr: any) {
+    }).catch((pushErr) => {
       console.error("[INSTANT WEB PUSH ERROR] Failed to send Web Push alert:", pushErr?.message || pushErr);
-    }
+    });
 
     // Notify the admin by generating an audit log
     await auditLog("application_submitted", "loan_application", app.applicationId, {

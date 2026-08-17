@@ -1,12 +1,17 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { toast } from "sonner";
-import { Download, RefreshCw, WifiOff, CheckCircle2 } from "lucide-react";
+import { Download, WifiOff, CheckCircle2 } from "lucide-react";
 
 export function PwaRegister() {
+  const pathname = usePathname();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
+
+  // Identify borrower-facing application routes (e.g., /apply/[code])
+  const isBorrowerRoute = pathname?.startsWith("/apply");
 
   useEffect(() => {
     // 1. Service Worker Registration
@@ -43,28 +48,34 @@ export function PwaRegister() {
         });
     }
 
-    // 2. Android Chrome PWA Install Prompt Listener
+    // 2. Android Chrome PWA Install Prompt Listener (Admin/Owner routes ONLY)
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setShowInstallBanner(true);
+      if (!isBorrowerRoute) {
+        setShowInstallBanner(true);
+      }
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
     // 3. Online/Offline Network Listeners
     const handleOffline = () => {
-      toast.error("Internet connection lost. Financial actions require an active connection.", {
-        icon: <WifiOff className="h-4 w-4 text-destructive" />,
-        duration: 6000,
-      });
+      if (!isBorrowerRoute) {
+        toast.error("Internet connection lost. Financial actions require an active connection.", {
+          icon: <WifiOff className="h-4 w-4 text-destructive" />,
+          duration: 6000,
+        });
+      }
     };
 
     const handleOnline = () => {
-      toast.success("Internet connection restored.", {
-        icon: <CheckCircle2 className="h-4 w-4 text-emerald-500" />,
-        duration: 4000,
-      });
+      if (!isBorrowerRoute) {
+        toast.success("Internet connection restored.", {
+          icon: <CheckCircle2 className="h-4 w-4 text-emerald-500" />,
+          duration: 4000,
+        });
+      }
     };
 
     window.addEventListener("offline", handleOffline);
@@ -75,7 +86,7 @@ export function PwaRegister() {
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
     };
-  }, []);
+  }, [isBorrowerRoute]);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
@@ -88,7 +99,8 @@ export function PwaRegister() {
     setShowInstallBanner(false);
   };
 
-  if (!showInstallBanner) return null;
+  // NEVER render install banner on borrower application routes (/apply/...)
+  if (isBorrowerRoute || !showInstallBanner) return null;
 
   return (
     <div className="fixed bottom-20 md:bottom-6 left-4 right-4 md:left-auto md:right-6 z-50 max-w-sm rounded-2xl bg-[#17181D]/95 border border-[#FFD54A]/30 p-4 shadow-2xl backdrop-blur-xl animate-in slide-in-from-bottom duration-300">
@@ -113,3 +125,4 @@ export function PwaRegister() {
     </div>
   );
 }
+

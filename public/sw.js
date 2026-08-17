@@ -1,9 +1,15 @@
 // FINEXA Production-Safe Progressive Web App (PWA) Service Worker
-const CACHE_NAME = "finexa-pwa-v1.0.1";
+const CACHE_NAME = "finexa-pwa-v1.0.2";
 const STATIC_ASSETS = [
   "/",
   "/login",
   "/home",
+  "/loan-management",
+  "/loans",
+  "/borrowers",
+  "/applications",
+  "/reports",
+  "/capital-management",
   "/logo.png",
   "/logo-icon.png",
   "/icon-192.png",

@@ -124,6 +124,7 @@ export default function DashboardLayout({
                   key={item.href}
                   href={item.href}
                   prefetch={true}
+                  onTouchStart={() => router.prefetch(item.href)}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                     isActive
                       ? "fx-nav-active"
@@ -280,6 +281,7 @@ export default function DashboardLayout({
                 key={item.href}
                 href={item.href}
                 prefetch={true}
+                onTouchStart={() => router.prefetch(item.href)}
                 className={`relative flex flex-col items-center justify-center gap-0.5 flex-1 px-1 py-2 transition-all duration-200 ${
                   isActive
                     ? "text-primary"

@@ -1,26 +1,42 @@
 import React from "react";
+import { BarChart3 } from "lucide-react";
+import { ReportCardSkeleton, SkeletonCard, Skeleton } from "@/components/ui/skeleton";
 
 export default function ReportsLoading() {
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto animate-pulse">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-border/50 pb-5">
-        <div className="space-y-2">
-          <div className="h-8 w-56 bg-muted/60 rounded-xl" />
-          <div className="h-4 w-72 bg-muted/40 rounded-lg" />
+    <div className="space-y-5 animate-in fade-in duration-150">
+      {/* Header */}
+      <div className="flex items-center gap-3 text-left">
+        <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+          <BarChart3 className="h-5 w-5 text-primary" />
         </div>
-        <div className="h-10 w-48 bg-muted/60 rounded-xl" />
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">Reports & Analytics</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Business performance metrics, total capital returns, and interest analytics.
+          </p>
+        </div>
       </div>
 
+      {/* KPI Stats Grid Skeleton */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="p-5 rounded-2xl bg-card border border-border/60 space-y-3">
-            <div className="h-3.5 w-28 bg-muted/60 rounded" />
-            <div className="h-7 w-32 bg-muted/80 rounded-lg" />
-          </div>
+          <ReportCardSkeleton key={i} />
         ))}
       </div>
 
-      <div className="h-72 bg-card rounded-2xl border border-border/60 p-6" />
+      {/* Main Chart Container Skeleton */}
+      <SkeletonCard className="p-6 h-80 flex flex-col justify-between">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-5 w-48 rounded-md" />
+          <Skeleton className="h-8 w-32 rounded-xl" />
+        </div>
+        <div className="flex items-end justify-between gap-3 h-48 pt-4">
+          {[40, 65, 30, 85, 55, 70, 95, 60, 45, 80, 50, 75].map((h, i) => (
+            <Skeleton key={i} className="flex-1 rounded-t-lg" style={{ height: `${h}%` }} />
+          ))}
+        </div>
+      </SkeletonCard>
     </div>
   );
 }

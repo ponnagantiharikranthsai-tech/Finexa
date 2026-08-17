@@ -1,25 +1,34 @@
 import React from "react";
+import { ClipboardList } from "lucide-react";
+import { ApplicationCardSkeleton, SkeletonButton } from "@/components/ui/skeleton";
 
 export default function ApplicationsLoading() {
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto animate-pulse">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-border/50 pb-5">
-        <div className="space-y-2">
-          <div className="h-8 w-52 bg-muted/60 rounded-xl" />
-          <div className="h-4 w-72 bg-muted/40 rounded-lg" />
+    <div className="space-y-5 animate-in fade-in duration-150">
+      {/* Header */}
+      <div className="flex items-center gap-3 text-left">
+        <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+          <ClipboardList className="h-5 w-5 text-primary" />
         </div>
-        <div className="h-11 w-44 bg-muted/60 rounded-xl" />
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">Loan Applications</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Review customer self-application requests and verify KYC documents.
+          </p>
+        </div>
       </div>
 
-      <div className="space-y-4 pt-2">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="p-5 rounded-2xl bg-card border border-border/60 space-y-3">
-            <div className="flex justify-between items-center">
-              <div className="h-5 w-40 bg-muted/70 rounded-lg" />
-              <div className="h-6 w-24 bg-muted/50 rounded-full" />
-            </div>
-            <div className="h-10 bg-muted/30 rounded-xl border border-border/40" />
-          </div>
+      {/* Tabs Skeleton */}
+      <div className="flex items-center gap-2 border-b border-border/40 pb-2">
+        <SkeletonButton className="h-9 w-24 rounded-full" />
+        <SkeletonButton className="h-9 w-28 rounded-full" />
+        <SkeletonButton className="h-9 w-24 rounded-full" />
+      </div>
+
+      {/* Applications List Skeleton */}
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+        {[1, 2, 3, 4].map((i) => (
+          <ApplicationCardSkeleton key={i} />
         ))}
       </div>
     </div>

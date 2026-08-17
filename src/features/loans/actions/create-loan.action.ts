@@ -117,6 +117,9 @@ export async function createLoanAction(
     await paymentReminderRepository.createScheduleForLoan(loan.loanId, loan.dueDate);
     await auditLog("loan_created", "loan", loan.loanId, { principal: loan.principal });
 
+    const { invalidateLoanManagementCache } = await import("./get-loan-management-data.action");
+    await invalidateLoanManagementCache();
+
     return { success: true, data: { loanId: loan.loanId } };
   } catch (err: any) {
     if (err?.message === "NEXT_REDIRECT" || err?.digest?.startsWith("NEXT_REDIRECT")) {

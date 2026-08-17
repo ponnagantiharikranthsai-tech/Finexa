@@ -124,8 +124,8 @@ export async function recordPaymentAction(
 
     const currentReceiptNo = `RC-${dateFormatted}-${String(createdIndex >= 0 ? createdIndex + 1 : allPayments.length).padStart(3, "0")}`;
 
-    return {
-      success: true,
+    const result = {
+      success: true as const,
       data: {
         documentId,
         receiptNumber: currentReceiptNo,
@@ -176,6 +176,11 @@ export async function recordPaymentAction(
         paymentsHistory,
       },
     };
+
+    const { invalidateLoanManagementCache } = await import("@/features/loans/actions/get-loan-management-data.action");
+    await invalidateLoanManagementCache();
+
+    return result;
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to record payment" };
   }

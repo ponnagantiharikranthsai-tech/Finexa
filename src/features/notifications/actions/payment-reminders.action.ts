@@ -30,10 +30,27 @@ export async function sendTestPushNotificationAction(): Promise<ActionResult<{ c
   }
 }
 
+let adminNotifCache: { data: any[]; timestamp: number } | null = null;
+const NOTIF_CACHE_TTL = 15000; // 15 seconds RAM cache
+
+export async function invalidateAdminNotifCache() {
+  adminNotifCache = null;
+}
+
 export async function getAdminNotificationsAction(overrideTodayStr?: string): Promise<ActionResult<any[]>> {
   try {
     await requireAuth();
+
+    if (!overrideTodayStr && adminNotifCache && Date.now() - adminNotifCache.timestamp < NOTIF_CACHE_TTL) {
+      return { success: true, data: adminNotifCache.data };
+    }
+
     const notifications = await paymentReminderRepository.getAdminNotifications(overrideTodayStr);
+
+    if (!overrideTodayStr) {
+      adminNotifCache = { data: notifications, timestamp: Date.now() };
+    }
+
     return { success: true, data: notifications };
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to fetch admin notifications" };

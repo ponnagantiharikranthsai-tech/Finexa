@@ -49,16 +49,22 @@ export async function middleware(request: NextRequest) {
 
   const isPublicPath = pathname === "/" || pathname === "/login" || pathname.startsWith("/apply/");
 
-  let user = null;
-  try {
-    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
-    user = supabaseUser || null;
-  } catch (error) {
-    user = null;
-  }
-
   const hasFinexaSession = request.cookies.has("finexa_session") && request.cookies.get("finexa_session")?.value === "true";
-  const isSessionValid = Boolean(user) || hasFinexaSession;
+  let isSessionValid = hasFinexaSession;
+  let user: { id: string; [key: string]: unknown } | null = hasFinexaSession ? { id: "finexa-admin-user" } : null;
+
+  // Only query Supabase Cloud Auth network API if local session cookie is NOT present
+  if (!isSessionValid) {
+    try {
+      const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+      user = (supabaseUser as any) || null;
+      if (user) {
+        isSessionValid = true;
+      }
+    } catch (error) {
+      user = null;
+    }
+  }
 
   // 2. Unauthenticated user attempting to access ANY protected page -> Redirect to /login
   if (!isSessionValid && !isPublicPath) {

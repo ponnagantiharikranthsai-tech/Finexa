@@ -31,21 +31,12 @@ export async function getLoanManagementDataAction(): Promise<ActionResult<LoanMa
     const loans = await loanRepository.findAllManagement();
 
     const data = loans.map((loan) => {
-      let panDecrypted = "";
-      let aadhaarDecrypted = "";
-      try {
-        panDecrypted = decrypt(loan.borrower.panEncrypted);
-        aadhaarDecrypted = decrypt(loan.borrower.aadhaarEncrypted);
-      } catch (e) {
-        panDecrypted = "DECRYPTION_ERROR";
-        aadhaarDecrypted = "DECRYPTION_ERROR";
-      }
       return {
         ...loan,
         borrower: {
           ...loan.borrower,
-          panDecrypted,
-          aadhaarDecrypted,
+          panDecrypted: "",
+          aadhaarDecrypted: "",
         },
       };
     });

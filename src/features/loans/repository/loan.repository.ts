@@ -51,6 +51,11 @@ export class LoanRepository {
     });
 
     for (const loan of loans) {
+      if (loan.status === "closed") {
+        balanceMap.set(loan.loanId, 0);
+        continue;
+      }
+
       const totalPayments = paymentsMap.get(loan.loanId) || 0;
       const periods = calculatePeriods(loan.dateGiven, loan.dueDate);
       const monthlyInterest = calculateMonthlyInterest(Number(loan.principal), Number(loan.interestRate));

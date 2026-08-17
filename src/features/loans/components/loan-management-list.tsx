@@ -433,6 +433,20 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       ]);
       if (res.success && res.data) {
         setExtraDetails(res.data);
+        if (res.data.panDecrypted || res.data.aadhaarDecrypted) {
+          setSelectedLoan((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  borrower: {
+                    ...prev.borrower,
+                    panDecrypted: res.data.panDecrypted || prev.borrower.panDecrypted,
+                    aadhaarDecrypted: res.data.aadhaarDecrypted || prev.borrower.aadhaarDecrypted,
+                  },
+                }
+              : prev
+          );
+        }
       } else {
         toast.error("Failed to load payment history ledger.");
       }

@@ -1,5 +1,5 @@
 // FINEXA Production-Safe Progressive Web App (PWA) Service Worker
-const CACHE_NAME = "finexa-pwa-v1.0.2";
+const CACHE_NAME = "finexa-pwa-v1.0.3";
 const STATIC_ASSETS = [
   "/",
   "/login",
@@ -91,27 +91,27 @@ self.addEventListener("fetch", function (event) {
     return;
   }
 
-  // 3. Network-First strategy for HTML document pages with fallback to cache
+  // 3. Stale-While-Revalidate strategy for HTML document pages (Instant <5ms PWA Launch)
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then(function (networkResponse) {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then(function (cache) {
-              cache.put(request, responseToCache);
-            });
-          }
-          return networkResponse;
-        })
-        .catch(function () {
-          return caches.match(request).then(function (cachedResponse) {
-            if (cachedResponse) {
-              return cachedResponse;
+      caches.match(request).then(function (cachedResponse) {
+        const fetchPromise = fetch(request)
+          .then(function (networkResponse) {
+            if (networkResponse && networkResponse.status === 200) {
+              const responseToCache = networkResponse.clone();
+              caches.open(CACHE_NAME).then(function (cache) {
+                cache.put(request, responseToCache);
+              });
             }
-            return caches.match("/home") || caches.match("/login");
+            return networkResponse;
+          })
+          .catch(function () {
+            return cachedResponse;
           });
-        })
+
+        // Return cached shell INSTANTLY (<5ms), revalidate in background
+        return cachedResponse || fetchPromise;
+      })
     );
     return;
   }

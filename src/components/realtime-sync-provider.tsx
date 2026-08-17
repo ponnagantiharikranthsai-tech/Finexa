@@ -96,52 +96,56 @@ export function RealtimeSyncProvider({ children }: { children: React.ReactNode }
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
-    // 3. Supabase Realtime Database Subscriptions
-    const client = getSupabaseClient();
-    if (!client) return;
+    // 3. Deferred Supabase Realtime Database Subscriptions (Async non-blocking)
+    let channel: any = null;
+    const timer = setTimeout(() => {
+      const client = getSupabaseClient();
+      if (!client) return;
 
-    const channel = client
-      .channel("finexa-realtime-db")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public" },
-        (payload) => {
-          console.log("Realtime DB Broadcast payload:", payload);
-          
-          // Re-fetch all dynamic Next.js server components in-place
-          router.refresh();
+      channel = client
+        .channel("finexa-realtime-db")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public" },
+          (payload) => {
+            console.log("Realtime DB Broadcast payload:", payload);
+            router.refresh();
 
-          // Alert admin of specific changes
-          const table = payload.table;
-          const event = payload.eventType;
+            const table = payload.table;
+            const event = payload.eventType;
 
-          if (table && event) {
-            let message = "";
-            if (table === "loans") {
-              message = event === "INSERT" ? "A new loan record has been registered." : "Loan details updated.";
-            } else if (table === "borrowers") {
-              message = event === "INSERT" ? "A new borrower profile has been created." : "Borrower details updated.";
-            } else if (table === "loan_applications") {
-              message = event === "INSERT" ? "A customer completed their loan application KYC!" : "Application status updated.";
-            } else if (table === "payments") {
-              message = "A new repayment was processed.";
-            }
+            if (table && event) {
+              let message = "";
+              if (table === "loans") {
+                message = event === "INSERT" ? "A new loan record has been registered." : "Loan details updated.";
+              } else if (table === "borrowers") {
+                message = event === "INSERT" ? "A new borrower profile has been created." : "Borrower details updated.";
+              } else if (table === "loan_applications") {
+                message = event === "INSERT" ? "A customer completed their loan application KYC!" : "Application status updated.";
+              } else if (table === "payments") {
+                message = "A new repayment was processed.";
+              }
 
-            if (message) {
-              toast.info(message, {
-                description: "Synchronized in real-time.",
-                duration: 3500,
-              });
+              if (message) {
+                toast.info(message, {
+                  description: "Synchronized in real-time.",
+                  duration: 3500,
+                });
+              }
             }
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
+    }, 1000);
 
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
-      client.removeChannel(channel);
+      clearTimeout(timer);
+      if (channel) {
+        const client = getSupabaseClient();
+        client?.removeChannel(channel);
+      }
     };
   }, [router]);
 

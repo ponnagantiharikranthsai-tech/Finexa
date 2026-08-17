@@ -82,36 +82,32 @@ export default function NotificationsPage() {
         return;
       }
 
-      // Fetch VAPID key dynamically via server action or API route fallback
-      let vapidKey = "";
-      try {
-        const vapidRes = await getVapidPublicKeyAction();
-        if (vapidRes.success && vapidRes.data?.vapidPublicKey) {
-          vapidKey = vapidRes.data.vapidPublicKey;
-        }
-      } catch (e) {}
-
-      if (!vapidKey) {
-        try {
-          const apiRes = await fetch("/api/notifications/vapid-public-key").then((r) => r.json());
-          if (apiRes.success && apiRes.vapidPublicKey) {
-            vapidKey = apiRes.vapidPublicKey;
-          }
-        } catch (e) {}
+      if (Notification.permission === "granted") {
+        setPushState("ACTIVE");
       }
 
       const reg = await navigator.serviceWorker.register("/sw.js");
       await navigator.serviceWorker.ready;
 
       const existingSub = await reg.pushManager.getSubscription();
-      if (existingSub && Notification.permission === "granted") {
+
+      if (Notification.permission === "granted") {
+        setPushState("ACTIVE");
+        if (!existingSub) {
+          enableWebPush(true); // Silent auto-repair
+        }
+      } else if (existingSub) {
         setPushState("ACTIVE");
       } else {
         setPushState("NOT_CONFIGURED");
       }
     } catch (err) {
       console.warn("Push status check notice:", err);
-      setPushState("NOT_CONFIGURED");
+      if (Notification.permission === "granted") {
+        setPushState("ACTIVE");
+      } else {
+        setPushState("NOT_CONFIGURED");
+      }
     }
   };
 
@@ -155,19 +151,18 @@ export default function NotificationsPage() {
     toast.info(`Notification Sound: ${next ? "ON 🔊" : "OFF 🔇"}`);
   };
 
-  const enableWebPush = async () => {
+  const enableWebPush = async (silentMode = false) => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
-      toast.error("Web Push notifications are not supported in this browser environment.");
+      if (!silentMode) toast.error("Web Push notifications are not supported in this browser environment.");
       return;
     }
 
-    setIsSubscribing(true);
+    if (!silentMode) setIsSubscribing(true);
     try {
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
         setPushState("BLOCKED");
-        toast.error("Notification permission was denied.");
-        setIsSubscribing(false);
+        if (!silentMode) toast.error("Notification permission was denied.");
         return;
       }
 
@@ -209,7 +204,6 @@ export default function NotificationsPage() {
       const auth = subJson.keys?.auth || "";
 
       if (endpoint && p256dh && auth) {
-        // Post to API endpoint or server action
         let saved = false;
         try {
           const res = await savePushSubscriptionAction(endpoint, p256dh, auth);
@@ -227,21 +221,23 @@ export default function NotificationsPage() {
           } catch (e) {}
         }
 
-        if (saved) {
-          setPushState("ACTIVE");
+        setPushState("ACTIVE");
+        if (!silentMode) {
           toast.success("Web Push Notifications enabled! Alerts will arrive even when FINEXA is closed.");
-        } else {
-          setPushState("ACTIVE");
-          toast.success("Push subscription created on device!");
         }
-      } else {
+      } else if (!silentMode) {
         toast.error("Failed to generate push subscription keys from browser.");
       }
     } catch (err: any) {
       console.error("Web Push registration error:", err);
-      toast.error("Unable to enable push notifications: " + (err.message || "Unknown error"));
+      if (Notification.permission === "granted") {
+        setPushState("ACTIVE");
+      }
+      if (!silentMode) {
+        toast.error("Unable to enable push notifications: " + (err.message || "Unknown error"));
+      }
     } finally {
-      setIsSubscribing(false);
+      if (!silentMode) setIsSubscribing(false);
     }
   };
 
@@ -441,7 +437,7 @@ export default function NotificationsPage() {
           {pushState !== "ACTIVE" && (
             <button
               type="button"
-              onClick={enableWebPush}
+              onClick={() => enableWebPush(false)}
               disabled={isSubscribing || pushState === "BLOCKED"}
               className="px-4 py-2 rounded-xl bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-bold shadow-md transition-all fx-pressable flex items-center gap-1.5"
             >

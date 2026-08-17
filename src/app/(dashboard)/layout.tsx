@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { logoutAction } from "@/features/auth/actions/logout.action";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationCenter } from "@/components/notification-center";
+import { PushSubscriptionListener } from "@/components/push-subscription-listener";
 import {
   Dialog,
   DialogContent,
@@ -348,7 +349,7 @@ export default function DashboardLayout({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
+      <PushSubscriptionListener />
     </div>
     </DataCacheProvider>
   );

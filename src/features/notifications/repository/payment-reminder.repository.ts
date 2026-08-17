@@ -237,9 +237,16 @@ export const paymentReminderRepository = {
         endpoint,
         p256dh,
         auth,
-        userId: userId || null,
+        userId: userId || "admin-user",
         createdAt: new Date(),
-      }).onConflictDoNothing();
+      }).onConflictDoUpdate({
+        target: pushSubscriptionsTable.endpoint,
+        set: {
+          p256dh,
+          auth,
+          userId: userId || "admin-user",
+        },
+      });
     } catch (e: any) {
       console.error("Error saving push subscription:", e.message);
     }

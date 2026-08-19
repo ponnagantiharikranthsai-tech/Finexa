@@ -33,6 +33,34 @@ export type DashboardStats = {
   dueTodayCount: number;
 };
 
+let isLoanNotesColumnInitialized = false;
+
+export async function ensureLoanNotesColumnAndMigrate(): Promise<void> {
+  if (isLoanNotesColumnInitialized) return;
+  try {
+    const statements = [
+      `ALTER TABLE loans ADD COLUMN IF NOT EXISTS internal_notes TEXT;`,
+      `ALTER TABLE loans ADD COLUMN IF NOT EXISTS internal_notes_updated_at TIMESTAMPTZ;`,
+      `UPDATE loans
+       SET internal_notes = borrowers.internal_notes,
+           internal_notes_updated_at = COALESCE(borrowers.internal_notes_updated_at, NOW())
+       FROM borrowers
+       WHERE loans.borrower_id = borrowers.borrower_id
+         AND loans.internal_notes IS NULL
+         AND borrowers.internal_notes IS NOT NULL;`
+    ];
+
+    for (const stmt of statements) {
+      try {
+        await db.execute(sql.raw(stmt));
+      } catch (e) {}
+    }
+    isLoanNotesColumnInitialized = true;
+  } catch (err: any) {
+    console.error("Error initializing loan internal_notes column & migration:", err.message);
+  }
+}
+
 export class LoanRepository {
   async getOutstandingBalancesForLoans(loans: Loan[]): Promise<Map<string, number>> {
     const loanIds = loans.map(l => l.loanId);
@@ -95,6 +123,7 @@ export class LoanRepository {
   }
 
   async findById(id: string): Promise<LoanWithBorrower | null> {
+    await ensureLoanNotesColumnAndMigrate();
     const [result] = await db
       .select({
         loan: loansTable,
@@ -113,8 +142,16 @@ export class LoanRepository {
       Number(result.loan.interestRate)
     );
 
+    const effectiveNotes = result.loan.internalNotes !== null && result.loan.internalNotes !== undefined
+      ? result.loan.internalNotes
+      : result.borrower.internalNotes;
+
+    const effectiveNotesUpdatedAt = result.loan.internalNotesUpdatedAt || result.borrower.internalNotesUpdatedAt;
+
     return {
       ...result.loan,
+      internalNotes: effectiveNotes,
+      internalNotesUpdatedAt: effectiveNotesUpdatedAt,
       borrower: result.borrower,
       outstandingBalance,
       monthlyInterestAmount,
@@ -360,6 +397,7 @@ export class LoanRepository {
   }
 
   async findAllManagement(): Promise<LoanWithBorrower[]> {
+    await ensureLoanNotesColumnAndMigrate();
     const rawLoans = await db
       .select({
         loan: loansTable,
@@ -380,8 +418,17 @@ export class LoanRepository {
           Number(item.loan.principal),
           Number(item.loan.interestRate)
         );
+
+        const effectiveNotes = item.loan.internalNotes !== null && item.loan.internalNotes !== undefined
+          ? item.loan.internalNotes
+          : item.borrower.internalNotes;
+
+        const effectiveNotesUpdatedAt = item.loan.internalNotesUpdatedAt || item.borrower.internalNotesUpdatedAt;
+
         data.push({
           ...item.loan,
+          internalNotes: effectiveNotes,
+          internalNotesUpdatedAt: effectiveNotesUpdatedAt,
           borrower: item.borrower,
           outstandingBalance,
           monthlyInterestAmount,

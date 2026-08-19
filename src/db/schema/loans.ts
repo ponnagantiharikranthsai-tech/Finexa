@@ -50,6 +50,9 @@ export const loansTable = pgTable("loans", {
   penaltyAmount: numeric("penalty_amount", { precision: 12, scale: 2 })
     .default("0"),
 
+  internalNotes: text("internal_notes"),
+  internalNotesUpdatedAt: timestamp("internal_notes_updated_at", { withTimezone: true }),
+
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .default(sql`now()`),

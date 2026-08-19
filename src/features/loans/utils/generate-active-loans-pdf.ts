@@ -230,7 +230,7 @@ export async function generateActiveLoansPdf(
   processedCards.forEach((item, index) => {
     const loan = item.loan;
     const borrower = item.borrower;
-    const notesText = (borrower as any).internalNotes || (loan as any).notes || "";
+    const notesText = (loan as any).internalNotes || (borrower as any).internalNotes || (loan as any).notes || "";
 
     // Wrap note lines for width = 170mm
     doc.setFontSize(7.5);

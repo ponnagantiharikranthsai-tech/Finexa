@@ -396,12 +396,27 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   }, [loans, deferredSearch, statusFilter, sortBy, todayStr]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
-  const handleSaveNotes = async (borrowerId: string, textToSave: string) => {
+  const handleSaveNotes = async (targetId: string, textToSave: string) => {
     if (textToSave === originalNotesText) return;
 
-    const res = await saveInternalNotesAction(borrowerId, textToSave);
+    const res = await saveInternalNotesAction(targetId, textToSave);
     if (res.success) {
       setOriginalNotesText(textToSave);
+      const now = new Date();
+      setLoans((prevLoans) =>
+        prevLoans.map((l) =>
+          l.loanId === targetId
+            ? { ...l, internalNotes: textToSave, internalNotesUpdatedAt: now }
+            : l
+        )
+      );
+      if (selectedLoan && selectedLoan.loanId === targetId) {
+        setSelectedLoan((prev) =>
+          prev
+            ? { ...prev, internalNotes: textToSave, internalNotesUpdatedAt: now }
+            : prev
+        );
+      }
       toast.success("Notes saved successfully.");
     } else {
       toast.error(res.error || "Failed to save notes.");
@@ -410,15 +425,18 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
   const handleDetailsClose = () => {
     if (selectedLoan && notesText !== originalNotesText) {
-      handleSaveNotes(selectedLoan.borrowerId, notesText);
+      handleSaveNotes(selectedLoan.loanId, notesText);
     }
     setDetailsOpen(false);
   };
 
   const handleViewDetails = async (loan: LoanManagementDetailResult) => {
     setSelectedLoan(loan);
-    setNotesText((loan.borrower as any).internalNotes || "");
-    setOriginalNotesText((loan.borrower as any).internalNotes || "");
+    const existingNotes = (loan as any).internalNotes !== undefined && (loan as any).internalNotes !== null
+      ? (loan as any).internalNotes
+      : (loan.borrower as any).internalNotes || "";
+    setNotesText(existingNotes);
+    setOriginalNotesText(existingNotes);
     setPenaltyRateInput(((loan as any).penaltyRate || 20).toString());
     setDetailsOpen(true);
     setDetailsLoading(true);
@@ -1820,14 +1838,14 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                     placeholder={`Example:\nCustomer requested 5 more days.\nInterest paid on 20 July 2026.\nPromised to clear principal next month.\nVisited customer's home.\nReminder sent via WhatsApp.`}
                     value={notesText}
                     onChange={(e) => setNotesText(e.target.value)}
-                    onBlur={() => handleSaveNotes(selectedLoan.borrowerId, notesText)}
+                    onBlur={() => handleSaveNotes(selectedLoan.loanId, notesText)}
                     className="w-full rounded-2xl bg-black/15 dark:bg-black/35 border border-border/50 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary p-4 text-sm font-medium transition-all"
                   />
                   <div className="flex items-center justify-between">
                     <div className="text-[10px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
-                      {(selectedLoan.borrower as any).internalNotesUpdatedAt ? (
+                      {((selectedLoan as any).internalNotesUpdatedAt || (selectedLoan.borrower as any).internalNotesUpdatedAt) ? (
                         <>
-                          <span><strong>Last Updated:</strong> {new Date((selectedLoan.borrower as any).internalNotesUpdatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} at {new Date((selectedLoan.borrower as any).internalNotesUpdatedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
+                          <span><strong>Last Updated:</strong> {new Date((selectedLoan as any).internalNotesUpdatedAt || (selectedLoan.borrower as any).internalNotesUpdatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} at {new Date((selectedLoan as any).internalNotesUpdatedAt || (selectedLoan.borrower as any).internalNotesUpdatedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
                           <span><strong>Updated By:</strong> Admin</span>
                         </>
                       ) : (
@@ -1837,7 +1855,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
                     <div className="flex items-center gap-2">
                       <Button
-                        onClick={() => handleSaveNotes(selectedLoan.borrowerId, notesText)}
+                        onClick={() => handleSaveNotes(selectedLoan.loanId, notesText)}
                         className="h-9 px-4 rounded-xl text-xs font-bold fx-brand-gradient border-0 text-white fx-cta-glow px-4"
                       >
                         Save Notes
@@ -1846,7 +1864,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                         variant="outline"
                         onClick={async () => {
                           setNotesText("");
-                          await handleSaveNotes(selectedLoan.borrowerId, "");
+                          await handleSaveNotes(selectedLoan.loanId, "");
                         }}
                         className="h-9 px-4 rounded-xl text-xs font-bold border-border"
                       >

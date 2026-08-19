@@ -81,15 +81,23 @@ export function PwaRegister() {
       e.preventDefault();
       setDeferredPrompt(e);
 
-      // Check conditions: NOT borrower route, NOT standalone PWA, NOT already seen
+      // Show card if NOT borrower route, NOT standalone PWA, and NOT dismissed by user
       if (!isBorrowerRoute && !isStandaloneMode() && !hasSeenInstallCard()) {
         setShowInstallBanner(true);
       }
     };
 
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    // 3. Native App Installed Event Listener
+    const handleAppInstalled = () => {
+      setDeferredPrompt(null);
+      dismissInstallCard();
+      toast.success("FINEXA App installed successfully!");
+    };
 
-    // 3. Online/Offline Network Listeners
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    // 4. Online/Offline Network Listeners
     const handleOffline = () => {
       if (!isBorrowerRoute) {
         toast.error("Internet connection lost. Financial actions require an active connection.", {
@@ -113,21 +121,11 @@ export function PwaRegister() {
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
     };
-  }, [isBorrowerRoute, isStandaloneMode, hasSeenInstallCard]);
-
-  // 5-Second Auto-Dismiss Timer
-  useEffect(() => {
-    if (!showInstallBanner) return;
-
-    const timer = setTimeout(() => {
-      dismissInstallCard();
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [showInstallBanner, dismissInstallCard]);
+  }, [isBorrowerRoute, isStandaloneMode, hasSeenInstallCard, dismissInstallCard]);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) {
@@ -155,7 +153,10 @@ export function PwaRegister() {
   }
 
   return (
-    <div className="fixed bottom-20 md:bottom-6 left-4 right-4 md:left-auto md:right-6 z-50 max-w-sm rounded-2xl bg-[#17181D]/95 border border-[#FFD54A]/30 p-4 pt-3.5 shadow-2xl backdrop-blur-xl animate-in slide-in-from-bottom duration-300 relative">
+    <div
+      style={{ position: "fixed", bottom: "24px", right: "24px", zIndex: 9999 }}
+      className="max-w-sm rounded-2xl bg-[#17181D]/95 border border-[#FFD54A]/30 p-4 pt-3.5 shadow-2xl backdrop-blur-xl animate-in slide-in-from-bottom duration-300"
+    >
       {/* Top-Right Close Button */}
       <button
         type="button"

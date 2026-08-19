@@ -155,14 +155,26 @@ export function PwaRegister() {
   }
 
   return (
-    <div className="fixed bottom-20 md:bottom-6 left-4 right-4 md:left-auto md:right-6 z-50 max-w-sm rounded-2xl bg-[#17181D]/95 border border-[#FFD54A]/30 p-4 shadow-2xl backdrop-blur-xl animate-in slide-in-from-bottom duration-300">
-      <div className="flex items-center gap-3 relative">
+    <div className="fixed bottom-20 md:bottom-6 left-4 right-4 md:left-auto md:right-6 z-50 max-w-sm rounded-2xl bg-[#17181D]/95 border border-[#FFD54A]/30 p-4 pt-3.5 shadow-2xl backdrop-blur-xl animate-in slide-in-from-bottom duration-300 relative">
+      {/* Top-Right Close Button */}
+      <button
+        type="button"
+        onClick={dismissInstallCard}
+        className="absolute top-2.5 right-2.5 h-7 w-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-white bg-white/5 hover:bg-white/15 active:bg-red-500 active:text-white transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD54A] shrink-0"
+        title="Close install prompt"
+        aria-label="Close install prompt"
+      >
+        <X className="h-4 w-4" />
+      </button>
+
+      {/* Card Body */}
+      <div className="flex items-center gap-3 pr-6">
         <img
           src="/icon-192.png"
           alt="Finexa App Icon"
           className="h-10 w-10 object-contain rounded-xl bg-white border border-border/50 shrink-0 shadow-sm"
         />
-        <div className="flex-1 min-w-0 text-left pr-6">
+        <div className="flex-1 min-w-0 text-left">
           <p className="text-xs font-black uppercase tracking-wider text-white">Install FINEXA App</p>
           <p className="text-[10px] text-zinc-400 truncate">Fast standalone access on your phone</p>
         </div>
@@ -173,17 +185,6 @@ export function PwaRegister() {
           className="flex items-center gap-1.5 h-8 px-3 rounded-xl bg-[#FFD54A] text-[#0B0F19] text-xs font-extrabold uppercase tracking-wider hover:bg-[#FFE082] transition-colors shrink-0 shadow-md cursor-pointer"
         >
           <Download className="h-3.5 w-3.5" /> Install
-        </button>
-
-        {/* Manual Dismiss Close Button */}
-        <button
-          type="button"
-          onClick={dismissInstallCard}
-          className="absolute -top-1 -right-1 p-1 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-          title="Close install card"
-          aria-label="Close install card"
-        >
-          <X className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>

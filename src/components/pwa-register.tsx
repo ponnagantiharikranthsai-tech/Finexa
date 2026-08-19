@@ -1,25 +1,53 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { toast } from "sonner";
-import { Download, WifiOff, CheckCircle2 } from "lucide-react";
+import { Download, WifiOff, CheckCircle2, X } from "lucide-react";
 
 export function PwaRegister() {
   const pathname = usePathname();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
 
-  // Identify borrower-facing application routes (e.g., /apply/[code])
+  // 1. Identify borrower-facing routes (e.g., /apply/[code])
   const isBorrowerRoute = pathname?.startsWith("/apply");
 
+  // 2. Helper to check if app is running in installed standalone PWA mode
+  const isStandaloneMode = useCallback(() => {
+    if (typeof window === "undefined") return false;
+    return (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as any).standalone === true ||
+      document.referrer.includes("android-app://")
+    );
+  }, []);
+
+  // 3. Helper to check if user has already seen/dismissed the install card
+  const hasSeenInstallCard = useCallback(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      return localStorage.getItem("finexa_install_card_seen") === "true";
+    } catch (e) {
+      return false;
+    }
+  }, []);
+
+  // 4. Dismiss card & store flag in localStorage permanently
+  const dismissInstallCard = useCallback(() => {
+    setShowInstallBanner(false);
+    try {
+      localStorage.setItem("finexa_install_card_seen", "true");
+    } catch (e) {}
+  }, []);
+
+  // Service Worker Registration & Event Listeners
   useEffect(() => {
     // 1. Service Worker Registration
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
       navigator.serviceWorker
         .register("/sw.js")
         .then((reg) => {
-          // Check for service worker updates
           reg.onupdatefound = () => {
             const installingWorker = reg.installing;
             if (installingWorker) {
@@ -48,11 +76,13 @@ export function PwaRegister() {
         });
     }
 
-    // 2. Android Chrome PWA Install Prompt Listener (Admin/Owner routes ONLY)
+    // 2. Android Chrome PWA Install Prompt Listener
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      if (!isBorrowerRoute) {
+
+      // Check conditions: NOT borrower route, NOT standalone PWA, NOT already seen
+      if (!isBorrowerRoute && !isStandaloneMode() && !hasSeenInstallCard()) {
         setShowInstallBanner(true);
       }
     };
@@ -86,34 +116,57 @@ export function PwaRegister() {
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
     };
-  }, [isBorrowerRoute]);
+  }, [isBorrowerRoute, isStandaloneMode, hasSeenInstallCard]);
+
+  // 5-Second Auto-Dismiss Timer
+  useEffect(() => {
+    if (!showInstallBanner) return;
+
+    const timer = setTimeout(() => {
+      dismissInstallCard();
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [showInstallBanner, dismissInstallCard]);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") {
-      toast.success("FINEXA App installed successfully!");
+    if (!deferredPrompt) {
+      dismissInstallCard();
+      return;
     }
-    setDeferredPrompt(null);
-    setShowInstallBanner(false);
+
+    try {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === "accepted") {
+        toast.success("FINEXA App installed successfully!");
+      }
+    } catch (e) {
+      console.warn("PWA install prompt error:", e);
+    } finally {
+      setDeferredPrompt(null);
+      dismissInstallCard();
+    }
   };
 
-  // NEVER render install banner on borrower application routes (/apply/...)
-  if (isBorrowerRoute || !showInstallBanner) return null;
+  // Guard: NEVER render on borrower application routes, installed PWA, or after dismissal
+  if (isBorrowerRoute || isStandaloneMode() || !showInstallBanner) {
+    return null;
+  }
 
   return (
     <div className="fixed bottom-20 md:bottom-6 left-4 right-4 md:left-auto md:right-6 z-50 max-w-sm rounded-2xl bg-[#17181D]/95 border border-[#FFD54A]/30 p-4 shadow-2xl backdrop-blur-xl animate-in slide-in-from-bottom duration-300">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 relative">
         <img
           src="/icon-192.png"
           alt="Finexa App Icon"
           className="h-10 w-10 object-contain rounded-xl bg-white border border-border/50 shrink-0 shadow-sm"
         />
-        <div className="flex-1 min-w-0 text-left">
+        <div className="flex-1 min-w-0 text-left pr-6">
           <p className="text-xs font-black uppercase tracking-wider text-white">Install FINEXA App</p>
           <p className="text-[10px] text-zinc-400 truncate">Fast standalone access on your phone</p>
         </div>
+
         <button
           type="button"
           onClick={handleInstallClick}
@@ -121,8 +174,18 @@ export function PwaRegister() {
         >
           <Download className="h-3.5 w-3.5" /> Install
         </button>
+
+        {/* Manual Dismiss Close Button */}
+        <button
+          type="button"
+          onClick={dismissInstallCard}
+          className="absolute -top-1 -right-1 p-1 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+          title="Close install card"
+          aria-label="Close install card"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
       </div>
     </div>
   );
 }
-

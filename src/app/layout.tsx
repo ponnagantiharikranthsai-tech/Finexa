@@ -58,6 +58,8 @@ export const metadata: Metadata = {
   },
 };
 
+import { StartupPerformanceTracker } from "@/components/startup-performance-tracker";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -77,6 +79,7 @@ export default function RootLayout({
               <SessionTimeoutProvider>
                 {children}
                 <PwaRegister />
+                <StartupPerformanceTracker />
               </SessionTimeoutProvider>
             </RealtimeSyncProvider>
           </ErrorBoundary>

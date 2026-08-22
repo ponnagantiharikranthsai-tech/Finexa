@@ -614,4 +614,49 @@ export const paymentReminderRepository = {
 
     return rows;
   },
+
+  async processScheduledWebPushNotifications() {
+    await ensureReminderTablesExist();
+    const notifications = await this.getAdminNotifications();
+
+    let pushedCount = 0;
+    for (const notif of notifications) {
+      if (!notif.dedupKey) continue;
+
+      let pushTitle = "FINEXA — Payment Reminder";
+      let pushBody = notif.message;
+      const payableFormatted = Number(notif.currentTotalPayable || notif.principal || 0).toLocaleString("en-IN");
+
+      if (notif.reminderType === "overdue") {
+        pushTitle = "FINEXA — Payment Overdue 🚨";
+        pushBody = `${notif.borrowerName}'s payment is overdue by ${notif.overdueDays || 1} days. Total payable: ₹${payableFormatted}.`;
+      } else if (notif.reminderType === "due_today") {
+        pushTitle = "FINEXA — Payment Due Today ⏰";
+        pushBody = `${notif.borrowerName}'s payment is due today. Total payable: ₹${payableFormatted}.`;
+      } else if (notif.reminderType === "3d") {
+        pushTitle = "FINEXA — Payment Due in 3 Days ⏳";
+        pushBody = `${notif.borrowerName}'s payment is due in 3 days. Total payable: ₹${payableFormatted}.`;
+      } else if (notif.reminderType === "10d") {
+        pushTitle = "FINEXA — Payment Due in 10 Days 📅";
+        pushBody = `${notif.borrowerName}'s payment is due on ${notif.dueDate}. Total payable: ₹${payableFormatted}.`;
+      } else if (notif.reminderType === "application_submitted") {
+        pushTitle = "FINEXA — New Loan Application Received 📝";
+        pushBody = `${notif.borrowerName} has submitted a new loan application.`;
+      }
+
+      const pushed = await sendWebPushToAllSubscriptions(notif.dedupKey, {
+        title: pushTitle,
+        body: pushBody,
+        icon: "/icon-192.png",
+        badge: "/badge.png",
+        url: `/notifications?highlight=${notif.dedupKey}`,
+        loanId: notif.loanId,
+        tag: notif.dedupKey,
+      });
+
+      if (pushed) pushedCount++;
+    }
+
+    return { total: notifications.length, pushedCount };
+  },
 };

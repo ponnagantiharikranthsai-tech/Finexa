@@ -97,6 +97,23 @@ export async function recordPaymentAction(
       outstandingBalance: remainingBalance,
     });
 
+    // Dispatch Web Push notification to all active devices when payment is recorded
+    try {
+      const payDedupKey = `notif_PAY_${createdPayment.paymentId || (createdPayment as any).id}_${Date.now()}`;
+      const payTitle = isFullyCleared ? "FINEXA — Full Payment Received 💳" : "FINEXA — Partial Payment Received 💳";
+      const payBody = `Received ₹${Number(amount).toLocaleString("en-IN")} for ${borrower.name}'s loan. ${isFullyCleared ? "Loan is now fully cleared & closed." : `Remaining balance: ₹${remainingBalance.toLocaleString("en-IN")}.`}`;
+
+      const { sendWebPushToAllSubscriptions } = await import("@/features/notifications/utils/web-push");
+      await sendWebPushToAllSubscriptions(payDedupKey, {
+        title: payTitle,
+        body: payBody,
+        icon: "/icon-192.png",
+        badge: "/badge.png",
+        url: `/loans/${loanId}`,
+        tag: payDedupKey,
+      });
+    } catch (e) {}
+
     // Compute cumulative history for every payment row
     let accumPaid = 0;
     const paymentsHistory = allPayments.map((p, idx) => {

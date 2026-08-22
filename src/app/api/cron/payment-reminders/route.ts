@@ -13,19 +13,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Unauthorized cron request" }, { status: 401 });
     }
 
-    const notifications = await paymentReminderRepository.getAdminNotifications();
+    // Server-Side Background Execution: Process scheduled loan cycles and send Web Push over FCM to all active subscriptions
+    const result = await paymentReminderRepository.processScheduledWebPushNotifications();
 
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
-      activeNotificationsCount: notifications.length,
-      notifications: notifications.map((n) => ({
-        loanId: n.loanId,
-        borrowerName: n.borrowerName,
-        reminderType: n.reminderType,
-        title: n.title,
-        dueDate: n.dueDate,
-      })),
+      activeNotificationsCount: result.total,
+      pushedWebPushCount: result.pushedCount,
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || "Failed cron execution" }, { status: 500 });

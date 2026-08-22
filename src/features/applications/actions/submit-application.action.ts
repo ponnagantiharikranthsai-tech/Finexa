@@ -76,23 +76,24 @@ export async function submitLoanApplicationAction(
     console.log(`[APPLICATION SUBMISSION SUCCESS] Application ${app.applicationId} saved for ${name}.`);
     console.log(`[INSTANT WEB PUSH] Dispatching background Push alert to registered admin devices...`);
 
-    // Fire Web Push asynchronously in background so response to borrower is near-instant
-    sendWebPushToAllSubscriptions(dedupKey, {
-      title: `🔔 ${toUnicodeBold("NEW LOAN APPLICATION")}`,
-      body: formatExecutivePushBody(name, principalFormatted, interestTypeStr, duration),
-      icon: "/icon-192.png",
-      badge: "/badge.png",
-      url: `/applications`,
-      tag: dedupKey,
-      actions: [
-        { action: "review", title: "Review Application" },
-        { action: "dismiss", title: "Dismiss" },
-      ],
-    }).then((pushSuccess) => {
+    // Await Web Push delivery to ensure Vercel serverless function completes FCM push
+    try {
+      const pushSuccess = await sendWebPushToAllSubscriptions(dedupKey, {
+        title: `🔔 ${toUnicodeBold("NEW LOAN APPLICATION")}`,
+        body: formatExecutivePushBody(name, principalFormatted, interestTypeStr, duration),
+        icon: "/icon-192.png",
+        badge: "/badge.png",
+        url: `/applications`,
+        tag: dedupKey,
+        actions: [
+          { action: "review", title: "Review Application" },
+          { action: "dismiss", title: "Dismiss" },
+        ],
+      });
       console.log(`[INSTANT WEB PUSH RESULT] Web Push status for ${name}: ${pushSuccess ? "DELIVERED" : "FAILED / NO SUBSCRIPTIONS"}`);
-    }).catch((pushErr) => {
+    } catch (pushErr: any) {
       console.error("[INSTANT WEB PUSH ERROR] Failed to send Web Push alert:", pushErr?.message || pushErr);
-    });
+    }
 
     // Notify the admin by generating an audit log
     await auditLog("application_submitted", "loan_application", app.applicationId, {

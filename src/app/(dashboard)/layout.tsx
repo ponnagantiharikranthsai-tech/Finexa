@@ -43,13 +43,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
 
-  useEffect(() => {
-    router.prefetch("/home");
-    router.prefetch("/loan-management");
-    router.prefetch("/capital-management");
-    router.prefetch("/applications");
-    router.prefetch("/reports");
-  }, [router]);
+  // Nav items and routes load on user navigation / link interaction
 
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [isLoggingOut, startTransition] = useTransition();

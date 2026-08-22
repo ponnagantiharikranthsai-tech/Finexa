@@ -480,16 +480,18 @@ export const paymentReminderRepository = {
           categoryRank,
         });
 
-        // Trigger Web Push notification asynchronously if new cycle
-        sendWebPushToAllSubscriptions(dedupKey, {
-          title: pushTitle,
-          body: pushBody,
-          icon: "/logo-icon.png",
-          badge: "/logo-icon.png",
-          url: `/notifications?highlight=${dedupKey}`,
-          loanId: loan.loanId,
-          tag: dedupKey,
-        }).catch((err) => console.error("Web Push trigger error:", err));
+        // Trigger Web Push notification completely decoupled from critical read query path
+        setTimeout(() => {
+          sendWebPushToAllSubscriptions(dedupKey, {
+            title: pushTitle,
+            body: pushBody,
+            icon: "/logo-icon.png",
+            badge: "/logo-icon.png",
+            url: `/notifications?highlight=${dedupKey}`,
+            loanId: loan.loanId,
+            tag: dedupKey,
+          }).catch((err) => console.error("Web Push trigger error:", err));
+        }, 100);
       }
     }
 

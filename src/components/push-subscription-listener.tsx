@@ -103,8 +103,14 @@ export function PushSubscriptionListener() {
       }
     };
 
-    // Run 1.5 seconds after mount to prevent blocking initial render
-    const timer = setTimeout(syncPushSubscription, 1500);
+    // Run 4.0 seconds after mount in idle callback to guarantee zero impact on app startup
+    const timer = setTimeout(() => {
+      if ("requestIdleCallback" in window) {
+        (window as any).requestIdleCallback(syncPushSubscription);
+      } else {
+        syncPushSubscription();
+      }
+    }, 4000);
     return () => clearTimeout(timer);
   }, []);
 

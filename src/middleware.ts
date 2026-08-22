@@ -4,11 +4,16 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 1. Skip static assets, internal routes, public API endpoints, etc.
+  // 1. Skip static assets, internal routes, public API endpoints, PWA files, icons
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/static") ||
+    pathname === "/sw.js" ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/favicon.ico" ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml" ||
     pathname.includes(".")
   ) {
     return NextResponse.next();
@@ -53,10 +58,16 @@ export async function middleware(request: NextRequest) {
   let isSessionValid = hasFinexaSession;
   let user: { id: string; [key: string]: unknown } | null = hasFinexaSession ? { id: "finexa-admin-user" } : null;
 
-  // Only query Supabase Cloud Auth network API if local session cookie is NOT present
+  // Non-blocking network check: Max 1200ms timeout for cloud auth check to prevent 15s freezes on PWA startup
   if (!isSessionValid) {
     try {
-      const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+      const authPromise = supabase.auth.getUser();
+      const timeoutPromise = new Promise<{ data: { user: null } }>((resolve) =>
+        setTimeout(() => resolve({ data: { user: null } }), 1200)
+      );
+
+      const res = await Promise.race([authPromise, timeoutPromise]);
+      const supabaseUser = res.data?.user;
       user = (supabaseUser as any) || null;
       if (user) {
         isSessionValid = true;
@@ -83,6 +94,7 @@ export async function middleware(request: NextRequest) {
     url.pathname = "/home";
     const redirectResponse = NextResponse.redirect(url);
     redirectResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+    redirectResponse.headers.set("Pragma", "no-cache");
     supabaseResponse.cookies.getAll().forEach((c) => redirectResponse.cookies.set(c.name, c.value, c));
     return redirectResponse;
   }
@@ -107,6 +119,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

@@ -173,9 +173,13 @@ export function NotificationCenter() {
       });
     };
 
-    checkUnread();
+    // Defer initial notification count fetch slightly to prioritize main UI rendering
+    const timer = setTimeout(checkUnread, 800);
     const interval = setInterval(checkUnread, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, []);
 
   return (

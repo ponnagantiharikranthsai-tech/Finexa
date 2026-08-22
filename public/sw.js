@@ -1,15 +1,8 @@
 // FINEXA Production-Safe Progressive Web App (PWA) Service Worker
-const CACHE_NAME = "finexa-pwa-v1.0.3";
+const CACHE_NAME = "finexa-pwa-v1.0.5";
 const STATIC_ASSETS = [
   "/",
   "/login",
-  "/home",
-  "/loan-management",
-  "/loans",
-  "/borrowers",
-  "/applications",
-  "/reports",
-  "/capital-management",
   "/logo.png",
   "/logo-icon.png",
   "/icon-192.png",
@@ -20,7 +13,7 @@ const STATIC_ASSETS = [
   "/badge.png",
 ];
 
-// Install Event — Cache core static shell assets and skip waiting
+// Install Event — Cache public static shell assets and skip waiting
 self.addEventListener("install", function (event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function (cache) {
@@ -32,13 +25,14 @@ self.addEventListener("install", function (event) {
   self.skipWaiting();
 });
 
-// Activate Event — Clean up old caches and claim clients
+// Activate Event — Clean up obsolete caches and claim clients immediately
 self.addEventListener("activate", function (event) {
   event.waitUntil(
     caches.keys().then(function (cacheNames) {
       return Promise.all(
         cacheNames.map(function (cacheName) {
           if (cacheName !== CACHE_NAME) {
+            console.log("[SW ACTIVATE] Deleting obsolete PWA cache:", cacheName);
             return caches.delete(cacheName);
           }
         })
@@ -49,18 +43,18 @@ self.addEventListener("activate", function (event) {
   );
 });
 
-// Fetch Event — Production-safe caching strategies
+// Fetch Event — Safe network-first & fallback caching strategy (Zero ERR_FAILED)
 self.addEventListener("fetch", function (event) {
   const request = event.request;
   const url = new URL(request.url);
 
-  // 1. NEVER cache sensitive financial API endpoints or authentication routes (Network-Only)
+  // 1. NEVER cache API requests, Next.js data routes, or non-GET requests (Network-Only)
   if (
     url.pathname.startsWith("/api/") ||
     url.pathname.startsWith("/_next/data/") ||
     request.method !== "GET"
   ) {
-    return; // Pass directly to network without service worker caching
+    return;
   }
 
   // 2. Cache-First strategy for static images, icons, and fonts
@@ -91,27 +85,41 @@ self.addEventListener("fetch", function (event) {
     return;
   }
 
-  // 3. Stale-While-Revalidate strategy for HTML document pages (Instant <5ms PWA Launch)
+  // 3. Network-First strategy with Cache Fallback for Navigation (Guarantees clean HTTP redirects and zero ERR_FAILED)
   if (request.mode === "navigate") {
     event.respondWith(
-      caches.match(request).then(function (cachedResponse) {
-        const fetchPromise = fetch(request)
-          .then(function (networkResponse) {
-            if (networkResponse && networkResponse.status === 200) {
-              const responseToCache = networkResponse.clone();
-              caches.open(CACHE_NAME).then(function (cache) {
-                cache.put(request, responseToCache);
-              });
+      fetch(request)
+        .then(function (networkResponse) {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then(function (cache) {
+              cache.put(request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(function () {
+          // Offline Fallback — Try exact request, then /login, then /
+          return caches.match(request).then(function (cachedResponse) {
+            if (cachedResponse) {
+              return cachedResponse;
             }
-            return networkResponse;
-          })
-          .catch(function () {
-            return cachedResponse;
+            return caches.match("/login").then(function (loginCache) {
+              if (loginCache) {
+                return loginCache;
+              }
+              return caches.match("/").then(function (rootCache) {
+                return (
+                  rootCache ||
+                  new Response("FINEXA is currently offline.", {
+                    status: 503,
+                    headers: { "Content-Type": "text/plain" },
+                  })
+                );
+              });
+            });
           });
-
-        // Return cached shell INSTANTLY (<5ms), revalidate in background
-        return cachedResponse || fetchPromise;
-      })
+        })
     );
     return;
   }
@@ -125,9 +133,6 @@ self.addEventListener("push", function (event) {
     const payload = event.data.json();
     const title = payload.title || "FINEXA — Payment Reminder";
 
-    // Official FINEXA Notification Options
-    // 'icon' points to the official gold FINEXA logo (/icon-192.png) to replace grey 'F' fallback
-    // 'badge' points to the monochrome white alpha badge (/badge.png) for top-left header tinting
     const options = {
       body: payload.body || "You have a new loan payment notification.",
       icon: payload.icon || "/icon-192.png",

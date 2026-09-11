@@ -173,11 +173,8 @@ export async function ensureReminderTablesExist() {
       `CREATE INDEX IF NOT EXISTS idx_admin_notifications_dedup_key ON admin_notifications(dedup_key);`
     ];
 
-    for (const stmt of statements) {
-      try {
-        await db.execute(sql.raw(stmt));
-      } catch (e) {}
-    }
+    const batchSql = statements.join("\n");
+    await db.execute(sql.raw(batchSql)).catch(() => {});
     isTableInitialized = true;
   } catch (err: any) {
     console.error("Error initializing reminder tables:", err.message);
@@ -479,19 +476,6 @@ export const paymentReminderRepository = {
           paymentStatus: "UNPAID",
           categoryRank,
         });
-
-        // Trigger Web Push notification completely decoupled from critical read query path
-        setTimeout(() => {
-          sendWebPushToAllSubscriptions(dedupKey, {
-            title: pushTitle,
-            body: pushBody,
-            icon: "/logo-icon.png",
-            badge: "/logo-icon.png",
-            url: `/notifications?highlight=${dedupKey}`,
-            loanId: loan.loanId,
-            tag: dedupKey,
-          }).catch((err) => console.error("Web Push trigger error:", err));
-        }, 100);
       }
     }
 

@@ -1,5 +1,5 @@
 // FINEXA Production-Safe Progressive Web App (PWA) Service Worker
-const CACHE_NAME = "finexa-pwa-v1.0.5";
+const CACHE_NAME = "finexa-pwa-v1.0.6";
 const STATIC_ASSETS = [
   "/",
   "/login",
@@ -57,10 +57,13 @@ self.addEventListener("fetch", function (event) {
     return;
   }
 
-  // 2. Cache-First strategy for static images, icons, and fonts
+  // 2. Cache-First strategy for Next.js static chunks, styles, images, icons, and fonts
   if (
+    url.pathname.startsWith("/_next/static/") ||
     request.destination === "image" ||
     request.destination === "font" ||
+    request.destination === "style" ||
+    request.destination === "script" ||
     url.pathname.endsWith(".png") ||
     url.pathname.endsWith(".jpg") ||
     url.pathname.endsWith(".ico") ||

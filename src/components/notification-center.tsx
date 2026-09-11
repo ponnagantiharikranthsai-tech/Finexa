@@ -173,8 +173,16 @@ export function NotificationCenter() {
       });
     };
 
-    // Defer initial notification count fetch slightly to prioritize main UI rendering
-    const timer = setTimeout(checkUnread, 800);
+    // Defer initial notification count fetch to idle callback after initial UI interactivity
+    const scheduleCheck = () => {
+      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+        (window as any).requestIdleCallback(checkUnread);
+      } else {
+        checkUnread();
+      }
+    };
+
+    const timer = setTimeout(scheduleCheck, 2500);
     const interval = setInterval(checkUnread, 30000);
     return () => {
       clearTimeout(timer);
@@ -185,7 +193,7 @@ export function NotificationCenter() {
   return (
     <Link
       href="/notifications"
-      prefetch={true}
+      prefetch={false}
       className="relative p-2 rounded-full hover:bg-accent/40 text-muted-foreground hover:text-foreground transition-colors fx-pressable flex items-center justify-center"
       title="Payment Notifications & Reminders"
     >

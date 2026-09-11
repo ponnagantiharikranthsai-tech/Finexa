@@ -127,7 +127,7 @@ export default function HomePage() {
             const Icon = card.icon;
             return (
               <FinexaStaggerItem key={card.label} index={idx}>
-                <Link href={card.href} className="block h-full">
+                <Link href={card.href} prefetch={false} className="block h-full">
                   <FinexaCard3D className="p-6 rounded-[20px] border nav-card-luxury text-left flex flex-col justify-between h-48 group relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-[#FFD54A]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 

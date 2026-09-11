@@ -88,41 +88,52 @@ self.addEventListener("fetch", function (event) {
     return;
   }
 
-  // 3. Network-First strategy with Cache Fallback for Navigation (Guarantees clean HTTP redirects and zero ERR_FAILED)
+  // 3. Stale-While-Revalidate navigation strategy for instant 0 ms app shell launch
   if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
-        .then(function (networkResponse) {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then(function (cache) {
-              cache.put(request, responseToCache);
-            });
-          }
-          return networkResponse;
+    // Borrower application routes always fetch fresh
+    if (url.pathname.startsWith("/apply/")) {
+      event.respondWith(
+        fetch(request).catch(function () {
+          return caches.match(request);
         })
-        .catch(function () {
-          // Offline Fallback — Try exact request, then /login, then /
-          return caches.match(request).then(function (cachedResponse) {
-            if (cachedResponse) {
-              return cachedResponse;
-            }
-            return caches.match("/login").then(function (loginCache) {
-              if (loginCache) {
-                return loginCache;
-              }
-              return caches.match("/").then(function (rootCache) {
-                return (
-                  rootCache ||
-                  new Response("FINEXA is currently offline.", {
-                    status: 503,
-                    headers: { "Content-Type": "text/plain" },
-                  })
-                );
+      );
+      return;
+    }
+
+    event.respondWith(
+      caches.match(request).then(function (cachedResponse) {
+        const fetchPromise = fetch(request)
+          .then(function (networkResponse) {
+            if (networkResponse && networkResponse.status === 200) {
+              const responseToCache = networkResponse.clone();
+              caches.open(CACHE_NAME).then(function (cache) {
+                cache.put(request, responseToCache);
               });
+            }
+            return networkResponse;
+          })
+          .catch(function () {
+            // Offline fallback if network fails
+            if (cachedResponse) return cachedResponse;
+            return caches.match("/login").then(function (loginCache) {
+              return (
+                loginCache ||
+                caches.match("/").then(function (rootCache) {
+                  return (
+                    rootCache ||
+                    new Response("FINEXA is currently offline.", {
+                      status: 503,
+                      headers: { "Content-Type": "text/plain" },
+                    })
+                  );
+                })
+              );
             });
           });
-        })
+
+        // Instant Native Launch: Return cached shell in 0 ms, revalidate in background
+        return cachedResponse || fetchPromise;
+      })
     );
     return;
   }

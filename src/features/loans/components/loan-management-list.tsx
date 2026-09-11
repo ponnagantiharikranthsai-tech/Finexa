@@ -113,6 +113,13 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   const searchParams = useSearchParams();
 
   const [loans, setLoans] = useState<LoanManagementDetailResult[]>(initialLoans);
+
+  // Keep loans in sync when fresh background data hydrates from IndexedDB or Supabase
+  useEffect(() => {
+    if (initialLoans && initialLoans.length > 0) {
+      setLoans(initialLoans);
+    }
+  }, [initialLoans]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");

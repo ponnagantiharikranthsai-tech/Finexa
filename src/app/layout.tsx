@@ -60,6 +60,8 @@ export const metadata: Metadata = {
 
 import { StartupPerformanceTracker } from "@/components/startup-performance-tracker";
 
+import { QueryProvider } from "@/components/providers/query-provider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -75,13 +77,15 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <ErrorBoundary>
-            <RealtimeSyncProvider>
-              <SessionTimeoutProvider>
-                {children}
-                <PwaRegister />
-                <StartupPerformanceTracker />
-              </SessionTimeoutProvider>
-            </RealtimeSyncProvider>
+            <QueryProvider>
+              <RealtimeSyncProvider>
+                <SessionTimeoutProvider>
+                  {children}
+                  <PwaRegister />
+                  <StartupPerformanceTracker />
+                </SessionTimeoutProvider>
+              </RealtimeSyncProvider>
+            </QueryProvider>
           </ErrorBoundary>
           <Toaster position="top-right" />
         </ThemeProvider>

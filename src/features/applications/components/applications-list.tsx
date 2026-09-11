@@ -33,6 +33,7 @@ import {
 import type { ApplicationWithBorrower } from "../repository/application.repository";
 import { calculateDueDate } from "@/domain/due-date-calculator";
 import { calculateMonthlyInterest } from "@/domain/interest-calculator";
+import { formatLoanApprovalMessage } from "../utils/format-approval-message";
 
 interface ApplicationsListProps {
   initialApps: ApplicationWithBorrower[];
@@ -216,7 +217,18 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
     startTransition(async () => {
       const res = await verifyApplicationAction(appId, actionType);
       if (res.success) {
-        toast.success(`Application successfully ${actionType === "approve" ? "approved" : "rejected"}!`);
+        if (actionType === "approve" && selectedApp) {
+          const approvalMsg = formatLoanApprovalMessage({
+            fullName: selectedApp.borrower?.name || selectedApp.customerName || "Customer",
+            principal: selectedApp.principal,
+            termStartDate: selectedApp.startDate,
+            termEndDate: selectedApp.dueDate,
+          });
+          copyToClipboard(approvalMsg);
+          toast.success("Application approved! Sanction message copied to clipboard.");
+        } else {
+          toast.success("Application successfully rejected.");
+        }
         setDetailsOpen(false);
         refreshApps();
       } else {

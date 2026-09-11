@@ -29,6 +29,20 @@
       "when": 1784095276548,
       "tag": "0003_bizarre_mephisto",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788514500000,
+      "tag": "0004_add_missing_loan_applications_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788520000000,
+      "tag": "0005_enable_rls_lockdown",
+      "breakpoints": true
     }
   ]
 }

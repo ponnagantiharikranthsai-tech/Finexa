@@ -20,7 +20,7 @@ export default function NewLoanPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
-  const [state, formAction, isCreating] = useActionState(createLoanAction, null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [borrowerId, setBorrowerId]       = useState("");
   const [borrowerName, setBorrowerName]   = useState("");
@@ -49,25 +49,6 @@ export default function NewLoanPage() {
     setPan(""); setAadhaar(""); setLocationUrl("");
   };
 
-  useEffect(() => {
-    if (state?.success) {
-      const newLoan = (state.data as any)?.newLoan;
-      if (newLoan) {
-        queryClient.setQueryData<any[]>(LOANS_QUERY_KEY, (old) => {
-          if (!old) return [newLoan];
-          return [newLoan, ...old];
-        });
-      }
-      toast.success("Loan created & issued successfully!");
-      router.push("/loan-management");
-    } else if (state && !state.success) {
-      const errStr = typeof state.error === "string" ? state.error : "Validation errors found. Please check input fields.";
-      if (errStr !== "NEXT_REDIRECT") {
-        toast.error(errStr);
-      }
-    }
-  }, [state, router, queryClient]);
-
   // Calculator previews
   const numericPrincipal = Number(principal || 0);
   const numericRate      = Number(interestRate || 0);
@@ -77,6 +58,150 @@ export default function NewLoanPage() {
   const computedInterest = interestType === "weekly" ? weeklyInterest : interestType === "daily" ? dailyInterest * 30 : monthlyInterest;
   const formattedDueDate = dueDate || (dateGiven ? calculateDueDate(new Date(dateGiven), interestType).toISOString().split("T")[0]! : "");
   const totalDue         = numericPrincipal + computedInterest;
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+
+    // Client-side validation
+    if (!borrowerId && (!borrowerName.trim() || !mobile.trim() || !email.trim() || !pan.trim() || !aadhaar.trim())) {
+      toast.error("Please fill in all mandatory borrower fields.");
+      return;
+    }
+    if (!principal || Number(principal) <= 0) {
+      toast.error("Please enter a valid principal amount.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const numPrincipal = Number(principal);
+    const resolvedDueDate = formattedDueDate || new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]!;
+    const tempLoanId = `temp_loan_${Date.now()}`;
+    const tempBorrowerId = borrowerId || `temp_b_${Date.now()}`;
+
+    // 1. Build FormData synchronously from component state before any route transition
+    const formData = new FormData();
+    if (borrowerId) formData.append("borrowerId", borrowerId);
+    formData.append("borrowerName", borrowerName);
+    formData.append("mobile", mobile);
+    formData.append("email", email);
+    formData.append("pan", pan);
+    formData.append("aadhaar", aadhaar);
+    if (locationUrl) formData.append("locationUrl", locationUrl);
+    formData.append("principal", principal);
+    formData.append("interestType", interestType);
+    formData.append("interestRate", interestRate);
+    formData.append("dateGiven", dateGiven);
+    formData.append("dueDate", resolvedDueDate);
+
+    // 2. Construct instant optimistic loan matching LoanManagementDetailResult
+    const optimisticLoan: any = {
+      loanId: tempLoanId,
+      borrowerId: tempBorrowerId,
+      principal: principal,
+      interestType: interestType,
+      interestRate: interestRate,
+      dateGiven: dateGiven,
+      dueDate: resolvedDueDate,
+      status: "active",
+      penaltyType: "fixed",
+      penaltyRate: "20",
+      penaltyAmount: "0",
+      internalNotes: null,
+      internalNotesUpdatedAt: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      borrower: {
+        borrowerId: tempBorrowerId,
+        name: borrowerName,
+        mobile: mobile,
+        email: email,
+        panEncrypted: "",
+        aadhaarEncrypted: "",
+        panDecrypted: pan,
+        aadhaarDecrypted: aadhaar,
+        fatherName: null,
+        motherName: null,
+        alternateMobile: null,
+        fatherMobile: null,
+        address: null,
+        district: null,
+        state: null,
+        pinCode: null,
+        aadhaarFrontUrl: null,
+        aadhaarBackUrl: null,
+        panCardUrl: null,
+        selfieUrl: null,
+        signatureUrl: null,
+        locationUrl: locationUrl || null,
+        internalNotes: null,
+        internalNotesUpdatedAt: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      outstandingBalance: numPrincipal,
+      monthlyInterestAmount: computedInterest,
+      isOptimistic: true,
+    };
+
+    // 3. Prepend to TanStack Query cache in 0 MILLISECONDS
+    queryClient.setQueryData<any[]>(LOANS_QUERY_KEY, (old) => {
+      if (!old) return [optimisticLoan];
+      return [optimisticLoan, ...old];
+    });
+
+    // 4. Immediately transition to /loan-management - UI is INSTANT!
+    router.push("/loan-management");
+    toast.success("Loan issued! Added to Loan Management.");
+
+    // 5. Execute server action in the background
+    try {
+      const res = await createLoanAction(null, formData);
+      if (res.success) {
+        if (res.data?.newLoan) {
+          const realLoan: any = {
+            ...res.data.newLoan,
+            borrower: {
+              ...res.data.newLoan.borrower,
+              name: borrowerName || res.data.newLoan.borrower?.name,
+              mobile: mobile || res.data.newLoan.borrower?.mobile,
+              email: email || res.data.newLoan.borrower?.email,
+              panDecrypted: pan || res.data.newLoan.borrower?.panDecrypted,
+              aadhaarDecrypted: aadhaar || res.data.newLoan.borrower?.aadhaarDecrypted,
+            },
+            isOptimistic: false,
+          };
+          // Reconcile temporary ID with real permanent database record
+          queryClient.setQueryData<any[]>(LOANS_QUERY_KEY, (old) => {
+            if (!old) return [realLoan];
+            return old.map((l: any) => (l.loanId === tempLoanId ? realLoan : l));
+          });
+        }
+      } else {
+        // Rollback on server validation or database error
+        queryClient.setQueryData<any[]>(LOANS_QUERY_KEY, (old) => {
+          if (!old) return [];
+          return old.filter((l: any) => l.loanId !== tempLoanId);
+        });
+        const err = res.error;
+        const errText =
+          typeof err === "string"
+            ? err
+            : Object.values(err || {}).flat().join("; ") || "Failed to create loan on server";
+        toast.error(errText);
+      }
+    } catch (err: any) {
+      // Rollback on network failure
+      queryClient.setQueryData<any[]>(LOANS_QUERY_KEY, (old) => {
+        if (!old) return [];
+        return old.filter((l: any) => l.loanId !== tempLoanId);
+      });
+      toast.error("Network error while saving loan. Rolled back.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const inputClass = "h-11 rounded-xl border-border focus:ring-2 focus:ring-primary/20 focus:border-primary";
   const labelClass = "text-xs font-semibold uppercase tracking-wider text-muted-foreground";
@@ -99,7 +224,7 @@ export default function NewLoanPage() {
         </div>
       </div>
 
-      <form action={formAction} className="grid gap-5 lg:grid-cols-3">
+      <form onSubmit={handleSubmit} className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-5">
 
           {/* ── Section 1: Borrower Info ───────────────────────────────────── */}
@@ -301,10 +426,10 @@ export default function NewLoanPage() {
             <div className="px-5 pb-5">
               <button
                 type="submit"
-                disabled={isCreating || isPending}
+                disabled={isSubmitting || isPending}
                 className="w-full flex items-center justify-center gap-2 h-12 rounded-xl fx-brand-gradient text-white font-semibold text-sm shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed fx-pressable"
               >
-                {isCreating || isPending ? (
+                {isSubmitting || isPending ? (
                   <>
                     <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     Creating & Issuing...

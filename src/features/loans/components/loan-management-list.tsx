@@ -117,12 +117,24 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
   const [loans, setLoans] = useState<LoanManagementDetailResult[]>(initialLoans);
 
-  // Keep loans in sync when fresh background data hydrates from IndexedDB or Supabase
+  // Keep loans in sync with props and TanStack Query Cache (0ms optimistic updates)
   useEffect(() => {
     if (initialLoans && initialLoans.length > 0) {
       setLoans(initialLoans);
     }
   }, [initialLoans]);
+
+  useEffect(() => {
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (
+        event?.query?.queryKey?.[0] === LOANS_QUERY_KEY[0] &&
+        Array.isArray(event.query.state.data)
+      ) {
+        setLoans(event.query.state.data as LoanManagementDetailResult[]);
+      }
+    });
+    return () => unsubscribe();
+  }, [queryClient]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
@@ -1030,6 +1042,12 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
                     <div className="flex flex-col items-end gap-1">
                       <StatusBadge status={loan.status} outstanding={loan.outstandingBalance} dueDate={loan.dueDate} />
+                      {(loan as any).isOptimistic && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-primary/15 text-primary border border-primary/25 animate-pulse">
+                          <RefreshCw className="h-2.5 w-2.5 animate-spin" />
+                          SYNCING
+                        </span>
+                      )}
                       {accruedPenalty.isPenaltyActive && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20">
                           <AlertTriangle className="h-3 w-3" />

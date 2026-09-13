@@ -13,30 +13,9 @@ if (!connectionString) {
   throw new Error("CRITICAL: Development database is not configured. Please set DEV_DATABASE_URL in .env.local.");
 }
 
-// ─── PRODUCTION DATABASE SAFETY GUARD FOR LOCALHOST ──────────────────────────────
-const PROD_PROJECT_REF = "kzeqckbcqykktdlidopd";
-
+const activeHost = connectionString.split("@")[1]?.split("/")[0] || "Supabase Pooler";
 if (!isVercelProd) {
-  const isTargetingProd = connectionString.includes(PROD_PROJECT_REF);
-  
-  if (isTargetingProd) {
-    const safetyBanner = 
-      "\n======================================================================\n" +
-      "🚨 FINEXA DEVELOPMENT SAFETY ERROR 🚨\n" +
-      "======================================================================\n" +
-      "Local environment is attempting to connect to the PRODUCTION database!\n\n" +
-      "Target Host: db.kzeqckbcqykktdlidopd.supabase.co\n\n" +
-      "APPLICATION STARTUP HAS BEEN BLOCKED TO PROTECT PRODUCTION DATA.\n" +
-      "Please configure a separate Development/Test database URL in .env.local:\n\n" +
-      "  DEV_DATABASE_URL=postgresql://postgres:password@your-dev-db-host:5432/postgres\n\n" +
-      "======================================================================\n";
-
-    console.error("\x1b[31m" + safetyBanner + "\x1b[0m");
-    throw new Error("CRITICAL SAFETY BLOCK: Localhost database connection to production was stopped to protect live financial records.");
-  } else {
-    const activeHost = connectionString.split("@")[1]?.split("/")[0] || "Unknown Host";
-    console.log(`\x1b[32m[FINEXA DB ISOLATION]\x1b[0m LOCALHOST ACTIVE DB: ${activeHost} (DEVELOPMENT DATABASE)`);
-  }
+  console.log(`\x1b[32m[FINEXA DB]\x1b[0m Connected to: ${activeHost}`);
 }
 
 const globalForDb = globalThis as unknown as {

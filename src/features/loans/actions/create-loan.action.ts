@@ -118,11 +118,12 @@ export async function createLoanAction(
       }).catch((e) => console.error("Async email dispatch error:", e));
     }
 
-    await paymentReminderRepository.createScheduleForLoan(loan.loanId, loan.dueDate);
-    await auditLog("loan_created", "loan", loan.loanId, { principal: loan.principal });
-
     const { invalidateLoanManagementCache } = await import("./get-loan-management-data.action");
-    await invalidateLoanManagementCache();
+    await Promise.all([
+      paymentReminderRepository.createScheduleForLoan(loan.loanId, loan.dueDate).catch(e => console.error("Reminder schedule error:", e)),
+      auditLog("loan_created", "loan", loan.loanId, { principal: loan.principal }).catch(e => console.error("Audit log error:", e)),
+      invalidateLoanManagementCache(),
+    ]);
 
     return {
       success: true,

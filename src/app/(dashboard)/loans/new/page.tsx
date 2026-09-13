@@ -20,7 +20,7 @@ export default function NewLoanPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
-  const [state, formAction] = useActionState(createLoanAction, null);
+  const [state, formAction, isCreating] = useActionState(createLoanAction, null);
 
   const [borrowerId, setBorrowerId]       = useState("");
   const [borrowerName, setBorrowerName]   = useState("");
@@ -301,13 +301,13 @@ export default function NewLoanPage() {
             <div className="px-5 pb-5">
               <button
                 type="submit"
-                disabled={isPending}
+                disabled={isCreating || isPending}
                 className="w-full flex items-center justify-center gap-2 h-12 rounded-xl fx-brand-gradient text-white font-semibold text-sm shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed fx-pressable"
               >
-                {isPending ? (
+                {isCreating || isPending ? (
                   <>
                     <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Creating...
+                    Creating & Issuing...
                   </>
                 ) : (
                   "Create & Issue Loan"

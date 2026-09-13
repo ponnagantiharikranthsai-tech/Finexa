@@ -119,11 +119,15 @@ export async function createLoanAction(
     }
 
     const { invalidateLoanManagementCache } = await import("./get-loan-management-data.action");
-    await Promise.all([
-      paymentReminderRepository.createScheduleForLoan(loan.loanId, loan.dueDate).catch(e => console.error("Reminder schedule error:", e)),
-      auditLog("loan_created", "loan", loan.loanId, { principal: loan.principal }).catch(e => console.error("Audit log error:", e)),
-      invalidateLoanManagementCache(),
-    ]);
+    await invalidateLoanManagementCache().catch(() => {});
+
+    // Asynchronous background execution for reminder scheduling and audit logs
+    Promise.resolve().then(async () => {
+      await Promise.allSettled([
+        paymentReminderRepository.createScheduleForLoan(loan.loanId, loan.dueDate),
+        auditLog("loan_created", "loan", loan.loanId, { principal: loan.principal }),
+      ]);
+    }).catch((e) => console.error("Post-loan background tasks error:", e));
 
     return {
       success: true,

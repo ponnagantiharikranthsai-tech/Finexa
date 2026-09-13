@@ -36,6 +36,11 @@ export default function NewLoanPage() {
   const [dateGiven, setDateGiven]         = useState(new Date().toISOString().split("T")[0]!);
   const [dueDate, setDueDate]             = useState("");
 
+  // Prefetch loan management page so route transition is 0ms
+  useEffect(() => {
+    router.prefetch("/loan-management");
+  }, [router]);
+
   // Sync auto-calculated due date when dateGiven or interestType changes
   useEffect(() => {
     if (dateGiven) {

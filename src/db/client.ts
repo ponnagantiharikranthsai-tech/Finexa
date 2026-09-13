@@ -31,10 +31,8 @@ if (!client || globalForDb.postgresUrl !== connectionString) {
     idle_timeout: 20, 
     connect_timeout: 5
   });
-  if (!isVercelProd) {
-    globalForDb.postgresClient = client;
-    globalForDb.postgresUrl = connectionString;
-  }
+  globalForDb.postgresClient = client;
+  globalForDb.postgresUrl = connectionString;
 }
 
 export const db = drizzle(client, { schema });

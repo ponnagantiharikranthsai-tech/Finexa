@@ -140,7 +140,9 @@ export class ApplicationRepository {
         or(
           like(loanApplicationsTable.applicationCode, `%${search}%`),
           like(borrowersTable.name, `%${search}%`),
-          like(borrowersTable.mobile, `%${search}%`)
+          like(borrowersTable.mobile, `%${search}%`),
+          like(loanApplicationsTable.customerName, `%${search}%`),
+          like(loanApplicationsTable.customerMobile, `%${search}%`)
         )
       );
     }

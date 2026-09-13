@@ -444,10 +444,10 @@ Thank you for choosing **FINEXA – Smart Loan Management.**`;
                 >
                   <TableCell className="font-semibold">{app.applicationCode}</TableCell>
                   <TableCell>
-                    {app.borrower ? (
+                    {app.borrower || app.customerName ? (
                       <div>
-                        <p className="font-semibold text-sm">{app.borrower.name}</p>
-                        <p className="text-xs text-muted-foreground">{app.borrower.mobile}</p>
+                        <p className="font-semibold text-sm">{app.borrower?.name || app.customerName}</p>
+                        <p className="text-xs text-muted-foreground">{app.borrower?.mobile || app.customerMobile}</p>
                       </div>
                     ) : (
                       <span className="text-xs italic text-muted-foreground">Link Shared / Unsubmitted</span>

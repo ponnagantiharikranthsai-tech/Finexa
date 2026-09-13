@@ -1,38 +1,51 @@
 export interface LoanApprovalMessageData {
   fullName: string;
+  phoneNumber?: string;
   principal: number | string;
+  interestRate?: number | string;
+  monthlyInterest?: number | string;
   termStartDate: string;
   termEndDate: string;
 }
 
-export function formatLoanApprovalMessage(applicationData: LoanApprovalMessageData): string {
+export function formatLoanApprovalMessage(data: LoanApprovalMessageData): string {
   const formatDate = (dateStr: string) => {
     if (!dateStr) return "";
-    const parts = dateStr.split("-");
+    const cleanDate = dateStr.includes("T") ? dateStr.split("T")[0]! : dateStr;
+    const parts = cleanDate.split("-");
     if (parts.length === 3) {
       const [y, m, d] = parts;
       return `${d}/${m}/${y}`;
     }
-    return dateStr;
+    return cleanDate;
   };
 
-  const name = applicationData.fullName || "Customer";
-  const amount = Number(applicationData.principal || 0).toLocaleString("en-IN");
-  const startDate = formatDate(applicationData.termStartDate);
-  const dueDate = formatDate(applicationData.termEndDate);
+  const name = data.fullName || "Borrower";
+  const phone = data.phoneNumber || "N/A";
+  const principal = Number(data.principal || 0).toLocaleString("en-IN");
+  const rate = data.interestRate !== undefined && data.interestRate !== null && data.interestRate !== ""
+    ? data.interestRate
+    : "20";
+  const monthlyInt = Number(data.monthlyInterest || 0).toLocaleString("en-IN");
+  const dateGiven = formatDate(data.termStartDate);
+  const dueDate = formatDate(data.termEndDate);
 
-  return `Dear ${name},
+  return `🎉 *Congratulations ${name}!*
 
-🎉 Congratulations! Your borrower profile and submitted details have been successfully verified. Your loan request has been officially sanctioned.
+Your identity and profile verification have been *successfully approved* ✅. 
+Your loan account has now been created on *Finexa*.
 
-📋 Loan Sanction Summary:
+📋 *Loan Summary:*
+• *Borrower Name:* ${name}
+• *Phone Number:* ${phone}
+• *Principal Amount:* ₹${principal}
+• *Interest Rate:* ₹${rate} per ₹1,000 / month
+• *Monthly Interest:* ₹${monthlyInt}
+• *Date Issued:* ${dateGiven}
+• *First Due Date:* ${dueDate}
 
-• Sanctioned Amount: ₹${amount}
-• Commencement Date: ${startDate}
-• Repayment Due Date: 🗓️ ${dueDate}
-• Verification Status: Complete & Verified ✅
+Thanks for contacting Finexa! 🙏
 
-Welcome to the FINEXA community! We are committed to providing you with a seamless and transparent financial experience. Please maintain timely repayments to ensure uninterrupted service and higher credit eligibility.
-
-Thank you for choosing FINEXA! 🤝`;
+Reply *HELP* if you have any questions.
+— *Team Finexa*`;
 }

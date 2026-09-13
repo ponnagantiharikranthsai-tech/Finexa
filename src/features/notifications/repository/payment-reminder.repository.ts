@@ -80,7 +80,7 @@ function formatDateVerbose(dateInput: any): string {
   }
 }
 
-let isTableInitialized = false;
+let isTableInitialized = true;
 
 export async function ensureReminderTablesExist() {
   if (isTableInitialized) return;

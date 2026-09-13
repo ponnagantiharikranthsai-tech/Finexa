@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
@@ -11,7 +11,9 @@ const indexedDbStorage = {
   getItem: async (key: string): Promise<string | null> => {
     if (typeof window === "undefined") return null;
     try {
-      const val = await get(key);
+      const readPromise = get(key);
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 400));
+      const val = await Promise.race([readPromise, timeoutPromise]);
       return val ?? null;
     } catch (e) {
       console.warn("[INDEXEDDB READ WARNING]", e);
@@ -30,7 +32,7 @@ const indexedDbStorage = {
     if (typeof window === "undefined") return;
     try {
       await del(key);
-    } catch (e) {}
+    } catch {}
   },
 };
 

@@ -9,7 +9,7 @@ export type ApplicationWithBorrower = LoanApplication & {
   borrower: Borrower | null;
 };
 
-let isTableStructureEnsured = false;
+let isTableStructureEnsured = true;
 
 export async function ensureLoanApplicationsTableStructure(): Promise<void> {
   if (isTableStructureEnsured) return;

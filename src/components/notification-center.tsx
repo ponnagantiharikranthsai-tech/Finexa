@@ -182,7 +182,7 @@ export function NotificationCenter() {
       }
     };
 
-    const timer = setTimeout(scheduleCheck, 2500);
+    const timer = setTimeout(scheduleCheck, 3500);
     const interval = setInterval(checkUnread, 30000);
     return () => {
       clearTimeout(timer);

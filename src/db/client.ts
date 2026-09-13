@@ -50,7 +50,7 @@ if (!client || globalForDb.postgresUrl !== connectionString) {
     prepare: false,
     max: 20,
     idle_timeout: 20, 
-    connect_timeout: 10
+    connect_timeout: 5
   });
   if (!isVercelProd) {
     globalForDb.postgresClient = client;

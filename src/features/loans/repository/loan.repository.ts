@@ -33,7 +33,7 @@ export type DashboardStats = {
   dueTodayCount: number;
 };
 
-let isLoanNotesColumnInitialized = false;
+let isLoanNotesColumnInitialized = true;
 
 export async function ensureLoanNotesColumnAndMigrate(): Promise<void> {
   if (isLoanNotesColumnInitialized) return;

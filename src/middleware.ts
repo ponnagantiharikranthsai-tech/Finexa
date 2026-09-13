@@ -55,24 +55,25 @@ export async function middleware(request: NextRequest) {
   const isPublicPath = pathname === "/" || pathname === "/login" || pathname.startsWith("/apply/");
 
   const hasFinexaSession = request.cookies.has("finexa_session") && request.cookies.get("finexa_session")?.value === "true";
-  let isSessionValid = hasFinexaSession;
-  let user: { id: string; [key: string]: unknown } | null = hasFinexaSession ? { id: "finexa-admin-user" } : null;
+  const hasSupabaseCookie = request.cookies.getAll().some(c => (c.name.startsWith("sb-") || c.name.includes("auth-token")) && c.value.length > 0);
+  let isSessionValid = hasFinexaSession || hasSupabaseCookie;
+  let user: { id: string; [key: string]: unknown } | null = isSessionValid ? { id: "finexa-admin-user" } : null;
 
-  // Non-blocking network check: Max 1200ms timeout for cloud auth check to prevent 15s freezes on PWA startup
-  if (!isSessionValid) {
+  // Zero-network fast-path: Only if Supabase cookie exists without finexa_session, do background check
+  if (!hasFinexaSession && hasSupabaseCookie) {
     try {
       const authPromise = supabase.auth.getUser();
       const timeoutPromise = new Promise<{ data: { user: null } }>((resolve) =>
-        setTimeout(() => resolve({ data: { user: null } }), 1200)
+        setTimeout(() => resolve({ data: { user: null } }), 800)
       );
 
       const res = await Promise.race([authPromise, timeoutPromise]);
       const supabaseUser = res.data?.user;
-      user = (supabaseUser as any) || null;
+      user = (supabaseUser as unknown as { id: string; [key: string]: unknown }) || null;
       if (user) {
         isSessionValid = true;
       }
-    } catch (error) {
+    } catch {
       user = null;
     }
   }
@@ -82,8 +83,6 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     const redirectResponse = NextResponse.redirect(url);
-    redirectResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
-    redirectResponse.headers.set("Pragma", "no-cache");
     supabaseResponse.cookies.getAll().forEach((c) => redirectResponse.cookies.set(c.name, c.value, c));
     return redirectResponse;
   }
@@ -93,13 +92,11 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/home";
     const redirectResponse = NextResponse.redirect(url);
-    redirectResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
-    redirectResponse.headers.set("Pragma", "no-cache");
     supabaseResponse.cookies.getAll().forEach((c) => redirectResponse.cookies.set(c.name, c.value, c));
     return redirectResponse;
   }
 
-  // 4. Forward authenticated request with security and zero-cache headers
+  // 4. Forward authenticated request with security headers
   const requestHeaders = new Headers(request.headers);
   if (user) {
     requestHeaders.set("x-user-id", user.id);
@@ -110,12 +107,13 @@ export async function middleware(request: NextRequest) {
       headers: requestHeaders,
     },
   });
-  finalResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
-  finalResponse.headers.set("Pragma", "no-cache");
   finalResponse.headers.set("X-Content-Type-Options", "nosniff");
   finalResponse.headers.set("X-Frame-Options", "DENY");
   return finalResponse;
 }
+
+// Support Next.js 16 proxy convention
+export const proxy = middleware;
 
 export const config = {
   matcher: [

@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { LOANS_QUERY_KEY } from "@/features/loans/hooks/use-loan-management-data";
 import { createClient } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { submitLoanApplicationAction } from "@/features/applications/actions/submit-application.action";
@@ -23,6 +25,7 @@ function getSupabaseClient() {
 
 export function RealtimeSyncProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [isOnline, setIsOnline] = useState(true);
 
   // Check initial connection status on client mount
@@ -66,7 +69,7 @@ export function RealtimeSyncProvider({ children }: { children: React.ReactNode }
       } else {
         localStorage.removeItem("finexa_offline_sync_queue");
         toast.success("All offline actions successfully synchronized!", { id: "offline-sync" });
-        router.refresh();
+        queryClient.invalidateQueries();
       }
     } catch (err) {
       console.error("Error processing offline queue:", err);
@@ -108,11 +111,21 @@ export function RealtimeSyncProvider({ children }: { children: React.ReactNode }
           "postgres_changes",
           { event: "*", schema: "public" },
           (payload) => {
-            console.log("Realtime DB Broadcast payload:", payload);
-            router.refresh();
-
             const table = payload.table;
             const event = payload.eventType;
+
+            // Targeted TanStack Query invalidation (avoids blocking full RSC re-renders)
+            if (table === "loans" || table === "payments") {
+              queryClient.invalidateQueries({ queryKey: [LOANS_QUERY_KEY] });
+            } else if (table === "borrowers") {
+              queryClient.invalidateQueries({ queryKey: ["borrowers"] });
+            } else if (table === "loan_applications") {
+              queryClient.invalidateQueries({ queryKey: ["applications"] });
+            } else if (table === "funders" || table === "capital_funds") {
+              queryClient.invalidateQueries({ queryKey: ["capital-management"] });
+            } else {
+              queryClient.invalidateQueries();
+            }
 
             if (table && event) {
               let message = "";

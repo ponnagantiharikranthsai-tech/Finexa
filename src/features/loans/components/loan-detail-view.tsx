@@ -253,7 +253,7 @@ export function LoanDetailView({ initialLoan, initialPayments, initialNotifs }: 
     startTransition(async () => {
       const res = await sendReminderAction(loan.loanId, Number(penaltyAmount || 0));
       if (res.success) {
-        toast.success("Reminder sent!"); setReminderOpen(false); setPenaltyAmount("0"); router.refresh();
+        toast.success("Reminder sent!"); setReminderOpen(false); setPenaltyAmount("0");
       } else {
         toast.error(typeof res.error === "string" ? res.error : "Failed to send reminder");
       }

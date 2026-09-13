@@ -225,7 +225,7 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
 
       setPaymentOpen(false);
       setPaymentAmount(""); setPaymentNotes("");
-      refreshLoans(); router.refresh();
+      refreshLoans();
     });
   };
 
@@ -258,7 +258,7 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
           duration: 10000,
         });
       }
-      setExtendOpen(false); refreshLoans(); router.refresh();
+      setExtendOpen(false); refreshLoans();
     });
   };
 
@@ -270,7 +270,7 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
       if (res.success) {
         toast.success("Reminder sent via Email & SMS!");
         setReminderOpen(false); setPenaltyAmount("0");
-        refreshLoans(); router.refresh();
+        refreshLoans();
       } else {
         toast.error(typeof res.error === "string" ? res.error : "Failed to send reminder");
       }
@@ -287,7 +287,6 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
         if (res.success) {
           toast.success("Loan deleted successfully!");
           refreshLoans();
-          router.refresh();
         } else {
           toast.error(typeof res.error === "string" ? res.error : "Failed to delete loan.");
         }

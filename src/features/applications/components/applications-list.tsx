@@ -200,7 +200,11 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
         setSuccessOpen(true);
         // Reset form
         setNotes("");
-        refreshApps();
+        if (res.data?.application) {
+          setApps((prev) => [res.data.application, ...prev]);
+        } else {
+          refreshApps();
+        }
       } else {
         const errMsg = typeof res.error === "string"
           ? res.error
@@ -217,6 +221,10 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
     startTransition(async () => {
       const res = await verifyApplicationAction(appId, actionType);
       if (res.success) {
+        const targetStatus = actionType === "approve" ? "approved" : "rejected";
+        setApps((prev) =>
+          prev.map((a) => (a.applicationId === appId ? { ...a, status: targetStatus } : a))
+        );
         if (actionType === "approve" && selectedApp) {
           const approvalMsg = formatLoanApprovalMessage({
             fullName: selectedApp.borrower?.name || selectedApp.customerName || "Customer",
@@ -230,7 +238,6 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
           toast.success("Application successfully rejected.");
         }
         setDetailsOpen(false);
-        refreshApps();
       } else {
         toast.error(typeof res.error === "string" ? res.error : `${actionType} action failed`);
       }

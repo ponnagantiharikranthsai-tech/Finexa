@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useTransition, useMemo, useDeferredValue } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { LOANS_QUERY_KEY } from "../hooks/use-loan-management-data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -110,6 +112,7 @@ function getCardGlow(status: string) {
 
 export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
 
   const [loans, setLoans] = useState<LoanManagementDetailResult[]>(initialLoans);
@@ -502,7 +505,10 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       if (ledgerRes.success && ledgerRes.data) {
         setPenaltyLedger(ledgerRes.data);
       }
-      router.refresh();
+      setLoans((prev) =>
+        prev.map((l) => (l.loanId === selectedLoan.loanId ? ({ ...l, penaltyRate: rate } as any) : l))
+      );
+      setSelectedLoan((prev) => (prev ? ({ ...prev, penaltyRate: rate } as any) : prev));
     } else {
       toast.error(typeof res.error === "string" ? res.error : "Failed to update penalty settings");
     }
@@ -539,7 +545,36 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       if (res.success) {
         toast.success("Borrower details updated successfully!");
         setEditOpen(false);
-        router.refresh();
+        setLoans((prev) =>
+          prev.map((l) =>
+            l.borrowerId === selectedLoan.borrowerId
+              ? {
+                  ...l,
+                  borrower: {
+                    ...l.borrower,
+                    name: borrowerName,
+                    mobile: borrowerMobile,
+                    email: borrowerEmail,
+                    locationUrl: borrowerLocation,
+                  },
+                }
+              : l
+          )
+        );
+        setSelectedLoan((prev) =>
+          prev
+            ? {
+                ...prev,
+                borrower: {
+                  ...prev.borrower,
+                  name: borrowerName,
+                  mobile: borrowerMobile,
+                  email: borrowerEmail,
+                  locationUrl: borrowerLocation,
+                },
+              }
+            : prev
+        );
       } else {
         if (res.error && typeof res.error === "object") {
           const errors = Object.values(res.error).flat().join(", ");
@@ -564,6 +599,12 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       return;
     }
 
+    const paidAmt = Number(paymentAmount);
+    if (isNaN(paidAmt) || paidAmt <= 0) {
+      toast.error("Please enter a valid payment amount.");
+      return;
+    }
+
     const fd = new FormData();
     fd.append("loanId", selectedLoan.loanId);
     fd.append("amount", paymentAmount);
@@ -571,28 +612,44 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     fd.append("paymentDate", paymentDate);
     fd.append("notes", paymentNotes);
 
+    // 1. OPTIMISTIC UPDATE: Update balance immediately in 0 ms
+    const targetLoanId = selectedLoan.loanId;
+    const previousOutstanding = selectedLoan.outstandingBalance;
+    const previousStatus = selectedLoan.status;
+    const newBal = Math.max(0, previousOutstanding - paidAmt);
+    const newStatus = newBal === 0 ? "closed" : previousStatus;
+
+    setLoans((prev) =>
+      prev.map((l) => (l.loanId === targetLoanId ? { ...l, outstandingBalance: newBal, status: newStatus } : l))
+    );
+    setSelectedLoan((prev) => (prev ? { ...prev, outstandingBalance: newBal, status: newStatus } : prev));
+    queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+      if (!old) return [];
+      return old.map((l) => (l.loanId === targetLoanId ? { ...l, outstandingBalance: newBal, status: newStatus } : l));
+    });
+
+    setPaymentOpen(false);
+    setPaymentAmount("");
+    setPaymentNotes("");
+    setShowMoneyEffect(true);
+
     startTransition(async () => {
       const res = await recordPaymentAction(null, fd);
       if (!res.success) {
+        // Rollback on failure
+        setLoans((prev) =>
+          prev.map((l) => (l.loanId === targetLoanId ? { ...l, outstandingBalance: previousOutstanding, status: previousStatus } : l))
+        );
+        setSelectedLoan((prev) => (prev ? { ...prev, outstandingBalance: previousOutstanding, status: previousStatus } : prev));
+        queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+          if (!old) return [];
+          return old.map((l) => (l.loanId === targetLoanId ? { ...l, outstandingBalance: previousOutstanding, status: previousStatus } : l));
+        });
         toast.error(typeof res.error === "string" ? res.error : "Failed to record payment");
         return;
       }
 
-      setShowMoneyEffect(true);
       const data = res.data;
-      const paidAmt = Number(paymentAmount);
-
-      setLoans((prev) =>
-        prev.map((l) => {
-          if (l.loanId === selectedLoan.loanId) {
-            const newBal = Math.max(0, l.outstandingBalance - paidAmt);
-            return { ...l, outstandingBalance: newBal, status: newBal === 0 ? "closed" : l.status };
-          }
-          return l;
-        })
-      );
-
-      // Automatic PDF Generation & Success Toast with Retry Button
       try {
         await generatePaymentCompletedPdf(data);
         toast.success(`Payment of ₹${paidAmt.toLocaleString("en-IN")} recorded! Receipt downloaded.`, {
@@ -603,19 +660,21 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
           duration: 8000,
         });
       } catch (pdfErr) {
-        console.error("Payment PDF generation error:", pdfErr);
         toast.success(`Payment of ₹${paidAmt.toLocaleString("en-IN")} recorded!`);
       }
-
-      setPaymentOpen(false);
-      setPaymentAmount("");
-      setPaymentNotes("");
-      router.refresh();
     });
   };
 
   const handlePayAndExtendConfirm = async () => {
     if (!selectedLoan) return;
+    const targetLoanId = selectedLoan.loanId;
+    const prevDueDate = selectedLoan.dueDate;
+    const prevStatus = selectedLoan.status;
+
+    setCycleEffectText("Pay & Extend Successful — Next Cycle Activated");
+    setTimeout(() => setCycleEffectText(null), 1500);
+    setPaymentOpen(false);
+
     startTransition(async () => {
       const res = await payAndExtendAction(selectedLoan.loanId, paymentDate, paymentNotes);
       if (!res.success) {
@@ -624,14 +683,16 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         return;
       }
       const data = res.data;
-      setCycleEffectText("Pay & Extend Successful — Next Cycle Activated");
-      setTimeout(() => setCycleEffectText(null), 1500);
       const newDueDateStr = data.newDueDate;
       setLoans((prev) =>
-        prev.map((l) => (l.loanId === selectedLoan.loanId ? { ...l, dueDate: newDueDateStr, status: "extended" } : l))
+        prev.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: newDueDateStr, status: "extended" } : l))
       );
+      setSelectedLoan((prev) => (prev ? { ...prev, dueDate: newDueDateStr, status: "extended" } : prev));
+      queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+        if (!old) return [];
+        return old.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: newDueDateStr, status: "extended" } : l));
+      });
 
-      // Automatic PDF Generation & Retry Toast Handling
       try {
         await generateLoanExtensionPdf(data);
         toast.success(`Loan extension completed successfully! Next cycle due: ${data.newDueDate}`, {
@@ -642,24 +703,21 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
           duration: 8000,
         });
       } catch (pdfErr) {
-        console.error("PDF generation error:", pdfErr);
-        toast.error("Loan extension completed, but the PDF could not be generated.", {
-          action: {
-            label: "🔄 Retry PDF",
-            onClick: () => generateLoanExtensionPdf(data),
-          },
-          duration: 10000,
-        });
+        toast.success(`Loan extension completed! Next cycle due: ${data.newDueDate}`);
       }
-
-      setPaymentOpen(false);
-      setPaymentNotes("");
-      router.refresh();
     });
   };
 
   const handleOverduePenaltyConfirm = async () => {
     if (!selectedLoan) return;
+    const targetLoanId = selectedLoan.loanId;
+    const prevDueDate = selectedLoan.dueDate;
+    const prevStatus = selectedLoan.status;
+    const prevPenalty = selectedLoan.penaltyAmount;
+
+    setPaymentOpen(false);
+    setPaymentNotes("");
+
     startTransition(async () => {
       const res = await overdueAndPenaltyAction(selectedLoan.loanId, paymentDate, paymentNotes);
       if (res.success) {
@@ -669,14 +727,18 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
           const newDueDateStr = res.data.newDueDate;
           setLoans((prev) =>
             prev.map((l) =>
-              l.loanId === selectedLoan.loanId ? { ...l, dueDate: newDueDateStr, status: "active", penaltyAmount: "0" } : l
+              l.loanId === targetLoanId ? { ...l, dueDate: newDueDateStr, status: "active", penaltyAmount: "0" } : l
             )
           );
+          setSelectedLoan((prev) => (prev ? { ...prev, dueDate: newDueDateStr, status: "active", penaltyAmount: "0" } : prev));
+          queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+            if (!old) return [];
+            return old.map((l) =>
+              l.loanId === targetLoanId ? { ...l, dueDate: newDueDateStr, status: "active", penaltyAmount: "0" } : l
+            );
+          });
         }
         toast.success(`Overdue cycle cleared! New cycle start: ${paymentDate}, Next due: ${res.data?.newDueDate}`);
-        setPaymentOpen(false);
-        setPaymentNotes("");
-        router.refresh();
       } else {
         toast.error(typeof res.error === "string" ? res.error : "Failed to process Overdue & Penalty payment");
       }
@@ -701,11 +763,23 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
   const handleExtendConfirm = async () => {
     if (!selectedLoan) return;
+    const targetLoanId = selectedLoan.loanId;
+    setExtendOpen(false);
 
     startTransition(async () => {
       const res = await extendLoanAction(selectedLoan.loanId);
       if (res.success) {
         const data = res.data;
+        const newDueDateStr = data.newDueDate;
+        setLoans((prev) =>
+          prev.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: newDueDateStr, status: "extended" } : l))
+        );
+        setSelectedLoan((prev) => (prev ? { ...prev, dueDate: newDueDateStr, status: "extended" } : prev));
+        queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+          if (!old) return [];
+          return old.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: newDueDateStr, status: "extended" } : l));
+        });
+
         try {
           generateLoanExtensionPdf(data);
           toast.success(`Loan period extended! Next due date: ${data.newDueDate}`, {
@@ -716,11 +790,8 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
             duration: 8000,
           });
         } catch (pdfErr) {
-          console.error("PDF generation error:", pdfErr);
           toast.success("Loan period extended by 1 month!");
         }
-        setExtendOpen(false);
-        router.refresh();
       } else {
         toast.error(typeof res.error === "string" ? res.error : "Failed to extend loan");
       }
@@ -735,13 +806,27 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       return;
     }
 
+    // 1. OPTIMISTIC REMOVAL: Remove immediately from UI in 0 ms
+    const deletedLoan = loans.find((l) => l.loanId === loanId);
+    setLoans((prev) => prev.filter((l) => l.loanId !== loanId));
+    queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+      if (!old) return [];
+      return old.filter((l) => l.loanId !== loanId);
+    });
+
     startTransition(async () => {
       const res = await deleteLoanAction(loanId);
       if (res.success) {
-        setLoans((prev) => prev.filter((l) => l.loanId !== loanId));
         toast.success("Loan deleted successfully!");
-        router.refresh();
       } else {
+        // Rollback on error
+        if (deletedLoan) {
+          setLoans((prev) => [deletedLoan, ...prev]);
+          queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+            if (!old) return [deletedLoan];
+            return [deletedLoan, ...old];
+          });
+        }
         toast.error(typeof res.error === "string" ? res.error : "Failed to delete loan");
       }
     });
@@ -752,13 +837,24 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       return;
     }
 
+    const removedLoans = loans.filter((l) => l.borrowerId === borrowerId);
+    setLoans((prev) => prev.filter((l) => l.borrowerId !== borrowerId));
+    queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+      if (!old) return [];
+      return old.filter((l) => l.borrowerId !== borrowerId);
+    });
+    setDetailsOpen(false);
+
     startTransition(async () => {
       const res = await deleteBorrowerAction(borrowerId);
       if (res.success) {
         toast.success("Borrower profile deleted successfully.");
-        setDetailsOpen(false);
-        router.refresh();
       } else {
+        setLoans((prev) => [...removedLoans, ...prev]);
+        queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+          if (!old) return removedLoans;
+          return [...removedLoans, ...old];
+        });
         toast.error(typeof res.error === "string" ? res.error : "Failed to delete borrower profile");
       }
     });
@@ -772,12 +868,10 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       const res = await deletePaymentAction(paymentId, selectedLoan.loanId);
       if (res.success) {
         toast.success("Payment record deleted.");
-        // Refetch extra details in place
         const extraRes = await getExtraLoanDetailsAction(selectedLoan.loanId);
         if (extraRes.success && extraRes.data) {
           setExtraDetails(extraRes.data);
         }
-        router.refresh();
       } else {
         toast.error(typeof res.error === "string" ? res.error : "Failed to delete payment");
       }

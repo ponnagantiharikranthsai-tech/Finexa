@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -38,6 +39,7 @@ interface CapitalManagementListProps {
 
 export function CapitalManagementList({ initialData }: CapitalManagementListProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [data, setData] = useState(initialData);
   const [activeTab, setActiveTab] = useState<"overview" | "funders">("overview");
 
@@ -210,7 +212,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
         toast.success(res.message || "Funder investment registered successfully!");
         setAddOpen(false);
         resetFunderForm();
-        router.refresh();
+        queryClient.invalidateQueries({ queryKey: ["capital-management-data"] });
       } else {
         toast.error(res.error || "Failed to create funder investment profile");
       }
@@ -250,7 +252,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
         toast.success("Investment details updated!");
         setEditOpen(false);
         resetFunderForm();
-        router.refresh();
+        queryClient.invalidateQueries({ queryKey: ["capital-management-data"] });
       } else {
         toast.error(res.error || "Failed to update investment profile");
       }
@@ -280,7 +282,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
       if (res.success) {
         toast.success(`Capital return of ₹${Number(returnAmount).toLocaleString("en-IN")} recorded!`);
         setReturnOpen(false);
-        router.refresh();
+        queryClient.invalidateQueries({ queryKey: ["capital-management-data"] });
       } else {
         toast.error(res.error || "Failed to record capital return");
       }
@@ -295,7 +297,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
       const res = await deleteFunderAction(funderId);
       if (res.success) {
         toast.success(`Investment record for "${funderName}" deleted successfully.`);
-        router.refresh();
+        queryClient.invalidateQueries({ queryKey: ["capital-management-data"] });
       } else {
         toast.error(res.error || "Failed to delete investment record");
       }

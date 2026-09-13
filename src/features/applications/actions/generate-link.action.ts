@@ -8,9 +8,9 @@ import { auditLog } from "@/lib/audit-log";
 import type { ActionResult } from "@/types/api.types";
 
 export async function generateLinkAction(
-  _prevState: ActionResult<{ code: string; url: string }> | null,
+  _prevState: ActionResult<{ code: string; url: string; application?: any }> | null,
   formData: FormData
-): Promise<ActionResult<{ code: string; url: string }>> {
+): Promise<ActionResult<{ code: string; url: string; application?: any }>> {
   try {
     await requireAuth();
 
@@ -87,6 +87,7 @@ export async function generateLinkAction(
       data: {
         code,
         url: secureUrl,
+        application: app,
       },
     };
   } catch (err: any) {

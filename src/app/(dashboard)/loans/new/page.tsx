@@ -1,7 +1,5 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import React, { useState, useTransition, useEffect, useActionState } from "react";
 import { useRouter } from "next/navigation";
 import { createLoanAction } from "@/features/loans/actions/create-loan.action";
@@ -15,8 +13,12 @@ import { calculateDueDate } from "@/domain/due-date-calculator";
 import { Search, Info, Check, ArrowLeft, User, FileText, Calculator, CreditCard, Bell } from "lucide-react";
 import Link from "next/link";
 
+import { useQueryClient } from "@tanstack/react-query";
+import { LOANS_QUERY_KEY } from "@/features/loans/hooks/use-loan-management-data";
+
 export default function NewLoanPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
   const [state, formAction] = useActionState(createLoanAction, null);
 
@@ -49,16 +51,22 @@ export default function NewLoanPage() {
 
   useEffect(() => {
     if (state?.success) {
+      const newLoan = (state.data as any)?.newLoan;
+      if (newLoan) {
+        queryClient.setQueryData<any[]>(LOANS_QUERY_KEY, (old) => {
+          if (!old) return [newLoan];
+          return [newLoan, ...old];
+        });
+      }
       toast.success("Loan created & issued successfully!");
       router.push("/loan-management");
-      router.refresh();
     } else if (state && !state.success) {
       const errStr = typeof state.error === "string" ? state.error : "Validation errors found. Please check input fields.";
       if (errStr !== "NEXT_REDIRECT") {
         toast.error(errStr);
       }
     }
-  }, [state, router]);
+  }, [state, router, queryClient]);
 
   // Calculator previews
   const numericPrincipal = Number(principal || 0);

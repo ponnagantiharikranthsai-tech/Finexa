@@ -33,7 +33,7 @@ export function DeleteBorrowerButton({ borrowerId, borrowerName, onSuccess, show
           if (onSuccess) {
             onSuccess();
           } else {
-            router.refresh();
+            router.push("/borrowers");
           }
         } else {
           toast.error(typeof res.error === "string" ? res.error : "Failed to delete borrower.");

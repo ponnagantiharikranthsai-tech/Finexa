@@ -14,9 +14,9 @@ import type { ActionResult } from "@/types/api.types";
 import { paymentReminderRepository } from "@/features/notifications/repository/payment-reminder.repository";
 
 export async function createLoanAction(
-  _prevState: ActionResult<{ loanId: string }> | null,
+  _prevState: ActionResult<{ loanId: string; newLoan?: any }> | null,
   formData: FormData
-): Promise<ActionResult<{ loanId: string }>> {
+): Promise<ActionResult<{ loanId: string; newLoan?: any }>> {
   try {
     await requireAuth();
 
@@ -85,33 +85,37 @@ export async function createLoanAction(
     });
 
     if (borrowerObj.email) {
-      try {
-        await emailService.sendLoanCreatedEmail({
-          loanId: loan.loanId,
-          borrowerName: borrowerObj.name,
-          borrowerEmail: borrowerObj.email,
-          principal: Number(loan.principal),
-          monthlyInterest,
-          interestRate: Number(loan.interestRate),
-          dateGiven: loan.dateGiven,
-          dueDate: loan.dueDate,
-        });
+      const recipientEmail = borrowerObj.email;
+      // Non-blocking fire-and-forget email dispatch
+      Promise.resolve().then(async () => {
+        try {
+          await emailService.sendLoanCreatedEmail({
+            loanId: loan.loanId,
+            borrowerName: borrowerObj.name,
+            borrowerEmail: recipientEmail,
+            principal: Number(loan.principal),
+            monthlyInterest,
+            interestRate: Number(loan.interestRate),
+            dateGiven: loan.dateGiven,
+            dueDate: loan.dueDate,
+          });
 
-        await notificationLogRepository.insert({
-          loanId: loan.loanId,
-          channel: "email",
-          type: "creation",
-          status: "sent",
-        });
-      } catch (e: any) {
-        await notificationLogRepository.insert({
-          loanId: loan.loanId,
-          channel: "email",
-          type: "creation",
-          status: "failed",
-          errorMessage: e.message || "Failed to send email notification",
-        });
-      }
+          await notificationLogRepository.insert({
+            loanId: loan.loanId,
+            channel: "email",
+            type: "creation",
+            status: "sent",
+          });
+        } catch (e: any) {
+          await notificationLogRepository.insert({
+            loanId: loan.loanId,
+            channel: "email",
+            type: "creation",
+            status: "failed",
+            errorMessage: e.message || "Failed to send email notification",
+          });
+        }
+      }).catch((e) => console.error("Async email dispatch error:", e));
     }
 
     await paymentReminderRepository.createScheduleForLoan(loan.loanId, loan.dueDate);
@@ -120,7 +124,22 @@ export async function createLoanAction(
     const { invalidateLoanManagementCache } = await import("./get-loan-management-data.action");
     await invalidateLoanManagementCache();
 
-    return { success: true, data: { loanId: loan.loanId } };
+    return {
+      success: true,
+      data: {
+        loanId: loan.loanId,
+        newLoan: {
+          ...loan,
+          borrower: {
+            ...borrowerObj,
+            panDecrypted: "",
+            aadhaarDecrypted: "",
+          },
+          outstandingBalance: Number(loan.principal),
+          monthlyInterestAmount: monthlyInterest,
+        } as any,
+      },
+    };
   } catch (err: any) {
     if (err?.message === "NEXT_REDIRECT" || err?.digest?.startsWith("NEXT_REDIRECT")) {
       throw err;

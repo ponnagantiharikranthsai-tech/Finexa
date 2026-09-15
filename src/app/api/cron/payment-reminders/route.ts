@@ -5,11 +5,16 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const secret = searchParams.get("secret");
+    const authHeader = request.headers.get("authorization");
     const headerSecret = request.headers.get("x-cron-secret");
-
     const cronSecret = process.env.CRON_SECRET || "finexa_local_cron_secret_key_2026";
 
-    if (secret !== cronSecret && headerSecret !== cronSecret && process.env.NODE_ENV === "production") {
+    const isVercelCron = authHeader === `Bearer ${cronSecret}`;
+    const isHeaderSecret = headerSecret === cronSecret;
+    const isQuerySecret = secret === cronSecret;
+    const isAuthorized = isVercelCron || isHeaderSecret || isQuerySecret;
+
+    if (!isAuthorized && process.env.NODE_ENV === "production") {
       return NextResponse.json({ success: false, error: "Unauthorized cron request" }, { status: 401 });
     }
 
@@ -25,4 +30,8 @@ export async function GET(request: Request) {
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || "Failed cron execution" }, { status: 500 });
   }
+}
+
+export async function POST(request: Request) {
+  return GET(request);
 }

@@ -76,26 +76,24 @@ export async function submitLoanApplicationAction(
     console.log(`[APPLICATION SUBMISSION SUCCESS] Application ${app.applicationId} saved for ${name}.`);
     console.log(`[INSTANT WEB PUSH] Dispatching background Push alert to registered admin devices...`);
 
-    // Dispatch Web Push notification to admin devices in background (non-blocking for borrower UX)
-    Promise.resolve().then(async () => {
-      try {
-        const pushSuccess = await sendWebPushToAllSubscriptions(dedupKey, {
-          title: `🔔 ${toUnicodeBold("NEW LOAN APPLICATION")}`,
-          body: formatExecutivePushBody(name, principalFormatted, interestTypeStr, duration),
-          icon: "/icon-192.png",
-          badge: "/badge.png",
-          url: `/applications`,
-          tag: dedupKey,
-          actions: [
-            { action: "review", title: "Review Application" },
-            { action: "dismiss", title: "Dismiss" },
-          ],
-        });
-        console.log(`[INSTANT WEB PUSH RESULT] Web Push status for ${name}: ${pushSuccess ? "DELIVERED" : "FAILED / NO SUBSCRIPTIONS"}`);
-      } catch (pushErr: any) {
-        console.error("[INSTANT WEB PUSH ERROR] Failed to send Web Push alert:", pushErr?.message || pushErr);
-      }
-    });
+    // Dispatch Web Push notification to admin devices with guaranteed serverless completion
+    try {
+      const pushSuccess = await sendWebPushToAllSubscriptions(dedupKey, {
+        title: `🔔 ${toUnicodeBold("NEW LOAN APPLICATION")}`,
+        body: formatExecutivePushBody(name, principalFormatted, interestTypeStr, duration),
+        icon: "/icon-192.png",
+        badge: "/badge.png",
+        url: `/applications`,
+        tag: dedupKey,
+        actions: [
+          { action: "review", title: "Review Application" },
+          { action: "dismiss", title: "Dismiss" },
+        ],
+      });
+      console.log(`[INSTANT WEB PUSH RESULT] Web Push status for ${name}: ${pushSuccess ? "DELIVERED" : "FAILED / NO SUBSCRIPTIONS"}`);
+    } catch (pushErr: any) {
+      console.error("[INSTANT WEB PUSH ERROR] Failed to send Web Push alert:", pushErr?.message || pushErr);
+    }
 
     // Notify the admin by generating an audit log
     await auditLog("application_submitted", "loan_application", app.applicationId, {

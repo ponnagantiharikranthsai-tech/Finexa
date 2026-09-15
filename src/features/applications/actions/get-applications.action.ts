@@ -47,6 +47,9 @@ export async function getApplicationsAction(
       },
     };
   } catch (err: any) {
+    if (err?.message === "NEXT_REDIRECT" || err?.digest?.startsWith("NEXT_REDIRECT")) {
+      throw err;
+    }
     return { success: false, error: err.message || "Failed to fetch applications" };
   }
 }

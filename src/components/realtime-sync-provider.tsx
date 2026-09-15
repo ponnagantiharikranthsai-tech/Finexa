@@ -116,11 +116,11 @@ export function RealtimeSyncProvider({ children }: { children: React.ReactNode }
 
             // Targeted TanStack Query invalidation (avoids blocking full RSC re-renders)
             if (table === "loans" || table === "payments") {
-              queryClient.invalidateQueries({ queryKey: [LOANS_QUERY_KEY] });
+              queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
             } else if (table === "borrowers") {
               queryClient.invalidateQueries({ queryKey: ["borrowers"] });
             } else if (table === "loan_applications") {
-              queryClient.invalidateQueries({ queryKey: ["applications"] });
+              queryClient.invalidateQueries({ queryKey: ["applications-data"] });
             } else if (table === "funders" || table === "capital_funds") {
               queryClient.invalidateQueries({ queryKey: ["capital-management"] });
             } else {

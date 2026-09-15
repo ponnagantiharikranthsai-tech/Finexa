@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -93,7 +94,30 @@ function calculateDurationText(startStr: string, dueStr: string, interestType: "
 }
 
 export function ApplicationsList({ initialApps, total: initialTotal, totalPages: initialTotalPages }: ApplicationsListProps) {
+  const queryClient = useQueryClient();
   const [apps, setApps] = useState<ApplicationWithBorrower[]>(initialApps);
+
+  // Keep apps state in sync with incoming props (resolves empty state on initial load)
+  useEffect(() => {
+    if (initialApps && initialApps.length > 0) {
+      setApps(initialApps);
+    }
+  }, [initialApps]);
+
+  // Subscribe to TanStack Query Cache so realtime sync and background updates immediately reflect
+  useEffect(() => {
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (
+        event?.query?.queryKey?.[0] === "applications-data" &&
+        event.query.state.data &&
+        Array.isArray((event.query.state.data as any).data)
+      ) {
+        setApps((event.query.state.data as any).data);
+      }
+    });
+    return () => unsubscribe();
+  }, [queryClient]);
+
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<string>("all");
   const [page, setPage] = useState(1);

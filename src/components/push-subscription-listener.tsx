@@ -31,6 +31,16 @@ export function PushSubscriptionListener() {
       }
 
       try {
+        // On localhost in development, unregister service workers to avoid ERR_FAILED
+        if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (const registration of registrations) {
+              registration.unregister();
+            }
+          });
+          return;
+        }
+
         // Only run auto-repair if Notification permission is ALREADY granted by the user
         if (Notification.permission !== "granted") {
           return;

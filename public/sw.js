@@ -28,6 +28,15 @@ self.addEventListener("install", function (event) {
 
 // Activate Event — Clean up obsolete caches and claim clients immediately
 self.addEventListener("activate", function (event) {
+  if (self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1") {
+    event.waitUntil(
+      self.registration.unregister().then(function () {
+        return self.clients.claim();
+      })
+    );
+    return;
+  }
+
   event.waitUntil(
     caches.keys().then(function (cacheNames) {
       return Promise.all(
@@ -48,6 +57,16 @@ self.addEventListener("activate", function (event) {
 self.addEventListener("fetch", function (event) {
   const request = event.request;
   const url = new URL(request.url);
+
+  // 0. NEVER intercept or cache requests on localhost / development (Eliminates ERR_FAILED)
+  if (
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
+    self.location.hostname === "localhost" ||
+    self.location.hostname === "127.0.0.1"
+  ) {
+    return;
+  }
 
   // 1. NEVER cache API requests, Next.js data routes, or non-GET requests (Network-Only)
   if (

@@ -5,17 +5,58 @@ import { capitalRepository } from "../repository/capital.repository";
 import { revalidatePath } from "next/cache";
 import { auditLog } from "@/lib/audit-log";
 
-export async function createFunderAction(prevState: any, formData: FormData) {
+export interface CreateFunderInput {
+  name: string;
+  mobile: string;
+  address: string;
+  capitalAmount: number | string;
+  investmentDate: string;
+  returnDueDate: string;
+  notes?: string | null;
+}
+
+export async function createFunderAction(
+  prevStateOrData: any,
+  maybeFormData?: FormData
+) {
   try {
     await requireAuth();
 
-    const name = formData.get("name") as string;
-    const mobile = formData.get("mobile") as string;
-    const address = formData.get("address") as string;
-    const capitalAmountStr = formData.get("capitalAmount") as string;
-    const investmentDate = formData.get("investmentDate") as string;
-    const returnDueDate = formData.get("returnDueDate") as string;
-    const notes = formData.get("notes") as string;
+    let name: string = "";
+    let mobile: string = "";
+    let address: string = "";
+    let capitalAmountStr: string = "";
+    let investmentDate: string = "";
+    let returnDueDate: string = "";
+    let notes: string | null = null;
+
+    if (maybeFormData instanceof FormData) {
+      name = (maybeFormData.get("name") as string) || "";
+      mobile = (maybeFormData.get("mobile") as string) || "";
+      address = (maybeFormData.get("address") as string) || "";
+      capitalAmountStr = (maybeFormData.get("capitalAmount") as string) || "";
+      investmentDate = (maybeFormData.get("investmentDate") as string) || "";
+      returnDueDate = (maybeFormData.get("returnDueDate") as string) || "";
+      notes = (maybeFormData.get("notes") as string) || null;
+    } else if (prevStateOrData instanceof FormData) {
+      name = (prevStateOrData.get("name") as string) || "";
+      mobile = (prevStateOrData.get("mobile") as string) || "";
+      address = (prevStateOrData.get("address") as string) || "";
+      capitalAmountStr = (prevStateOrData.get("capitalAmount") as string) || "";
+      investmentDate = (prevStateOrData.get("investmentDate") as string) || "";
+      returnDueDate = (prevStateOrData.get("returnDueDate") as string) || "";
+      notes = (prevStateOrData.get("notes") as string) || null;
+    } else if (typeof prevStateOrData === "object" && prevStateOrData !== null) {
+      name = prevStateOrData.name || "";
+      mobile = prevStateOrData.mobile || "";
+      address = prevStateOrData.address || "";
+      capitalAmountStr = String(prevStateOrData.capitalAmount || "");
+      investmentDate = prevStateOrData.investmentDate || "";
+      returnDueDate = prevStateOrData.returnDueDate || "";
+      notes = prevStateOrData.notes || null;
+    } else {
+      return { success: false, error: "Invalid form data provided." };
+    }
 
     if (!name || !mobile || !address || !capitalAmountStr || !investmentDate || !returnDueDate) {
       return { success: false, error: "All required fields must be filled out." };
@@ -51,6 +92,7 @@ export async function createFunderAction(prevState: any, formData: FormData) {
 
     return {
       success: true,
+      data: funder,
       message: existingFunder
         ? `Existing funder found (${existingFunder.name}). New investment of ₹${capitalAmount.toLocaleString("en-IN")} added successfully!`
         : `Funder registered and investment of ₹${capitalAmount.toLocaleString("en-IN")} created successfully!`,

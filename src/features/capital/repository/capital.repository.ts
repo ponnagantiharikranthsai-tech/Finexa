@@ -1,5 +1,5 @@
 import { db } from "@/db/client";
-import { fundersTable, capitalReturnsTable } from "@/db/schema";
+import { fundersTable, capitalReturnsTable, capitalAllocationsTable, loansTable } from "@/db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 
 export class CapitalRepository {
@@ -90,6 +90,70 @@ export class CapitalRepository {
       .select()
       .from(capitalReturnsTable)
       .orderBy(capitalReturnsTable.returnDate);
+  }
+
+  // ── Capital Allocations ───────────────────────────────────────────────────
+
+  async createAllocation(data: typeof capitalAllocationsTable.$inferInsert) {
+    const [inserted] = await db
+      .insert(capitalAllocationsTable)
+      .values(data)
+      .returning();
+    if (!inserted) {
+      throw new Error("Failed to insert capital allocation");
+    }
+    return inserted;
+  }
+
+  async updateAllocation(
+    id: string,
+    data: Partial<typeof capitalAllocationsTable.$inferInsert>
+  ) {
+    const [updated] = await db
+      .update(capitalAllocationsTable)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(capitalAllocationsTable.allocationId, id))
+      .returning();
+    return updated || null;
+  }
+
+  async deleteAllocation(id: string) {
+    const [deleted] = await db
+      .delete(capitalAllocationsTable)
+      .where(eq(capitalAllocationsTable.allocationId, id))
+      .returning();
+    return deleted || null;
+  }
+
+  async findAllocationsByLoanId(loanId: string) {
+    return await db
+      .select({
+        allocation: capitalAllocationsTable,
+        funder: fundersTable,
+      })
+      .from(capitalAllocationsTable)
+      .innerJoin(fundersTable, eq(capitalAllocationsTable.funderId, fundersTable.funderId))
+      .where(eq(capitalAllocationsTable.loanId, loanId))
+      .orderBy(capitalAllocationsTable.createdAt);
+  }
+
+  async findAllocationsByFunderId(funderId: string) {
+    return await db
+      .select({
+        allocation: capitalAllocationsTable,
+        loan: loansTable,
+      })
+      .from(capitalAllocationsTable)
+      .innerJoin(loansTable, eq(capitalAllocationsTable.loanId, loansTable.loanId))
+      .where(eq(capitalAllocationsTable.funderId, funderId))
+      .orderBy(capitalAllocationsTable.createdAt);
+  }
+
+  async findAllAllocations() {
+    return await db
+      .select()
+      .from(capitalAllocationsTable)
+      .orderBy(capitalAllocationsTable.createdAt);
   }
 }
 

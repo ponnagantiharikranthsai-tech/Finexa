@@ -25,11 +25,13 @@ import {
   ClipboardList,
   Home,
   Coins,
+  Car,
 } from "lucide-react";
 
 const navItems = [
   { label: "Home",               href: "/home",             icon: Home },
   { label: "Loan Management",    href: "/loan-management",  icon: CreditCard },
+  { label: "Vehicle Loans",      href: "/vehicle-loans",     icon: Car },
   { label: "Capital Management", href: "/capital-management", icon: Coins },
   { label: "Applications",       href: "/applications",     icon: ClipboardList },
   { label: "Reports",            href: "/reports",          icon: BarChart3 },

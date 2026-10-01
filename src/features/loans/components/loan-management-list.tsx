@@ -22,7 +22,7 @@ import { sendReminderAction } from "@/features/notifications/actions/send-remind
 import { deleteLoanAction } from "@/features/loans/actions/delete-loan.action";
 import { deleteBorrowerAction } from "@/features/borrowers/actions/delete-borrower.action";
 import { updateBorrowerAction } from "@/features/borrowers/actions/update-borrower.action";
-import { getExtraLoanDetailsAction } from "@/features/loans/actions/get-extra-loan-details.action";
+import { getExtraLoanDetailsAction, type ExtraLoanDetails } from "@/features/loans/actions/get-extra-loan-details.action";
 import { deletePaymentAction } from "@/features/payments/actions/delete-payment.action";
 import { saveInternalNotesAction } from "@/features/borrowers/actions/save-internal-notes.action";
 import { updatePenaltySettingsAction } from "../actions/update-penalty-settings.action";
@@ -33,8 +33,10 @@ import {
   Search, Plus, Send, Landmark, Calendar, RefreshCw, CreditCard, ChevronRight,
   Trash2, Users, Mail, FileText, MapPin, User, Eye, EyeOff, Edit, Clock,
   AlertTriangle, Check, CheckCircle2, XCircle, ChevronDown, ListFilter, X,
-  ShieldAlert, Settings, Percent, DollarSign, History
+  ShieldAlert, Settings, Percent, DollarSign, History, ExternalLink, Coins
 } from "lucide-react";
+import { AllocateCapitalDialog } from "./allocate-capital-dialog";
+import { removeCapitalAllocationAction } from "@/features/capital/actions/remove-capital-allocation.action";
 import type { LoanManagementDetailResult } from "../actions/get-loan-management-data.action";
 import type { Payment, NotificationLog, PenaltyLedger, LoanCycle } from "@/db/schema";
 import { calculatePeriods, calculateMonthlyInterest } from "@/domain/interest-calculator";
@@ -251,6 +253,8 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   const [reminderOpen, setReminderOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [allocateOpen, setAllocateOpen] = useState(false);
+  const [loanToAllocate, setLoanToAllocate] = useState<LoanManagementDetailResult | null>(null);
   const [notesText, setNotesText] = useState("");
   const [originalNotesText, setOriginalNotesText] = useState("");
 
@@ -271,7 +275,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   const [borrowerLocation, setBorrowerLocation] = useState("");
 
   // Details extra data
-  const [extraDetails, setExtraDetails] = useState<{ payments: Payment[]; notifications: NotificationLog[]; cycles?: LoanCycle[] } | null>(null);
+  const [extraDetails, setExtraDetails] = useState<ExtraLoanDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [showSensitive, setShowSensitive] = useState(false);
 
@@ -495,6 +499,29 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       }
       setDetailsLoading(false);
     });
+  };
+
+  const handleRemoveAllocation = async (allocationId: string) => {
+    if (
+      !confirm(
+        "Are you sure you want to remove this capital allocation? The allocated money will immediately return to the capital provider's available balance."
+      )
+    ) {
+      return;
+    }
+    const res = await removeCapitalAllocationAction(allocationId);
+    if (res.success) {
+      toast.success("Capital allocation removed successfully.");
+      if (selectedLoan) {
+        const extraRes = await getExtraLoanDetailsAction(selectedLoan.loanId);
+        if (extraRes.success && extraRes.data) {
+          setExtraDetails(extraRes.data);
+        }
+      }
+      await queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+    } else {
+      toast.error(typeof res.error === "string" ? res.error : "Failed to remove allocation.");
+    }
   };
 
   const handleUpdatePenaltySettings = async (e: React.FormEvent) => {
@@ -1105,6 +1132,91 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                       }</strong></span>
                     </div>
                   </div>
+
+                  {/* Capital / Funding Source Section */}
+                  <div className="p-3 rounded-xl bg-black/15 dark:bg-black/35 border border-white/[0.04] text-xs space-y-2 text-left">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider flex items-center gap-1.5">
+                        <Landmark className="h-3 w-3 text-primary" /> Capital Source
+                      </span>
+                      {loan.funding && loan.funding.isFullyFunded ? (
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          Fully Funded
+                        </span>
+                      ) : loan.funding && loan.funding.isPartiallyFunded ? (
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          Partially Funded
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-muted/50 text-muted-foreground border border-border/40">
+                          Not Assigned
+                        </span>
+                      )}
+                    </div>
+
+                    {loan.funding && loan.funding.sources.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          {loan.funding.sources.map((s) => (
+                            <div
+                              key={s.allocationId}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 text-[11px] font-semibold text-foreground"
+                            >
+                              <span>
+                                {s.funderName}: <strong className="text-primary font-bold">₹{s.amount.toLocaleString("en-IN")}</strong>
+                                <span className="text-muted-foreground text-[10px] ml-1">({s.funderSharePercentage}%)</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/capital-management?funderId=${s.funderId}`);
+                                }}
+                                title="View in Capital Management"
+                                className="text-muted-foreground hover:text-primary transition-colors p-0.5"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {loan.funding.isPartiallyFunded && (
+                          <div className="flex items-center justify-between pt-1 border-t border-white/[0.04]">
+                            <span className="text-[10px] text-amber-400 font-bold">
+                              ₹{loan.funding.remainingRequired.toLocaleString("en-IN")} remaining
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLoanToAllocate(loan);
+                                setAllocateOpen(true);
+                              }}
+                              className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1"
+                            >
+                              <Plus className="h-3 w-3" /> Add Capital Person
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between pt-0.5">
+                        <span className="text-[11px] text-muted-foreground">No capital person assigned</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLoanToAllocate(loan);
+                            setAllocateOpen(true);
+                          }}
+                          className="h-7 px-2.5 rounded-lg bg-primary/15 text-primary border border-primary/25 hover:bg-primary/25 text-[11px] font-bold flex items-center gap-1 transition-all"
+                        >
+                          <Plus className="h-3 w-3" /> Add Capital Person
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Bottom Actions Row */}
@@ -1694,6 +1806,139 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                 </div>
               </div>
 
+              {/* ── Section 2A: Capital & Funding Allocation ───────────────── */}
+              {selectedLoan && (() => {
+                const currentFunding = extraDetails?.funding || selectedLoan.funding;
+                const sources = currentFunding?.sources || [];
+                const totalFunded = currentFunding?.totalFunded || 0;
+                const principal = Number(selectedLoan.principal);
+                const remaining = Math.max(0, principal - totalFunded);
+
+                return (
+                  <div className="space-y-3.5 border-t border-border/40 pt-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/40 pb-2">
+                      <h3 className="font-bold text-base text-primary flex items-center gap-1.5">
+                        <Landmark className="h-4 w-4" /> Capital & Funding Sources
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        {currentFunding?.isFullyFunded ? (
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            Fully Funded
+                          </span>
+                        ) : currentFunding?.isPartiallyFunded ? (
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            Partially Funded (₹{remaining.toLocaleString("en-IN")} left)
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border/40">
+                            Not Assigned
+                          </span>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            setLoanToAllocate(selectedLoan);
+                            setAllocateOpen(true);
+                          }}
+                          className="h-8 px-3 rounded-lg text-xs font-bold fx-brand-gradient text-white border-0 flex items-center gap-1"
+                        >
+                          <Plus className="h-3 w-3" />
+                          <span>+ Add Capital Person</span>
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Summary row */}
+                    <div className="grid grid-cols-3 gap-3 bg-accent/20 dark:bg-secondary/15 p-3 rounded-xl border border-border/30 text-xs text-center">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Loan Principal</span>
+                        <p className="font-extrabold text-foreground mt-0.5">₹{principal.toLocaleString("en-IN")}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Funded</span>
+                        <p className="font-extrabold text-emerald-400 mt-0.5">₹{totalFunded.toLocaleString("en-IN")}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Unfunded Balance</span>
+                        <p className={`font-extrabold mt-0.5 ${remaining > 0 ? "text-amber-400 font-black" : "text-muted-foreground"}`}>
+                          ₹{remaining.toLocaleString("en-IN")}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Sources Table */}
+                    {sources.length === 0 ? (
+                      <div className="p-4 text-center rounded-xl bg-accent/15 dark:bg-secondary/10 border border-border/30 text-xs text-muted-foreground space-y-1">
+                        <p className="font-semibold text-foreground">No capital person assigned yet</p>
+                        <p className="text-[11px]">Click &quot;+ Add Capital Person&quot; above to connect an investor/funder to this loan.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto border border-border/30 rounded-xl bg-accent/15 dark:bg-secondary/10">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="border-b border-border/30 bg-white/5">
+                              <th className="p-2.5 font-bold text-muted-foreground uppercase text-[10px]">Capital Person</th>
+                              <th className="p-2.5 font-bold text-muted-foreground uppercase text-[10px]">Amount</th>
+                              <th className="p-2.5 font-bold text-muted-foreground uppercase text-[10px]">Share %</th>
+                              <th className="p-2.5 font-bold text-muted-foreground uppercase text-[10px]">Funding Date</th>
+                              <th className="p-2.5 font-bold text-muted-foreground uppercase text-[10px]">Notes</th>
+                              <th className="p-2.5 font-bold text-muted-foreground uppercase text-[10px] text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/20">
+                            {sources.map((src) => (
+                              <tr key={src.allocationId} className="hover:bg-white/[0.02]">
+                                <td className="p-2.5">
+                                  <p className="font-bold text-foreground">{src.funderName}</p>
+                                  <p className="text-[10px] text-muted-foreground">{src.funderMobile}</p>
+                                </td>
+                                <td className="p-2.5 font-extrabold text-primary">
+                                  ₹{src.amount.toLocaleString("en-IN")}
+                                </td>
+                                <td className="p-2.5 font-semibold text-foreground">
+                                  {src.funderSharePercentage}%
+                                </td>
+                                <td className="p-2.5 text-muted-foreground text-[11px]">
+                                  {src.allocationDate}
+                                </td>
+                                <td className="p-2.5 text-muted-foreground text-[11px] truncate max-w-[120px]" title={src.notes || ""}>
+                                  {src.notes || "—"}
+                                </td>
+                                <td className="p-2.5 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setDetailsOpen(false);
+                                        router.push(`/capital-management?funderId=${src.funderId}`);
+                                      }}
+                                      className="px-2 py-1 rounded bg-secondary hover:bg-accent/40 text-[10px] font-bold text-primary flex items-center gap-1 transition-colors"
+                                      title="View in Capital Management"
+                                    >
+                                      <span>Capital Details</span>
+                                      <ExternalLink className="h-2.5 w-2.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveAllocation(src.allocationId)}
+                                      className="p-1 rounded text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                      title="Remove Allocation"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* ── Section 2B: Penalty Details & Settings ───────────────── */}
               {selectedLoan && (() => {
                 const currentRate = Number(penaltyRateInput);
@@ -2021,6 +2266,22 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Modal: Allocate Capital Dialog ──────────────────────────────────── */}
+      <AllocateCapitalDialog
+        open={allocateOpen}
+        onOpenChange={setAllocateOpen}
+        loan={loanToAllocate}
+        onSuccess={async () => {
+          await queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+          if (selectedLoan) {
+            const extraRes = await getExtraLoanDetailsAction(selectedLoan.loanId);
+            if (extraRes.success && extraRes.data) {
+              setExtraDetails(extraRes.data);
+            }
+          }
+        }}
+      />
     </div>
   );
 }

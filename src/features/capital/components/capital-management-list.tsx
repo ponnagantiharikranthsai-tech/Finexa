@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,8 @@ import {
   Search, Plus, Landmark, Calendar, RefreshCw, ChevronRight,
   Trash2, Mail, FileText, MapPin, User, Edit, Clock,
   Check, CheckCircle2, XCircle, ChevronDown, ListFilter,
-  DollarSign, Wallet, Users, ArrowUpLeft, ArrowDownRight, Coins, Info
+  DollarSign, Wallet, Users, ArrowUpLeft, ArrowDownRight, Coins, Info,
+  CreditCard, ExternalLink, ShieldCheck
 } from "lucide-react";
 import { createFunderAction } from "../actions/create-funder.action";
 import { updateFunderAction } from "../actions/update-funder.action";
@@ -32,6 +33,8 @@ interface CapitalManagementListProps {
       activeCapital: number;
       availableCapital: number;
       activeFunders: number;
+      totalAllocated?: number;
+      totalCapitalWithBorrowers?: number;
       totalOutstandingLoansPrincipal: number;
     };
   };
@@ -39,6 +42,7 @@ interface CapitalManagementListProps {
 
 export function CapitalManagementList({ initialData }: CapitalManagementListProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [data, setData] = useState(initialData);
   const [activeTab, setActiveTab] = useState<"overview" | "funders">("overview");
@@ -79,6 +83,19 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
   useEffect(() => {
     setData(initialData);
   }, [initialData]);
+
+  // Deep linking trigger via ?funderId=...
+  useEffect(() => {
+    const funderIdParam = searchParams.get("funderId");
+    if (funderIdParam && data.funders.length > 0) {
+      const match = data.funders.find((f) => f.funderId === funderIdParam);
+      if (match) {
+        setActiveTab("funders");
+        setSelectedFunder(match);
+        setDetailsOpen(true);
+      }
+    }
+  }, [searchParams, data.funders]);
 
   // Mobile number lookup for existing funder during Add Funder form
   const matchedExistingFunder = React.useMemo(() => {
@@ -628,8 +645,18 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                           <p className="font-extrabold text-foreground mt-0.5">₹{funder.capitalAmount.toLocaleString("en-IN")}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Returned Amount</p>
-                          <p className="font-extrabold text-foreground mt-0.5">₹{funder.totalReturned.toLocaleString("en-IN")}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Available to Lend</p>
+                          <p className="font-extrabold text-emerald-400 mt-0.5">
+                            ₹{(funder.availableCapital ?? funder.remainingCapital).toLocaleString("en-IN")}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Allocated to Loans</p>
+                          <p className="font-extrabold text-primary mt-0.5">₹{(funder.totalAllocated || 0).toLocaleString("en-IN")}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">With Borrowers</p>
+                          <p className="font-extrabold text-amber-400 mt-0.5">₹{(funder.capitalWithBorrowers || 0).toLocaleString("en-IN")}</p>
                         </div>
                         <div>
                           <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Return Due Date</p>
@@ -644,6 +671,16 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                           </p>
                         </div>
                       </div>
+
+                      {/* Loan Funding Count Badge */}
+                      {funder.loansFunded && funder.loansFunded.length > 0 && (
+                        <div className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[10px] font-bold text-primary flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <CreditCard className="h-3 w-3" /> Loans Funded:
+                          </span>
+                          <strong>{funder.loansFunded.length} Active Loan{funder.loansFunded.length !== 1 ? "s" : ""}</strong>
+                        </div>
+                      )}
 
                       {hasMultiple && (
                         <div className="px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] font-bold text-amber-500 flex items-center justify-between">
@@ -1088,6 +1125,116 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* ── Connected Loan Allocations ("Where is my money currently?") ── */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                  <h3 className="font-bold text-sm text-primary flex items-center gap-1.5">
+                    <CreditCard className="h-4 w-4" /> Where Is This Money? (Loans Funded)
+                  </h3>
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase px-2.5 py-0.5 rounded-full bg-accent/30">
+                    {selectedFunder.loansFunded?.length || 0} Loan Allocation{selectedFunder.loansFunded?.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+
+                {/* Capital Allocation Financial Breakdown */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-black/25 dark:bg-black/45 border border-border/40 text-xs text-center">
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground">Total Capital</span>
+                    <p className="font-extrabold text-foreground mt-0.5">
+                      ₹{selectedFunder.capitalAmount.toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground">Allocated to Loans</span>
+                    <p className="font-extrabold text-primary mt-0.5">
+                      ₹{(selectedFunder.totalAllocated || 0).toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground">With Borrowers</span>
+                    <p className="font-extrabold text-amber-400 mt-0.5">
+                      ₹{(selectedFunder.capitalWithBorrowers || 0).toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground">Available to Lend</span>
+                    <p className="font-black text-emerald-400 mt-0.5">
+                      ₹{(selectedFunder.availableCapital ?? selectedFunder.remainingCapital).toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Loans Funded Table */}
+                {!selectedFunder.loansFunded || selectedFunder.loansFunded.length === 0 ? (
+                  <div className="py-6 text-center bg-accent/15 dark:bg-secondary/10 rounded-xl text-xs text-muted-foreground space-y-1">
+                    <p className="font-semibold text-foreground">No loans funded yet from this capital record.</p>
+                    <p className="text-[11px]">Go to Loan Management and assign this capital provider to fund loans.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-border/30 rounded-xl bg-accent/15 dark:bg-secondary/10">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-border/30 bg-white/5">
+                          <th className="p-3 font-bold text-muted-foreground uppercase text-[10px]">Borrower & Loan</th>
+                          <th className="p-3 font-bold text-muted-foreground uppercase text-[10px]">Capital Allocated</th>
+                          <th className="p-3 font-bold text-muted-foreground uppercase text-[10px]">With Borrower</th>
+                          <th className="p-3 font-bold text-muted-foreground uppercase text-[10px]">Repaid</th>
+                          <th className="p-3 font-bold text-muted-foreground uppercase text-[10px]">Funding Date</th>
+                          <th className="p-3 font-bold text-muted-foreground uppercase text-[10px] text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/20">
+                        {selectedFunder.loansFunded.map((loanItem) => (
+                          <tr key={loanItem.allocationId} className="hover:bg-white/[0.02]">
+                            <td className="p-3">
+                              <p className="font-bold text-foreground">{loanItem.borrowerName}</p>
+                              <p className="text-[10px] text-muted-foreground">
+                                Loan: ₹{loanItem.loanPrincipal.toLocaleString("en-IN")} • {loanItem.borrowerMobile}
+                              </p>
+                            </td>
+                            <td className="p-3">
+                              <span className="font-extrabold text-foreground">
+                                ₹{loanItem.allocatedAmount.toLocaleString("en-IN")}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground block">
+                                {loanItem.funderSharePercentage}% of loan
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className="font-bold text-amber-400">
+                                ₹{loanItem.capitalWithBorrower.toLocaleString("en-IN")}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className="font-bold text-emerald-400">
+                                ₹{loanItem.capitalRepaid.toLocaleString("en-IN")}
+                              </span>
+                            </td>
+                            <td className="p-3 text-muted-foreground text-[11px]">
+                              {loanItem.allocationDate}
+                            </td>
+                            <td className="p-3 text-right">
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => {
+                                  setDetailsOpen(false);
+                                  router.push(`/loan-management?loanId=${loanItem.loanId}`);
+                                }}
+                                className="h-7 px-2.5 rounded-lg text-[10px] font-bold bg-secondary hover:bg-accent/40 text-primary border border-border"
+                              >
+                                <span>View Loan</span>
+                                <ExternalLink className="h-2.5 w-2.5 ml-1" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {/* Funder Notes */}

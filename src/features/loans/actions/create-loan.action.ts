@@ -118,6 +118,23 @@ export async function createLoanAction(
       }).catch((e) => console.error("Async email dispatch error:", e));
     }
 
+    // Optional Capital Allocation during loan creation
+    const funderId = (formData.get("funderId") as string)?.trim();
+    if (funderId) {
+      try {
+        const { allocateCapitalAction } = await import("@/features/capital/actions/allocate-capital.action");
+        await allocateCapitalAction({
+          loanId: loan.loanId,
+          funderId,
+          amount: parsed.data.principal,
+          allocationDate: parsed.data.dateGiven,
+          notes: "Allocated during loan creation",
+        });
+      } catch (allocErr) {
+        console.error("Auto-allocation during loan creation error:", allocErr);
+      }
+    }
+
     const { invalidateLoanManagementCache } = await import("./get-loan-management-data.action");
     await invalidateLoanManagementCache().catch(() => {});
 

@@ -10,11 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { calculateMonthlyInterest } from "@/domain/interest-calculator";
 import { calculateDueDate } from "@/domain/due-date-calculator";
-import { Search, Info, Check, ArrowLeft, User, FileText, Calculator, CreditCard, Bell } from "lucide-react";
+import { Search, Info, Check, ArrowLeft, User, FileText, Calculator, CreditCard, Bell, Landmark } from "lucide-react";
 import Link from "next/link";
 
 import { useQueryClient } from "@tanstack/react-query";
 import { LOANS_QUERY_KEY } from "@/features/loans/hooks/use-loan-management-data";
+import { getFundersQuickListAction, type FunderQuickOption } from "@/features/capital/actions/get-funders-quick-list.action";
 
 export default function NewLoanPage() {
   const router = useRouter();
@@ -35,6 +36,16 @@ export default function NewLoanPage() {
   const [interestRate, setInterestRate]   = useState("20");
   const [dateGiven, setDateGiven]         = useState(new Date().toISOString().split("T")[0]!);
   const [dueDate, setDueDate]             = useState("");
+
+  // Optional Capital Allocation
+  const [funderId, setFunderId]           = useState("");
+  const [fundersList, setFundersList]     = useState<FunderQuickOption[]>([]);
+
+  useEffect(() => {
+    getFundersQuickListAction().then((res) => {
+      if (res.success && res.data) setFundersList(res.data);
+    });
+  }, []);
 
   // Prefetch loan management page so route transition is 0ms
   useEffect(() => {
@@ -99,6 +110,7 @@ export default function NewLoanPage() {
     formData.append("interestRate", interestRate);
     formData.append("dateGiven", dateGiven);
     formData.append("dueDate", resolvedDueDate);
+    if (funderId) formData.append("funderId", funderId);
 
     // 2. Construct instant optimistic loan matching LoanManagementDetailResult
     const optimisticLoan: any = {
@@ -344,6 +356,46 @@ export default function NewLoanPage() {
                   <Label htmlFor="dueDate" className={labelClass}>Due Date*</Label>
                   <Input id="dueDate" name="dueDate" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required className={inputClass} />
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Section 2B: Capital Funding Allocation (Optional) ────────── */}
+          <div className="bg-white dark:bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-secondary">
+              <div className="flex items-center gap-3">
+                <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Landmark className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">Capital Source Allocation</p>
+                  <p className="text-[11px] text-muted-foreground">Select capital provider funding this loan, or allocate later</p>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                OPTIONAL
+              </span>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="funderId" className={labelClass}>Capital Provider / Funder</Label>
+                <select
+                  id="funderId"
+                  value={funderId}
+                  onChange={(e) => setFunderId(e.target.value)}
+                  className="w-full h-11 px-3.5 rounded-xl bg-background border border-border/50 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">-- No Capital Person (Assign Later from Loan Card) --</option>
+                  {fundersList.map((f) => (
+                    <option key={f.funderId} value={f.funderId}>
+                      {f.name} — Available: ₹{f.availableCapital.toLocaleString("en-IN")} (Total: ₹{f.totalCapital.toLocaleString("en-IN")})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-muted-foreground">
+                  If selected, FINEXA will automatically connect and allocate this loan amount from the capital provider upon creation.
+                </p>
               </div>
             </div>
           </div>

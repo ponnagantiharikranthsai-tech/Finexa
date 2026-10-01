@@ -152,6 +152,12 @@ export async function sendWebPushToAllSubscriptions(
       return false;
     }
 
+    // Localhost Development Push Notification Sandbox Protection
+    if (process.env.NODE_ENV !== "production" && process.env.ENABLE_REAL_DEV_PUSH !== "true") {
+      console.log(`\x1b[33m[DEV PUSH SANDBOX]\x1b[0m Protected real devices. Simulated Web Push alert [${dedupKey}]: "${payload.title}" - "${payload.body}"`);
+      return true;
+    }
+
     // 2. Fetch all registered active push subscriptions
     const subscriptions = await db.select().from(pushSubscriptionsTable);
     if (subscriptions.length === 0) {

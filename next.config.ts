@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const isProd = process.env.NODE_ENV === "production";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["localhost:3000", "127.0.0.1:3000", "localhost", "127.0.0.1"],
   experimental: {
     serverActions: {
       // In production (Vercel), allow the deployed domain.

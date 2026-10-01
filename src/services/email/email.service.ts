@@ -67,6 +67,12 @@ ${appLink}
 Thank you,
 FINEXA – Smart Loan Management.`;
 
+    // Localhost Development Email Sandbox Protection
+    if (process.env.NODE_ENV !== "production" && process.env.ENABLE_REAL_DEV_EMAIL !== "true") {
+      console.log(`\x1b[33m[DEV EMAIL SANDBOX]\x1b[0m Protected real borrower. Simulated Loan Created Email to ${payload.borrowerEmail}`);
+      return;
+    }
+
     const { error } = await resend.emails.send({
       from: `Finexa <${FROM_EMAIL}>`,
       to: payload.borrowerEmail,
@@ -108,6 +114,12 @@ Please clear your dues on time to avoid late fees.
 
 Thank you,
 FINEXA – Smart Loan Management.`;
+
+    // Localhost Development Email Sandbox Protection
+    if (process.env.NODE_ENV !== "production" && process.env.ENABLE_REAL_DEV_EMAIL !== "true") {
+      console.log(`\x1b[33m[DEV EMAIL SANDBOX]\x1b[0m Protected real borrower. Simulated Reminder Email to ${payload.borrowerEmail}`);
+      return;
+    }
 
     const { error } = await resend.emails.send({
       from: `Finexa <${FROM_EMAIL}>`,

@@ -23,11 +23,24 @@ export default function LoginPage() {
   const [focused, setFocused] = useState<"email" | "password" | null>(null);
   const [showMoneyEffect, setShowMoneyEffect] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) e.preventDefault();
     setError(null);
 
-    if (!email.trim() || !password) {
+    // Fallback to DOM elements in case browser autofill did not trigger onChange
+    let emailVal = email.trim();
+    let passVal = password;
+
+    if (!emailVal || !passVal) {
+      if (typeof document !== "undefined") {
+        const emailEl = document.getElementById("email") as HTMLInputElement | null;
+        const passEl = document.getElementById("password") as HTMLInputElement | null;
+        if (emailEl?.value) emailVal = emailEl.value.trim();
+        if (passEl?.value) passVal = passEl.value;
+      }
+    }
+
+    if (!emailVal || !passVal) {
       const msg = "Please enter your email/mobile and password.";
       setError(msg);
       toast.error(msg);
@@ -39,16 +52,16 @@ export default function LoginPage() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({ email: emailVal, password: passVal }),
       });
       const data = await res.json();
       if (data.success) {
         document.cookie = "finexa_session=true; path=/; max-age=604800; SameSite=Lax";
-        document.cookie = "finexa_user_email=" + encodeURIComponent(email.trim()) + "; path=/; max-age=604800; SameSite=Lax";
+        document.cookie = "finexa_user_email=" + encodeURIComponent(emailVal) + "; path=/; max-age=604800; SameSite=Lax";
         sessionStorage.setItem("session_active", "true");
         setShowMoneyEffect(true);
         toast.success("Welcome back to FINEXA!");
-        window.location.replace("/home");
+        window.location.href = "/home";
       } else {
         const errorMsg = typeof data.error === "string" 
           ? data.error 
@@ -57,12 +70,12 @@ export default function LoginPage() {
             : "Invalid email/mobile or password.";
         setError(errorMsg);
         toast.error(errorMsg);
-        setIsPending(false);
       }
     } catch (err: any) {
       const msg = err.message || "Failed to log in. Please check your connection.";
       setError(msg);
       toast.error(msg);
+    } finally {
       setIsPending(false);
     }
   };
@@ -244,12 +257,8 @@ export default function LoginPage() {
 
               {/* Submit Button */}
               <button
-                type="button"
+                type="submit"
                 disabled={isPending}
-                onClick={(e) => {
-                  console.log("[LOGIN] Login button clicked");
-                  handleSubmit(e);
-                }}
                 className="w-full h-12 rounded-xl bg-[#FFD54A] text-[#0B0F19] hover:bg-[#FFE082] active:scale-[0.98] transition-all duration-300 shadow-lg shadow-[#FFD54A]/20 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed mt-2 z-30 relative pointer-events-auto touch-manipulation cursor-pointer"
               >
                 {isPending ? (
@@ -264,6 +273,21 @@ export default function LoginPage() {
                   </>
                 )}
               </button>
+
+              {/* Dev Quick Credentials Helper */}
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail("ponnagantiharikranthsai@gmail.com");
+                    setPassword("@Harikranth 746992");
+                    toast.success("Credentials filled!");
+                  }}
+                  className="text-xs text-[#FFD54A] hover:underline cursor-pointer bg-transparent border-none py-1 px-2"
+                >
+                  ⚡ Fill My Admin Credentials
+                </button>
+              </div>
             </form>
           </div>
 

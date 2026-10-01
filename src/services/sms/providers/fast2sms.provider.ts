@@ -4,6 +4,12 @@ export class Fast2SMSProvider implements SMSProvider {
   private apiKey = process.env.FAST2SMS_API_KEY;
 
   async sendMessage(to: string, message: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    // Localhost Development SMS Sandbox Protection
+    if (process.env.NODE_ENV !== "production" && process.env.ENABLE_REAL_DEV_SMS !== "true") {
+      console.log(`\x1b[33m[DEV SMS SANDBOX]\x1b[0m Protected real borrower. Simulated SMS to ${to}: "${message}"`);
+      return { success: true, messageId: `dev-sandbox-${Date.now()}` };
+    }
+
     if (!this.apiKey) {
       return { success: false, error: "FAST2SMS_API_KEY is not defined in environment variables" };
     }

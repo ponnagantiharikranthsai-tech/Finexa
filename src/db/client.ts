@@ -13,9 +13,28 @@ if (!connectionString) {
   throw new Error("CRITICAL: Development database is not configured. Please set DEV_DATABASE_URL in .env.local.");
 }
 
+export const PROD_SUPABASE_PROJECT_REF = "kzeqckbcqykktdlidopd";
+
+export function isDevDbIsolated(): boolean {
+  if (isVercelProd) return true;
+  return !connectionString.includes(PROD_SUPABASE_PROJECT_REF);
+}
+
 const activeHost = connectionString.split("@")[1]?.split("/")[0] || "Supabase Pooler";
 if (!isVercelProd) {
-  console.log(`\x1b[32m[FINEXA DB]\x1b[0m Connected to: ${activeHost}`);
+  if (connectionString.includes(PROD_SUPABASE_PROJECT_REF)) {
+    console.error(`
+\x1b[41m\x1b[37m\x1b[1m ================================================================================ \x1b[0m
+\x1b[31m\x1b[1m 🚨 WARNING: LOCALHOST IS CONNECTED TO PRODUCTION DATA! 🚨 \x1b[0m
+\x1b[33m Database Target:\x1b[0m ${activeHost} (Project: ${PROD_SUPABASE_PROJECT_REF})
+\x1b[33m Safety Protection:\x1b[0m To protect live borrowers, loans, and capital from being
+ modified during local testing, set DEV_DATABASE_URL in .env.local to an isolated
+ local database (e.g. postgresql://postgres:postgres@localhost:5432/finexa_dev).
+\x1b[41m\x1b[37m\x1b[1m ================================================================================ \x1b[0m
+    `);
+  } else {
+    console.log(`\x1b[32m[FINEXA DB]\x1b[0m Connected to ISOLATED DEVELOPMENT DATABASE: ${activeHost} (SAFE MODE)`);
+  }
 }
 
 const globalForDb = globalThis as unknown as {

@@ -245,24 +245,45 @@ export async function verifyApplicationAction(
     const pdfArrayBuffer = doc.output("arraybuffer");
     const pdfBuffer = Buffer.from(pdfArrayBuffer);
 
-    // Upload PDF to Supabase Storage
+    // Upload PDF to Supabase Storage (Separated for Dev / Prod)
+    const isDev = process.env.NODE_ENV !== "production";
     const uploadId = Math.random().toString(36).substring(2, 15);
-    const pdfPath = `borrowers/${uploadId}/loan_agreement_${loan.loanId}.pdf`;
-    const adminClient = getSupabaseAdmin();
-    const { error: pdfError } = await adminClient.storage
-      .from("borrower-documents")
-      .upload(pdfPath, pdfBuffer, {
-        contentType: "application/pdf",
-        upsert: true,
-      });
+    const bucketName = process.env.SUPABASE_STORAGE_BUCKET || (isDev ? "borrower-documents-dev" : "borrower-documents");
+    const pdfPath = isDev 
+      ? `dev-borrowers/${uploadId}/loan_agreement_${loan.loanId}.pdf`
+      : `borrowers/${uploadId}/loan_agreement_${loan.loanId}.pdf`;
 
-    if (pdfError) {
-      throw new Error(`PDF upload failed: ${pdfError.message}`);
+    let pdfUrl = "";
+    try {
+      const adminClient = getSupabaseAdmin();
+      const { error: pdfError } = await adminClient.storage
+        .from(bucketName)
+        .upload(pdfPath, pdfBuffer, {
+          contentType: "application/pdf",
+          upsert: true,
+        });
+
+      if (pdfError) {
+        if (isDev) {
+          console.warn(`[DEV STORAGE NOTICE] Could not upload to ${bucketName} (${pdfError.message}). Using dev placeholder.`);
+          pdfUrl = `/dev-documents/loan_agreement_${loan.loanId}.pdf`;
+        } else {
+          throw new Error(`PDF upload failed: ${pdfError.message}`);
+        }
+      } else {
+        const { data: { publicUrl } } = adminClient.storage
+          .from(bucketName)
+          .getPublicUrl(pdfPath);
+        pdfUrl = publicUrl;
+      }
+    } catch (e: any) {
+      if (isDev) {
+        console.warn(`[DEV STORAGE NOTICE] Storage bypassed in dev: ${e.message}`);
+        pdfUrl = `/dev-documents/loan_agreement_${loan.loanId}.pdf`;
+      } else {
+        throw e;
+      }
     }
-
-    const { data: { publicUrl: pdfUrl } } = adminClient.storage
-      .from("borrower-documents")
-      .getPublicUrl(pdfPath);
 
     // Update application details in DB
     await applicationRepository.update(app.applicationId, {

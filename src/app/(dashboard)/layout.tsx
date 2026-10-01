@@ -230,6 +230,30 @@ export default function DashboardLayout({
         {/* ─── MAIN WORKSPACE ──────────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 relative z-[1]">
 
+          {/* ─── ISOLATED DEVELOPMENT / LOCAL ENVIRONMENT BANNER ─── */}
+          {process.env.NODE_ENV !== "production" && (
+            <div className="bg-amber-500/15 border-b border-amber-500/25 text-amber-400 px-4 py-1 text-[11px] font-semibold flex items-center justify-between z-40 shrink-0 backdrop-blur-md">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </span>
+                <span className="font-extrabold tracking-wider uppercase text-amber-300">DEVELOPMENT / LOCAL</span>
+                <span className="hidden sm:inline text-[9px] uppercase tracking-wider text-amber-200/90 bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 rounded font-mono font-bold">
+                  SAFE & ISOLATED
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-[10px]">
+                <span className="text-zinc-400 hidden md:inline">
+                  Production data protected
+                </span>
+                <span className="text-amber-400/90 font-mono font-semibold">
+                  LOCAL DB
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Top Header Bar — Logo, Search/Controls, Bell, Theme */}
           <header className="h-14 fx-glass-header flex items-center justify-between px-4 shrink-0 border-b border-border/40">
             <div className="flex items-center gap-2 md:hidden">

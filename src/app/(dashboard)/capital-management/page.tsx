@@ -8,7 +8,7 @@ import { Coins, RefreshCw } from "lucide-react";
 
 export default function CapitalManagementPage() {
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["capital-management-data"],
+    queryKey: ["capital-management-data-v2"],
     queryFn: async () => {
       const res = await getCapitalDataAction();
       if (!res.success || !res.data) {

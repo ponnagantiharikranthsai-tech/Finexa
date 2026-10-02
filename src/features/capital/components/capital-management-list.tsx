@@ -42,12 +42,33 @@ interface CapitalManagementListProps {
   };
 }
 
+const fmt = (val: number | string | undefined | null) => (Number(val) || 0).toLocaleString("en-IN");
+
 export function CapitalManagementList({ initialData }: CapitalManagementListProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [data, setData] = useState(initialData);
   const [activeTab, setActiveTab] = useState<"funders" | "overview">("funders");
+
+  // Defensively normalize stats
+  const stats = {
+    totalProvided: Number(data?.stats?.totalProvided ?? data?.stats?.totalReceived ?? 0),
+    currentlyAllocated: Number(data?.stats?.currentlyAllocated ?? data?.stats?.activeCapital ?? 0),
+    unallocatedReceived: Number(data?.stats?.unallocatedReceived ?? data?.stats?.availableCapital ?? 0),
+    activeFunders: Number(data?.stats?.activeFunders ?? 0),
+  };
+
+  // Defensively normalize funders list
+  const fundersList: FunderWithReturns[] = (data?.funders || []).map((f) => ({
+    ...f,
+    totalProvided: Number(f.totalProvided ?? f.capitalAmount ?? 0),
+    currentlyAllocated: Number(f.currentlyAllocated ?? 0),
+    unallocatedReceived: Number(f.unallocatedReceived ?? f.availableCapital ?? 0),
+    fundingHistory: Array.isArray(f.fundingHistory) ? f.fundingHistory : [],
+    loansFunded: Array.isArray(f.loansFunded) ? f.loansFunded : [],
+    returnsList: Array.isArray(f.returnsList) ? f.returnsList : [],
+  }));
 
   // Filter & Search states
   const [search, setSearch] = useState("");
@@ -88,15 +109,15 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
   // Deep linking trigger via ?funderId=...
   useEffect(() => {
     const funderIdParam = searchParams.get("funderId");
-    if (funderIdParam && data.funders.length > 0) {
-      const match = data.funders.find((f) => f.funderId === funderIdParam);
+    if (funderIdParam && fundersList.length > 0) {
+      const match = fundersList.find((f) => f.funderId === funderIdParam);
       if (match) {
         setActiveTab("funders");
         setSelectedFunder(match);
         setDetailsOpen(true);
       }
     }
-  }, [searchParams, data.funders]);
+  }, [searchParams, fundersList]);
 
   const resetFunderForm = () => {
     setName("");
@@ -106,7 +127,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
   };
 
   // Funders Tab Filtering Logics
-  const filteredFunders = data.funders.filter((funder) => {
+  const filteredFunders = fundersList.filter((funder) => {
     const q = search.trim().toLowerCase();
     if (q) {
       const matchName = funder.name.toLowerCase().includes(q);
@@ -286,7 +307,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
           </div>
           <div>
             <p className="text-xl md:text-2xl font-black text-foreground tracking-tight">
-              ₹{data.stats.totalProvided.toLocaleString("en-IN")}
+              ₹{fmt(stats.totalProvided)}
             </p>
             <p className="text-[10px] text-muted-foreground mt-1">Sum of actual funding transactions</p>
           </div>
@@ -302,7 +323,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
           </div>
           <div>
             <p className="text-xl md:text-2xl font-black text-emerald-500 tracking-tight">
-              ₹{data.stats.currentlyAllocated.toLocaleString("en-IN")}
+              ₹{fmt(stats.currentlyAllocated)}
             </p>
             <p className="text-[10px] text-muted-foreground mt-1">Active capital funded to borrowers</p>
           </div>
@@ -318,7 +339,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
           </div>
           <div>
             <p className="text-xl md:text-2xl font-black text-blue-400 tracking-tight">
-              ₹{data.stats.unallocatedReceived.toLocaleString("en-IN")}
+              ₹{fmt(stats.unallocatedReceived)}
             </p>
             <p className="text-[10px] text-muted-foreground mt-1">Money received & pending assignment</p>
           </div>
@@ -334,7 +355,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
           </div>
           <div>
             <p className="text-xl md:text-2xl font-black text-amber-500 tracking-tight">
-              {data.stats.activeFunders}
+              {stats.activeFunders}
             </p>
             <p className="text-[10px] text-muted-foreground mt-1">On-demand funding sources</p>
           </div>
@@ -353,7 +374,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                 : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
             }`}
           >
-            Capital Persons ({data.funders.length})
+            Capital Persons ({fundersList.length})
           </button>
           <button
             onClick={() => setActiveTab("overview")}
@@ -471,19 +492,19 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                       <div>
                         <span className="text-[9px] uppercase font-bold text-muted-foreground">Total Provided</span>
                         <p className="font-extrabold text-foreground text-sm mt-0.5">
-                          ₹{funder.totalProvided.toLocaleString("en-IN")}
+                          ₹{fmt(funder.totalProvided)}
                         </p>
                       </div>
                       <div>
                         <span className="text-[9px] uppercase font-bold text-muted-foreground">Allocated</span>
                         <p className="font-extrabold text-emerald-400 text-sm mt-0.5">
-                          ₹{funder.currentlyAllocated.toLocaleString("en-IN")}
+                          ₹{fmt(funder.currentlyAllocated)}
                         </p>
                       </div>
                       <div>
                         <span className="text-[9px] uppercase font-bold text-muted-foreground">Unallocated</span>
                         <p className="font-extrabold text-blue-400 text-sm mt-0.5">
-                          ₹{funder.unallocatedReceived.toLocaleString("en-IN")}
+                          ₹{fmt(funder.unallocatedReceived)}
                         </p>
                       </div>
                     </div>
@@ -491,16 +512,16 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                     {/* Recent Funding Events Preview */}
                     <div className="space-y-1.5">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
-                        <span>Funding History ({funder.fundingHistory.length})</span>
+                        <span>Funding History ({(funder.fundingHistory || []).length})</span>
                       </p>
 
-                      {funder.fundingHistory.length === 0 ? (
+                      {(!funder.fundingHistory || funder.fundingHistory.length === 0) ? (
                         <p className="text-[11px] text-muted-foreground italic py-1">
                           No funding events recorded yet. Ready to fund on-demand.
                         </p>
                       ) : (
                         <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
-                          {funder.fundingHistory.slice(0, 3).map((item) => (
+                          {(funder.fundingHistory || []).slice(0, 3).map((item) => (
                             <div
                               key={item.transactionId}
                               className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 text-[11px]"
@@ -515,7 +536,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                               </div>
                               <div className="text-right shrink-0 flex items-center gap-1.5">
                                 <strong className="text-primary font-bold">
-                                  ₹{item.amount.toLocaleString("en-IN")}
+                                  ₹{fmt(item.amount)}
                                 </strong>
                                 {item.loanId && (
                                   <button
@@ -600,8 +621,8 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/20">
-                  {data.funders.flatMap((f) =>
-                    f.fundingHistory.map((item) => ({ ...item, funderName: f.name, funderMobile: f.mobile }))
+                  {fundersList.flatMap((f) =>
+                    (f.fundingHistory || []).map((item) => ({ ...item, funderName: f.name, funderMobile: f.mobile }))
                   ).length === 0 ? (
                     <tr>
                       <td colSpan={6} className="p-6 text-center text-muted-foreground">
@@ -609,8 +630,8 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                       </td>
                     </tr>
                   ) : (
-                    data.funders.flatMap((f) =>
-                      f.fundingHistory.map((item) => ({ ...item, funderName: f.name, funderMobile: f.mobile }))
+                    fundersList.flatMap((f) =>
+                      (f.fundingHistory || []).map((item) => ({ ...item, funderName: f.name, funderMobile: f.mobile }))
                     ).map((item) => (
                       <tr key={item.transactionId} className="hover:bg-muted/10">
                         <td className="p-3">
@@ -621,14 +642,14 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                           {item.funderName}
                         </td>
                         <td className="p-3 font-black text-primary">
-                          ₹{item.amount.toLocaleString("en-IN")}
+                          ₹{fmt(item.amount)}
                         </td>
                         <td className="p-3">
                           {item.borrowerName ? (
                             <div>
                               <strong className="text-foreground">{item.borrowerName}</strong>
                               <span className="text-[10px] text-muted-foreground block">
-                                Loan: ₹{item.loanPrincipal?.toLocaleString("en-IN")}
+                                Loan: ₹{fmt(item.loanPrincipal)}
                               </span>
                             </div>
                           ) : (
@@ -929,19 +950,19 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                 <div>
                   <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Provided</span>
                   <p className="font-extrabold text-foreground text-sm mt-0.5">
-                    ₹{selectedFunder.totalProvided.toLocaleString("en-IN")}
+                    ₹{fmt(selectedFunder.totalProvided)}
                   </p>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-muted-foreground">Currently Allocated</span>
                   <p className="font-extrabold text-emerald-400 text-sm mt-0.5">
-                    ₹{selectedFunder.currentlyAllocated.toLocaleString("en-IN")}
+                    ₹{fmt(selectedFunder.currentlyAllocated)}
                   </p>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-muted-foreground">Unallocated Received</span>
                   <p className="font-extrabold text-blue-400 text-sm mt-0.5">
-                    ₹{selectedFunder.unallocatedReceived.toLocaleString("en-IN")}
+                    ₹{fmt(selectedFunder.unallocatedReceived)}
                   </p>
                 </div>
               </div>
@@ -950,14 +971,14 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b border-border/40 pb-2">
                   <h3 className="font-bold text-sm text-primary flex items-center gap-1.5">
-                    <History className="h-4 w-4" /> Funding History ({selectedFunder.fundingHistory.length})
+                    <History className="h-4 w-4" /> Funding History ({(selectedFunder.fundingHistory || []).length})
                   </h3>
                   <span className="text-[11px] text-muted-foreground">
                     Chronological record of individual funding events
                   </span>
                 </div>
 
-                {selectedFunder.fundingHistory.length === 0 ? (
+                {(!selectedFunder.fundingHistory || selectedFunder.fundingHistory.length === 0) ? (
                   <div className="py-8 text-center bg-accent/10 rounded-xl text-xs text-muted-foreground">
                     No funding events recorded yet for {selectedFunder.name}.
                   </div>
@@ -975,7 +996,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/20">
-                        {selectedFunder.fundingHistory.map((item) => (
+                        {(selectedFunder.fundingHistory || []).map((item) => (
                           <tr key={item.transactionId} className="hover:bg-muted/10">
                             <td className="p-3 font-semibold text-foreground whitespace-nowrap">
                               {item.fundingDate}
@@ -984,7 +1005,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                               {item.transactionCode}
                             </td>
                             <td className="p-3 font-black text-primary whitespace-nowrap">
-                              ₹{item.amount.toLocaleString("en-IN")}
+                              ₹{fmt(item.amount)}
                             </td>
                             <td className="p-3">
                               {item.borrowerName ? (
@@ -1036,10 +1057,10 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                     <ArrowUpLeft className="h-4 w-4" /> Capital Returned to {selectedFunder.name}
                   </h3>
                   <div className="divide-y divide-border/20 border border-border/30 rounded-xl overflow-hidden">
-                    {selectedFunder.returnsList.map((r) => (
+                    {(selectedFunder.returnsList || []).map((r) => (
                       <div key={r.returnId} className="p-3 flex items-center justify-between text-xs bg-muted/10">
                         <div>
-                          <span className="font-bold text-foreground">₹{r.amount.toLocaleString("en-IN")}</span>
+                          <span className="font-bold text-foreground">₹{fmt(r.amount)}</span>
                           <span className="text-[10px] text-muted-foreground block">{r.returnDate}</span>
                         </div>
                         <span className="text-[11px] text-muted-foreground">{r.notes || "Capital repaid"}</span>

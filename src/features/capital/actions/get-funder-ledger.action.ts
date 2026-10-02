@@ -1,7 +1,7 @@
 "use server";
 
 import { requireAuth } from "@/lib/auth";
-import { db } from "@/db/client";
+import { db, withDbRetry } from "@/db/client";
 import {
   fundersTable,
   capitalReturnsTable,
@@ -68,39 +68,43 @@ export async function getFunderLedgerAction(
     }
 
     // 1. Fetch funder
-    const funder = await capitalRepository.findFunderById(funderId);
+    const funder = await withDbRetry(() => capitalRepository.findFunderById(funderId));
     if (!funder) {
       return { success: false, error: "Capital Person not found." };
     }
 
     // 2. Fetch all funding transactions for this funder
-    const rawTransactions = await db
-      .select({
-        tx: capitalFundingTransactionsTable,
-        loan: loansTable,
-        borrower: borrowersTable,
-      })
-      .from(capitalFundingTransactionsTable)
-      .leftJoin(loansTable, eq(capitalFundingTransactionsTable.loanId, loansTable.loanId))
-      .leftJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
-      .where(eq(capitalFundingTransactionsTable.funderId, funderId))
-      .orderBy(desc(capitalFundingTransactionsTable.fundingDate), desc(capitalFundingTransactionsTable.createdAt));
+    const rawTransactions = await withDbRetry(() =>
+      db
+        .select({
+          tx: capitalFundingTransactionsTable,
+          loan: loansTable,
+          borrower: borrowersTable,
+        })
+        .from(capitalFundingTransactionsTable)
+        .leftJoin(loansTable, eq(capitalFundingTransactionsTable.loanId, loansTable.loanId))
+        .leftJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
+        .where(eq(capitalFundingTransactionsTable.funderId, funderId))
+        .orderBy(desc(capitalFundingTransactionsTable.fundingDate), desc(capitalFundingTransactionsTable.createdAt))
+    );
 
     // 3. Fetch allocations for fallback synthesis if transactions table is empty
-    const rawAllocations = await db
-      .select({
-        allocation: capitalAllocationsTable,
-        loan: loansTable,
-        borrower: borrowersTable,
-      })
-      .from(capitalAllocationsTable)
-      .innerJoin(loansTable, eq(capitalAllocationsTable.loanId, loansTable.loanId))
-      .innerJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
-      .where(eq(capitalAllocationsTable.funderId, funderId))
-      .orderBy(desc(capitalAllocationsTable.allocationDate));
+    const rawAllocations = await withDbRetry(() =>
+      db
+        .select({
+          allocation: capitalAllocationsTable,
+          loan: loansTable,
+          borrower: borrowersTable,
+        })
+        .from(capitalAllocationsTable)
+        .innerJoin(loansTable, eq(capitalAllocationsTable.loanId, loansTable.loanId))
+        .innerJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
+        .where(eq(capitalAllocationsTable.funderId, funderId))
+        .orderBy(desc(capitalAllocationsTable.allocationDate))
+    );
 
     // 4. Fetch capital returns
-    const rawReturns = await capitalRepository.findCapitalReturnsByFunderId(funderId);
+    const rawReturns = await withDbRetry(() => capitalRepository.findCapitalReturnsByFunderId(funderId));
     const totalReturned = rawReturns.reduce((sum, r) => sum + Number(r.amount), 0);
 
     // Build ledger items
@@ -243,9 +247,23 @@ export async function getFunderLedgerAction(
     };
   } catch (err: any) {
     console.error("getFunderLedgerAction Error:", err);
+    // Distinguish DB connection failures from genuine "not found" situations
+    const isConnectionError =
+      err?.code === "ECONNRESET" ||
+      err?.code === "ECONNREFUSED" ||
+      err?.code === "ETIMEDOUT" ||
+      err?.cause?.code === "ECONNRESET" ||
+      err?.cause?.code === "ECONNREFUSED" ||
+      err?.message?.includes("ECONNRESET") ||
+      err?.message?.includes("Failed query") ||
+      err?.message?.includes("Connection terminated") ||
+      err?.message?.includes("connect ECONNREFUSED");
+
     return {
       success: false,
-      error: err.message || "Failed to load capital funding ledger.",
+      error: isConnectionError
+        ? "DB_CONNECTION_ERROR: Unable to reach the database. Please retry."
+        : err.message || "Failed to load capital funding ledger.",
     };
   }
 }

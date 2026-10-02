@@ -1,7 +1,7 @@
 "use server";
 
 import { requireAuth } from "@/lib/auth";
-import { db } from "@/db/client";
+import { db, withDbRetry } from "@/db/client";
 import {
   fundersTable,
   capitalReturnsTable,
@@ -82,9 +82,9 @@ export async function getCapitalDataAction() {
     await requireAuth();
 
     // 1. Fetch all funders
-    const rawFunders = await capitalRepository.findAllFunders();
+    const rawFunders = await withDbRetry(() => capitalRepository.findAllFunders());
     // 2. Fetch all returns
-    const rawReturns = await capitalRepository.findAllCapitalReturns();
+    const rawReturns = await withDbRetry(() => capitalRepository.findAllCapitalReturns());
 
     const returnsByFunder: Record<string, typeof rawReturns> = {};
     rawReturns.forEach((r) => {
@@ -95,28 +95,32 @@ export async function getCapitalDataAction() {
     });
 
     // 3. Fetch all allocations joined with loans & borrowers
-    const rawAllocations = await db
-      .select({
-        allocation: capitalAllocationsTable,
-        loan: loansTable,
-        borrower: borrowersTable,
-      })
-      .from(capitalAllocationsTable)
-      .innerJoin(loansTable, eq(capitalAllocationsTable.loanId, loansTable.loanId))
-      .innerJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
-      .orderBy(desc(capitalAllocationsTable.allocationDate));
+    const rawAllocations = await withDbRetry(() =>
+      db
+        .select({
+          allocation: capitalAllocationsTable,
+          loan: loansTable,
+          borrower: borrowersTable,
+        })
+        .from(capitalAllocationsTable)
+        .innerJoin(loansTable, eq(capitalAllocationsTable.loanId, loansTable.loanId))
+        .innerJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
+        .orderBy(desc(capitalAllocationsTable.allocationDate))
+    );
 
     // 4. Fetch all funding transactions joined with loans & borrowers
-    const rawTransactions = await db
-      .select({
-        tx: capitalFundingTransactionsTable,
-        loan: loansTable,
-        borrower: borrowersTable,
-      })
-      .from(capitalFundingTransactionsTable)
-      .leftJoin(loansTable, eq(capitalFundingTransactionsTable.loanId, loansTable.loanId))
-      .leftJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
-      .orderBy(desc(capitalFundingTransactionsTable.fundingDate), desc(capitalFundingTransactionsTable.createdAt));
+    const rawTransactions = await withDbRetry(() =>
+      db
+        .select({
+          tx: capitalFundingTransactionsTable,
+          loan: loansTable,
+          borrower: borrowersTable,
+        })
+        .from(capitalFundingTransactionsTable)
+        .leftJoin(loansTable, eq(capitalFundingTransactionsTable.loanId, loansTable.loanId))
+        .leftJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
+        .orderBy(desc(capitalFundingTransactionsTable.fundingDate), desc(capitalFundingTransactionsTable.createdAt))
+    );
 
     // Group transactions by funderId
     const transactionsByFunder: Record<string, FundingTransactionHistoryItem[]> = {};

@@ -70,8 +70,8 @@ export function CapitalFundingLedgerView({
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  // Query funder ledger
-  const { data, isLoading, isFetching, refetch } = useQuery({
+  // Query funder ledger with retry on connection errors
+  const { data, isLoading, isFetching, refetch, error: queryError } = useQuery({
     queryKey: ["capital-funder-ledger", funderId],
     queryFn: async () => {
       const res = await getFunderLedgerAction(funderId);
@@ -83,7 +83,16 @@ export function CapitalFundingLedgerView({
     },
     initialData: initialData || undefined,
     staleTime: 1000 * 60 * 2,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000), // exponential: 2s, 4s, 8s
   });
+
+  const isDbConnectionError =
+    queryError instanceof Error &&
+    (queryError.message.includes("DB_CONNECTION_ERROR") ||
+      queryError.message.includes("ECONNRESET") ||
+      queryError.message.includes("Failed query") ||
+      queryError.message.includes("Connection terminated"));
 
   // Filters & Search state
   const [searchTerm, setSearchTerm] = useState("");
@@ -288,7 +297,42 @@ export function CapitalFundingLedgerView({
     );
   }
 
-  if (!funder) {
+  if (queryError && !data) {
+    if (isDbConnectionError) {
+      // DB connection failure — show retry, not "not found"
+      return (
+        <div className="py-16 text-center space-y-4 max-w-md mx-auto">
+          <div className="h-12 w-12 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto">
+            <AlertCircle className="h-6 w-6" />
+          </div>
+          <h2 className="text-lg font-bold text-foreground">Database Connection Issue</h2>
+          <p className="text-xs text-muted-foreground">
+            The local database connection was interrupted (ECONNRESET). This is a temporary glitch
+            with the local PostgreSQL server. Your data is safe — please retry.
+          </p>
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <Button
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="fx-brand-gradient text-white text-xs font-bold"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isFetching ? "animate-spin" : ""}`} />
+              {isFetching ? "Retrying…" : "Retry Connection"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => router.push("/capital-management")}
+              className="text-xs"
+            >
+              <ArrowLeft className="h-3.5 w-3.5 mr-1.5" /> Back
+            </Button>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  if (!funder && !isLoading) {
     return (
       <div className="py-16 text-center space-y-4 max-w-md mx-auto">
         <div className="h-12 w-12 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
@@ -307,6 +351,9 @@ export function CapitalFundingLedgerView({
       </div>
     );
   }
+
+  // TypeScript narrowing guard — funder is always defined past this point
+  if (!funder) return null;
 
   return (
     <div className="space-y-6 pb-12 w-full max-w-full overflow-x-hidden">

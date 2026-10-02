@@ -44,17 +44,75 @@ const globalForDb = globalThis as unknown as {
 
 let client = globalForDb.postgresClient;
 if (!client || globalForDb.postgresUrl !== connectionString) {
-  client = postgres(connectionString, { 
+  client = postgres(connectionString, {
     prepare: false,
-    max: 20,
-    idle_timeout: 20, 
-    connect_timeout: 5
+    max: 10,               // fewer connections to avoid overwhelming local PG
+    idle_timeout: 30,      // close idle connections after 30s
+    max_lifetime: 60 * 10, // recycle connections every 10 min
+    connect_timeout: 15,   // allow 15s for initial connection
+    // Keep TCP sockets alive so the OS doesn't silently drop them
+    connection: {
+      application_name: "finexa-dev",
+    },
   });
   globalForDb.postgresClient = client;
   globalForDb.postgresUrl = connectionString;
 }
 
-export const db = drizzle(client, { schema });
+export let db = drizzle(client, { schema });
+
+// ── DB Retry Utility ──────────────────────────────────────────────────────────
+// Wraps any async DB operation and retries on transient connection errors
+// (ECONNRESET, ECONNREFUSED, etc.) that are common with local dev Postgres.
+const RETRIABLE_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE", "ENOTFOUND"]);
+
+function isRetriableError(err: any): boolean {
+  const code = err?.code || err?.cause?.code || "";
+  const msg = err?.message || "";
+  return (
+    RETRIABLE_CODES.has(code) ||
+    msg.includes("Connection terminated") ||
+    msg.includes("ECONNRESET") ||
+    msg.includes("read ECONNRESET") ||
+    msg.includes("Failed query")
+  );
+}
+
+function rebuildConnection() {
+  const newClient = postgres(connectionString, {
+    prepare: false,
+    max: 10,
+    idle_timeout: 30,
+    max_lifetime: 60 * 10,
+    connect_timeout: 15,
+    connection: { application_name: "finexa-dev" },
+  });
+  globalForDb.postgresClient = newClient;
+  globalForDb.postgresUrl = connectionString;
+  db = drizzle(newClient, { schema });
+  console.log("[FINEXA DB] Reconnected to database after connection error.");
+  return newClient;
+}
+
+export async function withDbRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  let lastError: any;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastError = err;
+      if (isRetriableError(err) && attempt < maxRetries) {
+        console.warn(`[FINEXA DB] Connection error (attempt ${attempt + 1}/${maxRetries}), reconnecting...`, err.code || err.cause?.code || err.message?.slice(0, 80));
+        rebuildConnection();
+        // Brief delay before retry: 500ms, 1000ms, 2000ms
+        await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw lastError;
+}
 
 // Read-only development connection test
 export async function testDatabaseConnection() {

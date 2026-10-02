@@ -1,7 +1,7 @@
 "use server";
 
 import { requireAuth } from "@/lib/auth";
-import { db } from "@/db/client";
+import { db, withDbRetry } from "@/db/client";
 import {
   fundersTable,
   capitalAllocationsTable,
@@ -30,11 +30,13 @@ export async function getFundersQuickListAction(): Promise<
     await requireAuth();
 
     // 1. Fetch all active funders
-    const funders = await db
-      .select()
-      .from(fundersTable)
-      .where(eq(fundersTable.status, "active"))
-      .orderBy(fundersTable.name);
+    const funders = await withDbRetry(() =>
+      db
+        .select()
+        .from(fundersTable)
+        .where(eq(fundersTable.status, "active"))
+        .orderBy(fundersTable.name)
+    );
 
     if (funders.length === 0) {
       return { success: true, data: [] };
@@ -43,15 +45,17 @@ export async function getFundersQuickListAction(): Promise<
     const funderIds = funders.map((f) => f.funderId);
 
     // 2. Fetch all active allocations for these funders
-    const allocations = await db
-      .select({
-        funderId: capitalAllocationsTable.funderId,
-        amount: capitalAllocationsTable.amount,
-      })
-      .from(capitalAllocationsTable)
-      .where(
-        inArray(capitalAllocationsTable.funderId, funderIds)
-      );
+    const allocations = await withDbRetry(() =>
+      db
+        .select({
+          funderId: capitalAllocationsTable.funderId,
+          amount: capitalAllocationsTable.amount,
+        })
+        .from(capitalAllocationsTable)
+        .where(
+          inArray(capitalAllocationsTable.funderId, funderIds)
+        )
+    );
 
     const allocationsMap = new Map<string, number>();
     allocations.forEach((a) => {
@@ -59,14 +63,16 @@ export async function getFundersQuickListAction(): Promise<
     });
 
     // 3. Fetch all funding transactions for these funders
-    const transactions = await db
-      .select({
-        funderId: capitalFundingTransactionsTable.funderId,
-        amount: capitalFundingTransactionsTable.amount,
-        status: capitalFundingTransactionsTable.status,
-      })
-      .from(capitalFundingTransactionsTable)
-      .where(inArray(capitalFundingTransactionsTable.funderId, funderIds));
+    const transactions = await withDbRetry(() =>
+      db
+        .select({
+          funderId: capitalFundingTransactionsTable.funderId,
+          amount: capitalFundingTransactionsTable.amount,
+          status: capitalFundingTransactionsTable.status,
+        })
+        .from(capitalFundingTransactionsTable)
+        .where(inArray(capitalFundingTransactionsTable.funderId, funderIds))
+    );
 
     const totalProvidedMap = new Map<string, number>();
     const totalReceivedStandaloneMap = new Map<string, number>();

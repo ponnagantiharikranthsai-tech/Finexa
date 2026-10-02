@@ -2,6 +2,7 @@
 
 import { requireAuth } from "@/lib/auth";
 import { capitalRepository } from "../repository/capital.repository";
+import { withDbRetry } from "@/db/client";
 import { safeRevalidatePath } from "@/lib/safe-revalidate";
 import { auditLog } from "@/lib/audit-log";
 
@@ -67,7 +68,7 @@ export async function createFunderAction(
     const todayStr = new Date().toISOString().split("T")[0]!;
 
     // Check if an existing funder shares this mobile number
-    const existingFunder = await capitalRepository.findFunderByMobile(mobile);
+    const existingFunder = await withDbRetry(() => capitalRepository.findFunderByMobile(mobile));
 
     if (existingFunder) {
       // If capital person already exists, optionally record received capital if specified
@@ -91,17 +92,19 @@ export async function createFunderAction(
     }
 
     // Create On-Demand Capital Person
-    const funder = await capitalRepository.createFunder({
-      name,
-      mobile,
-      address: address || "",
-      capitalAmount: "0.00",
-      investmentDate: todayStr,
-      returnDueDate: null,
-      status: "active",
-      fundingModel: "on_demand",
-      notes: notes || null,
-    });
+    const funder = await withDbRetry(() =>
+      capitalRepository.createFunder({
+        name,
+        mobile,
+        address: address || "",
+        capitalAmount: "0.00",
+        investmentDate: todayStr,
+        returnDueDate: null,
+        status: "active",
+        fundingModel: "on_demand",
+        notes: notes || null,
+      })
+    );
 
     // If initial received amount was specified, record a received funding transaction
     if (initialAmount > 0) {

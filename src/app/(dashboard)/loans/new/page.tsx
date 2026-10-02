@@ -155,16 +155,39 @@ function NewLoanFormContent() {
       });
 
       if (res.success && res.data) {
-        toast.success(res.message || `Capital person ${newFunderName} registered!`);
-        await loadFunders();
-        // Automatically select newly created capital person
-        setFunderId(res.data.funderId);
+        const newFunder = res.data;
+
+        // ── 1. Immediately inject the new person into the dropdown list ──────
+        // This works even if the DB list-reload below fails (e.g. ECONNRESET).
+        const newOption: FunderQuickOption = {
+          funderId: newFunder.funderId,
+          name: newFunder.name,
+          mobile: newFunder.mobile,
+          fundingModel: newFunder.fundingModel || "on_demand",
+          totalProvided: 0,
+          currentlyAllocated: 0,
+          unallocatedReceived: 0,
+          totalCapital: 0,
+          availableCapital: 0,
+        };
+        setFundersList((prev) => {
+          // Avoid duplicates if the person already existed
+          if (prev.some((f) => f.funderId === newFunder.funderId)) return prev;
+          return [...prev, newOption].sort((a, b) => a.name.localeCompare(b.name));
+        });
+
+        // ── 2. Auto-select the newly created person ───────────────────────────
+        setFunderId(newFunder.funderId);
         setFundingAmount(principal);
         setFundingDate(dateGiven || new Date().toISOString().split("T")[0]!);
         setShowAddFunderModal(false);
         setNewFunderName("");
         setNewFunderMobile("");
         setNewFunderNotes("");
+        toast.success(res.message || `Capital person "${newFunder.name}" registered and selected!`);
+
+        // ── 3. Refresh full list in background (ignore ECONNRESET silently) ──
+        loadFunders().catch(() => { /* silent: list already has the new entry */ });
       } else {
         toast.error(res.error || "Failed to create capital person.");
       }

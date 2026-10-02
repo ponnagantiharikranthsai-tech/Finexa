@@ -23,6 +23,9 @@ export default function CapitalManagementPage() {
     funders: [],
     stats: {
       totalReceived: 0,
+      totalProvided: 0,
+      currentlyAllocated: 0,
+      unallocatedReceived: 0,
       totalReturned: 0,
       activeCapital: 0,
       availableCapital: 0,
@@ -41,7 +44,7 @@ export default function CapitalManagementPage() {
           <div>
             <h1 className="text-xl font-bold tracking-tight">Capital</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Track funder investments, capital returns, and capital summary stats.
+              Track on-demand capital partners, individual funding transactions, and loan allocations.
             </p>
           </div>
         </div>

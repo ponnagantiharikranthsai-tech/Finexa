@@ -2,7 +2,7 @@
 
 import { requireAuth } from "@/lib/auth";
 import { capitalRepository } from "../repository/capital.repository";
-import { revalidatePath } from "next/cache";
+import { safeRevalidatePath } from "@/lib/safe-revalidate";
 import { auditLog } from "@/lib/audit-log";
 
 export async function deleteFunderAction(funderId: string) {
@@ -20,7 +20,7 @@ export async function deleteFunderAction(funderId: string) {
 
     await auditLog("funder_deleted", "funder", funderId, { name: deleted.name, mobile: deleted.mobile });
 
-    revalidatePath("/capital-management");
+    safeRevalidatePath("/capital-management");
 
     return { success: true };
   } catch (err) {

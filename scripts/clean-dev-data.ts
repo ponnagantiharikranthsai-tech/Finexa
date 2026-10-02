@@ -1,5 +1,12 @@
 import { db, isDevDbIsolated } from "../src/db/client";
-import { borrowersTable, loansTable, fundersTable, paymentsTable, capitalAllocationsTable } from "../src/db/schema";
+import {
+  borrowersTable,
+  loansTable,
+  fundersTable,
+  paymentsTable,
+  capitalAllocationsTable,
+  capitalFundingTransactionsTable,
+} from "../src/db/schema";
 import { like, or } from "drizzle-orm";
 
 async function cleanDevData() {
@@ -17,20 +24,35 @@ Cleaner will NOT touch production records.
   }
 
   try {
-    console.log("Cleaning test allocations...");
-    await db.delete(capitalAllocationsTable).where(like(capitalAllocationsTable.notes, "%Dev test%"));
-    
+    console.log("Cleaning test allocations & funding transactions...");
+    await db.delete(capitalAllocationsTable);
+    await db.delete(capitalFundingTransactionsTable);
+
     console.log("Cleaning test payments...");
-    await db.delete(paymentsTable).where(like(paymentsTable.notes, "%Dev test%"));
+    await db.delete(paymentsTable);
 
     console.log("Cleaning test loans...");
-    await db.delete(loansTable).where(like(loansTable.internalNotes, "%Development isolated test loan%"));
+    await db.delete(loansTable);
 
-    console.log("Cleaning test borrowers ('Jagadeesh Test')...");
-    await db.delete(borrowersTable).where(like(borrowersTable.name, "%Test%"));
+    console.log("Cleaning test borrowers...");
+    await db.delete(borrowersTable).where(
+      or(
+        like(borrowersTable.name, "%Test%"),
+        like(borrowersTable.name, "Jagadeesh%"),
+        like(borrowersTable.name, "Ravi%"),
+        like(borrowersTable.name, "Sanjana%"),
+        like(borrowersTable.name, "Multi%")
+      )
+    );
 
-    console.log("Cleaning test funders ('X Test')...");
-    await db.delete(fundersTable).where(like(fundersTable.name, "%Test%"));
+    console.log("Cleaning test funders...");
+    await db.delete(fundersTable).where(
+      or(
+        like(fundersTable.name, "%Test%"),
+        like(fundersTable.name, "X%"),
+        like(fundersTable.name, "Y%")
+      )
+    );
 
     console.log("\n✓ Test data cleaned successfully.\n");
   } catch (err: any) {

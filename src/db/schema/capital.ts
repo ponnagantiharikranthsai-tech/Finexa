@@ -6,6 +6,7 @@ import { paymentsTable } from "./payments";
 export const funderStatusEnum = pgEnum("funder_status", [
   "active",
   "returned",
+  "inactive",
 ]);
 
 export const fundersTable = pgTable("funders", {
@@ -15,11 +16,12 @@ export const fundersTable = pgTable("funders", {
 
   name: text("name").notNull(),
   mobile: text("mobile").notNull(),
-  address: text("address").notNull(),
-  capitalAmount: numeric("capital_amount", { precision: 12, scale: 2 }).notNull(),
-  investmentDate: date("investment_date").notNull(),
-  returnDueDate: date("return_due_date").notNull(),
+  address: text("address").default(""),
+  capitalAmount: numeric("capital_amount", { precision: 12, scale: 2 }).notNull().default("0.00"),
+  investmentDate: date("investment_date").notNull().default(sql`CURRENT_DATE`),
+  returnDueDate: date("return_due_date"),
   status: funderStatusEnum("status").notNull().default("active"),
+  fundingModel: text("funding_model").notNull().default("on_demand"), // 'on_demand' | 'pool'
   notes: text("notes"),
 
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -31,6 +33,37 @@ export const fundersTable = pgTable("funders", {
 }, (table) => [
   index("idx_funders_status").on(table.status),
   index("idx_funders_mobile").on(table.mobile),
+]);
+
+export const capitalFundingTransactionsTable = pgTable("capital_funding_transactions", {
+  transactionId: uuid("transaction_id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+
+  transactionCode: text("transaction_code").notNull().unique(), // e.g. CF-001
+  funderId: uuid("funder_id")
+    .notNull()
+    .references(() => fundersTable.funderId, { onDelete: "cascade" }),
+
+  loanId: uuid("loan_id")
+    .references(() => loansTable.loanId, { onDelete: "set null" }),
+
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  fundingDate: date("funding_date").notNull().default(sql`CURRENT_DATE`),
+  status: text("status").notNull().default("allocated"), // 'pending' | 'received' | 'allocated' | 'released'
+  notes: text("notes"),
+
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+}, (table) => [
+  index("idx_cft_funder_id").on(table.funderId),
+  index("idx_cft_loan_id").on(table.loanId),
+  index("idx_cft_funding_date").on(table.fundingDate),
+  index("idx_cft_status").on(table.status),
 ]);
 
 export const capitalReturnsTable = pgTable("capital_returns", {
@@ -73,6 +106,9 @@ export const capitalAllocationsTable = pgTable("capital_allocations", {
     .notNull()
     .references(() => loansTable.loanId, { onDelete: "cascade" }),
 
+  fundingTransactionId: uuid("funding_transaction_id")
+    .references(() => capitalFundingTransactionsTable.transactionId, { onDelete: "set null" }),
+
   paymentId: uuid("payment_id")
     .references(() => paymentsTable.paymentId, { onDelete: "set null" }),
 
@@ -96,6 +132,8 @@ export const capitalAllocationsTable = pgTable("capital_allocations", {
 
 export type Funder = typeof fundersTable.$inferSelect;
 export type InsertFunder = typeof fundersTable.$inferInsert;
+export type CapitalFundingTransaction = typeof capitalFundingTransactionsTable.$inferSelect;
+export type InsertCapitalFundingTransaction = typeof capitalFundingTransactionsTable.$inferInsert;
 export type CapitalReturn = typeof capitalReturnsTable.$inferSelect;
 export type InsertCapitalReturn = typeof capitalReturnsTable.$inferInsert;
 export type CapitalAllocation = typeof capitalAllocationsTable.$inferSelect;

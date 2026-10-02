@@ -4,22 +4,22 @@ import { requireAuth } from "@/lib/auth";
 import { db } from "@/db/client";
 import {
   fundersTable,
-  capitalReturnsTable,
   capitalAllocationsTable,
-  loansTable,
-  paymentsTable,
+  capitalFundingTransactionsTable,
 } from "@/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { ActionResult } from "@/types/api.types";
 
 export interface FunderQuickOption {
   funderId: string;
   name: string;
   mobile: string;
+  fundingModel: string;
+  totalProvided: number;
+  currentlyAllocated: number;
+  unallocatedReceived: number;
+  // Legacy compatibility fields if needed
   totalCapital: number;
-  totalReturned: number;
-  activeCapital: number;
-  capitalWithBorrowers: number;
   availableCapital: number;
 }
 
@@ -42,111 +42,64 @@ export async function getFundersQuickListAction(): Promise<
 
     const funderIds = funders.map((f) => f.funderId);
 
-    // 2. Fetch all returns for these funders
-    const returns = await db
-      .select({
-        funderId: capitalReturnsTable.funderId,
-        amount: capitalReturnsTable.amount,
-      })
-      .from(capitalReturnsTable)
-      .where(inArray(capitalReturnsTable.funderId, funderIds));
-
-    const returnsMap = new Map<string, number>();
-    returns.forEach((r) => {
-      returnsMap.set(r.funderId, (returnsMap.get(r.funderId) || 0) + Number(r.amount));
-    });
-
-    // 3. Fetch all active allocations for these funders
+    // 2. Fetch all active allocations for these funders
     const allocations = await db
       .select({
-        allocationId: capitalAllocationsTable.allocationId,
         funderId: capitalAllocationsTable.funderId,
-        loanId: capitalAllocationsTable.loanId,
         amount: capitalAllocationsTable.amount,
       })
       .from(capitalAllocationsTable)
       .where(
-        and(
-          inArray(capitalAllocationsTable.funderId, funderIds),
-          eq(capitalAllocationsTable.status, "active")
-        )
+        inArray(capitalAllocationsTable.funderId, funderIds)
       );
 
-    // 4. Calculate capital currently with borrowers
-    const allocatedLoanIds = Array.from(new Set(allocations.map((a) => a.loanId)));
-    const loanMap = new Map<string, { principal: number; status: string }>();
-
-    if (allocatedLoanIds.length > 0) {
-      const loans = await db
-        .select({
-          loanId: loansTable.loanId,
-          principal: loansTable.principal,
-          status: loansTable.status,
-        })
-        .from(loansTable)
-        .where(inArray(loansTable.loanId, allocatedLoanIds));
-
-      loans.forEach((l) => {
-        loanMap.set(l.loanId, { principal: Number(l.principal), status: l.status });
-      });
-    }
-
-    // Principal repayments on these loans
-    const repaymentsMap = new Map<string, number>();
-    if (allocatedLoanIds.length > 0) {
-      const repayments = await db
-        .select({
-          loanId: paymentsTable.loanId,
-          amount: paymentsTable.amount,
-        })
-        .from(paymentsTable)
-        .where(
-          and(
-            inArray(paymentsTable.loanId, allocatedLoanIds),
-            eq(paymentsTable.paymentType, "principal")
-          )
-        );
-
-      repayments.forEach((p) => {
-        repaymentsMap.set(p.loanId, (repaymentsMap.get(p.loanId) || 0) + Number(p.amount));
-      });
-    }
-
-    const funderWithBorrowersMap = new Map<string, number>();
-    allocations.forEach((alloc) => {
-      const l = loanMap.get(alloc.loanId);
-      if (!l || l.status === "closed") return;
-
-      const lPrincipal = l.principal;
-      const lRepaid = repaymentsMap.get(alloc.loanId) || 0;
-      const lRemaining = Math.max(0, lPrincipal - lRepaid);
-
-      const ratio = lPrincipal > 0 ? Number(alloc.amount) / lPrincipal : 0;
-      const withBorrower = Math.min(Number(alloc.amount), lRemaining * ratio);
-
-      funderWithBorrowersMap.set(
-        alloc.funderId,
-        (funderWithBorrowersMap.get(alloc.funderId) || 0) + withBorrower
-      );
+    const allocationsMap = new Map<string, number>();
+    allocations.forEach((a) => {
+      allocationsMap.set(a.funderId, (allocationsMap.get(a.funderId) || 0) + Number(a.amount));
     });
 
-    // 5. Build final quick list
+    // 3. Fetch all funding transactions for these funders
+    const transactions = await db
+      .select({
+        funderId: capitalFundingTransactionsTable.funderId,
+        amount: capitalFundingTransactionsTable.amount,
+        status: capitalFundingTransactionsTable.status,
+      })
+      .from(capitalFundingTransactionsTable)
+      .where(inArray(capitalFundingTransactionsTable.funderId, funderIds));
+
+    const totalProvidedMap = new Map<string, number>();
+    const totalReceivedStandaloneMap = new Map<string, number>();
+
+    transactions.forEach((t) => {
+      const amt = Number(t.amount);
+      totalProvidedMap.set(t.funderId, (totalProvidedMap.get(t.funderId) || 0) + amt);
+      if (t.status === "received") {
+        totalReceivedStandaloneMap.set(t.funderId, (totalReceivedStandaloneMap.get(t.funderId) || 0) + amt);
+      }
+    });
+
+    // 4. Build final quick list with On-Demand metrics
     const result: FunderQuickOption[] = funders.map((f) => {
-      const totalCapital = Number(f.capitalAmount);
-      const totalReturned = returnsMap.get(f.funderId) || 0;
-      const activeCapital = Math.max(0, totalCapital - totalReturned);
-      const capitalWithBorrowers = funderWithBorrowersMap.get(f.funderId) || 0;
-      const availableCapital = Math.max(0, activeCapital - capitalWithBorrowers);
+      const allocated = allocationsMap.get(f.funderId) || 0;
+      // If transactions recorded, use sum of transactions; otherwise use allocations count
+      const recordedProvided = totalProvidedMap.get(f.funderId) || allocated;
+      const totalProvided = Math.max(recordedProvided, allocated);
+
+      // Unallocated received is only if capital was explicitly recorded as received without allocation
+      const standaloneReceived = totalReceivedStandaloneMap.get(f.funderId) || 0;
+      const unallocatedReceived = Math.max(0, standaloneReceived);
 
       return {
         funderId: f.funderId,
         name: f.name,
         mobile: f.mobile,
-        totalCapital,
-        totalReturned,
-        activeCapital,
-        capitalWithBorrowers: Math.round(capitalWithBorrowers),
-        availableCapital: Math.round(availableCapital),
+        fundingModel: f.fundingModel || "on_demand",
+        totalProvided: Math.round(totalProvided),
+        currentlyAllocated: Math.round(allocated),
+        unallocatedReceived: Math.round(unallocatedReceived),
+        totalCapital: Math.round(totalProvided),
+        availableCapital: Math.round(unallocatedReceived),
       };
     });
 
@@ -155,7 +108,7 @@ export async function getFundersQuickListAction(): Promise<
     console.error("getFundersQuickListAction Error:", err);
     return {
       success: false,
-      error: err.message || "Failed to load funders list.",
+      error: err.message || "Failed to load capital providers list.",
     };
   }
 }

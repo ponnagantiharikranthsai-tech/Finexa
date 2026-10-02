@@ -14,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   Landmark,
@@ -26,8 +25,8 @@ import {
   ExternalLink,
   RefreshCw,
   Plus,
-  ArrowRight,
   ShieldCheck,
+  ArrowLeft,
 } from "lucide-react";
 import {
   getFundersQuickListAction,
@@ -63,6 +62,7 @@ export function AllocateCapitalDialog({
   const [allocationDate, setAllocationDate] = useState<string>(
     new Date().toISOString().split("T")[0]!
   );
+  const [fundingStatus, setFundingStatus] = useState<"allocated" | "received" | "pending">("allocated");
   const [notes, setNotes] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -70,12 +70,6 @@ export function AllocateCapitalDialog({
   const [isCreatingFunder, setIsCreatingFunder] = useState(false);
   const [newName, setNewName] = useState("");
   const [newMobile, setNewMobile] = useState("");
-  const [newAddress, setNewAddress] = useState("");
-  const [newCapitalAmount, setNewCapitalAmount] = useState("");
-  const [newInvestmentDate, setNewInvestmentDate] = useState(
-    new Date().toISOString().split("T")[0]!
-  );
-  const [newReturnDueDate, setNewReturnDueDate] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [isCreatingPending, startCreateTransition] = useTransition();
 
@@ -98,11 +92,7 @@ export function AllocateCapitalDialog({
     if (res.success && res.data) {
       setFunders(res.data);
       if (res.data.length > 0 && !selectedFunderId) {
-        // Preselect funder with highest available capital
-        const best = [...res.data].sort((a, b) => b.availableCapital - a.availableCapital)[0];
-        if (best && best.availableCapital > 0) {
-          setSelectedFunderId(best.funderId);
-        }
+        setSelectedFunderId(res.data[0]!.funderId);
       }
     } else {
       toast.error("Failed to load capital providers.");
@@ -117,18 +107,16 @@ export function AllocateCapitalDialog({
   const alreadyFunded = loan?.funding ? loan.funding.totalFunded : 0;
   const remainingNeeded = Math.max(0, loanPrincipal - alreadyFunded);
 
-  // Validation calculations
+  // Validation calculations (On-Demand Model)
   const numAmount = Number(amount) || 0;
-  const availableCap = selectedFunder ? selectedFunder.availableCapital : 0;
-  const isOverFunderCap = selectedFunder ? numAmount > availableCap : false;
   const isOverLoanNeeded = numAmount > remainingNeeded;
-  const isValidAmount = numAmount > 0 && !isOverFunderCap && !isOverLoanNeeded;
+  const isValidAmount = numAmount > 0 && !isOverLoanNeeded;
 
-  // Handle Create Funder Inline
+  // Handle Create Funder Inline (No fake balance required)
   const handleCreateNewFunder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newMobile.trim() || !newAddress.trim() || !newCapitalAmount) {
-      toast.error("Please fill in all required capital provider details.");
+    if (!newName.trim() || !newMobile.trim()) {
+      toast.error("Please enter capital person name and mobile number.");
       return;
     }
 
@@ -136,24 +124,24 @@ export function AllocateCapitalDialog({
       const res = await createFunderAction({
         name: newName.trim(),
         mobile: newMobile.trim(),
-        address: newAddress.trim(),
-        capitalAmount: Number(newCapitalAmount),
-        investmentDate: newInvestmentDate,
-        returnDueDate: newReturnDueDate || newInvestmentDate,
         notes: newNotes.trim() || null,
+        fundingModel: "on_demand",
       });
 
       if (res.success && res.data) {
-        toast.success(`Capital provider "${newName}" registered successfully!`);
-        // Reload funders & auto select
+        toast.success(`Capital person "${newName}" registered successfully!`);
         await loadFunders();
         setSelectedFunderId(res.data.funderId);
         setIsCreatingFunder(false);
-        // Pre-fill amount
-        const prefill = Math.min(remainingNeeded, Number(newCapitalAmount));
-        setAmount(prefill.toString());
+        setNewName("");
+        setNewMobile("");
+        setNewNotes("");
+        // Pre-fill amount with remaining loan needed
+        if (remainingNeeded > 0) {
+          setAmount(remainingNeeded.toString());
+        }
       } else {
-        toast.error(typeof res.error === "string" ? res.error : "Failed to register capital provider.");
+        toast.error(typeof res.error === "string" ? res.error : "Failed to register capital person.");
       }
     });
   };
@@ -161,7 +149,7 @@ export function AllocateCapitalDialog({
   // Handle Confirm Allocation
   const handleConfirmAllocation = async () => {
     if (!loan || !selectedFunderId || !isValidAmount) {
-      toast.error("Please select a capital provider and enter a valid allocation amount.");
+      toast.error("Please select a capital person and enter a valid funding amount.");
       return;
     }
 
@@ -171,77 +159,82 @@ export function AllocateCapitalDialog({
       funderId: selectedFunderId,
       amount: numAmount,
       allocationDate,
+      status: fundingStatus,
       notes: notes.trim() || undefined,
     });
     setIsSubmitting(false);
 
     if (res.success) {
       toast.success(
-        `Successfully allocated ₹${numAmount.toLocaleString("en-IN")} from ${selectedFunder?.name} to ${loan.borrower.name}!`
+        `Successfully linked ₹${numAmount.toLocaleString("en-IN")} from ${selectedFunder?.name} to ${loan.borrower.name}!`
       );
-      await queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
-      onSuccess?.();
+
+      // Invalidate React Query cache
+      queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+
+      if (onSuccess) onSuccess();
       onOpenChange(false);
     } else {
-      toast.error(typeof res.error === "string" ? res.error : "Failed to allocate capital.");
+      toast.error(typeof res.error === "string" ? res.error : "Failed to record capital funding.");
     }
   };
 
-  if (!loan) return null;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl max-w-lg fx-glass-card border-border/50 bg-white dark:bg-card p-6 text-left max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="border-b border-border/40 pb-4">
+      <DialogContent className="rounded-2xl max-w-xl fx-glass-card border-border/50 bg-white dark:bg-card p-6 text-left">
+        <DialogHeader className="border-b border-border/40 pb-3">
           <DialogTitle className="text-lg font-black tracking-tight flex items-center justify-between">
             <span className="flex items-center gap-2">
               <Landmark className="h-5 w-5 text-primary" />
-              <span>Capital Allocation</span>
+              <span>On-Demand Capital Funding</span>
             </span>
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-              Loan: ₹{loanPrincipal.toLocaleString("en-IN")}
-            </span>
+            {loan && (
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                Loan Principal: ₹{Number(loan.principal).toLocaleString("en-IN")}
+              </span>
+            )}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Connect private capital person funds directly to {loan.borrower.name}&apos;s loan file.
+            Connect an on-demand capital provider to fund this loan. Record the actual amount provided.
           </DialogDescription>
         </DialogHeader>
 
-        {/* ── Summary Banner ────────────────────────────────────────────────── */}
-        <div className="p-3.5 rounded-xl bg-black/25 dark:bg-black/45 border border-border/40 text-xs space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground font-semibold">Borrower:</span>
-            <span className="font-extrabold text-foreground">{loan.borrower.name} ({loan.borrower.mobile})</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2 pt-1 border-t border-border/20 text-center">
-            <div>
-              <p className="text-[10px] uppercase font-bold text-muted-foreground">Principal</p>
-              <p className="font-extrabold text-foreground mt-0.5">₹{loanPrincipal.toLocaleString("en-IN")}</p>
+        {/* ── Summary of current loan funding status ────────────────────────── */}
+        {loan && (
+          <div className="p-3.5 rounded-xl bg-accent/20 dark:bg-secondary/20 border border-border/40 text-xs space-y-2">
+            <div className="flex items-center justify-between font-semibold">
+              <span className="text-muted-foreground">Borrower: <strong className="text-foreground">{loan.borrower.name}</strong></span>
+              <span className="text-muted-foreground">Mobile: <strong className="text-foreground">{loan.borrower.mobile}</strong></span>
             </div>
-            <div>
-              <p className="text-[10px] uppercase font-bold text-muted-foreground">Already Funded</p>
-              <p className="font-extrabold text-emerald-400 mt-0.5">₹{alreadyFunded.toLocaleString("en-IN")}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase font-bold text-muted-foreground">Remaining Needed</p>
-              <p className={`font-extrabold mt-0.5 ${remainingNeeded > 0 ? "text-amber-400 font-black" : "text-muted-foreground"}`}>
-                ₹{remainingNeeded.toLocaleString("en-IN")}
-              </p>
-            </div>
-          </div>
-        </div>
 
-        {/* ── Existing Sources List (if any) ────────────────────────────────── */}
-        {loan.funding && loan.funding.sources.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/30 text-center">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground">Required</span>
+                <p className="font-extrabold text-foreground mt-0.5">₹{loanPrincipal.toLocaleString("en-IN")}</p>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground">Funded</span>
+                <p className="font-extrabold text-emerald-400 mt-0.5">₹{alreadyFunded.toLocaleString("en-IN")}</p>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground">Remaining Needed</span>
+                <p className="font-extrabold text-amber-400 mt-0.5">₹{remainingNeeded.toLocaleString("en-IN")}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Existing Sources on this Loan ─────────────────────────────────── */}
+        {loan?.funding && loan.funding.sources.length > 0 && (
           <div className="space-y-1.5">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
-              Current Capital Sources ({loan.funding.sources.length}):
-            </p>
-            <div className="space-y-1">
+            <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+              Current Capital Sources on this Loan ({loan.funding.sources.length})
+            </Label>
+            <div className="space-y-1.5 max-h-28 overflow-y-auto pr-1">
               {loan.funding.sources.map((s) => (
                 <div
                   key={s.allocationId}
-                  className="flex items-center justify-between p-2 rounded-lg bg-accent/20 dark:bg-secondary/15 border border-border/30 text-xs"
+                  className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 border border-border/30 text-xs"
                 >
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-foreground">{s.funderName}</span>
@@ -306,67 +299,50 @@ export function AllocateCapitalDialog({
               ) : (
                 <select
                   value={selectedFunderId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    setSelectedFunderId(id);
-                    const f = funders.find((x) => x.funderId === id);
-                    if (f) {
-                      const maxPossible = Math.min(remainingNeeded, f.availableCapital);
-                      if (maxPossible > 0) setAmount(maxPossible.toString());
-                    }
-                  }}
+                  onChange={(e) => setSelectedFunderId(e.target.value)}
                   className="w-full h-11 px-3.5 rounded-xl bg-accent/20 dark:bg-secondary/20 border border-border/40 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="">-- Choose a Capital Person --</option>
                   {funders.map((f) => (
                     <option key={f.funderId} value={f.funderId}>
-                      {f.name} — Available: ₹{f.availableCapital.toLocaleString("en-IN")} (Total: ₹{f.totalCapital.toLocaleString("en-IN")})
+                      {f.name} {f.unallocatedReceived > 0 ? `(Unallocated: ₹${f.unallocatedReceived.toLocaleString("en-IN")})` : `(On-Demand)`}
                     </option>
                   ))}
                 </select>
               )}
             </div>
 
-            {/* Selected Funder Balance Card */}
+            {/* Selected Funder Profile Info */}
             {selectedFunder && (
-              <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/20 text-xs space-y-2">
+              <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 text-xs space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-foreground flex items-center gap-1.5">
                     <Coins className="h-4 w-4 text-primary" /> {selectedFunder.name}
                   </span>
                   <span className="text-[10px] text-muted-foreground">{selectedFunder.mobile}</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 pt-1 border-t border-primary/20 text-center">
-                  <div>
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground">Total Capital</span>
-                    <p className="font-extrabold text-foreground mt-0.5">₹{selectedFunder.totalCapital.toLocaleString("en-IN")}</p>
-                  </div>
-                  <div>
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground">Out with Borrowers</span>
-                    <p className="font-extrabold text-amber-400 mt-0.5">₹{selectedFunder.capitalWithBorrowers.toLocaleString("en-IN")}</p>
-                  </div>
-                  <div>
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground">Available Capital</span>
-                    <p className="font-black text-emerald-400 mt-0.5">₹{selectedFunder.availableCapital.toLocaleString("en-IN")}</p>
-                  </div>
-                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Funding Model: <strong className="text-foreground">On-Demand</strong> • Total Provided to Date: ₹{selectedFunder.totalProvided.toLocaleString("en-IN")}
+                  {selectedFunder.unallocatedReceived > 0 && (
+                    <span className="text-emerald-400 font-bold ml-1.5">
+                      (₹{selectedFunder.unallocatedReceived.toLocaleString("en-IN")} unallocated received)
+                    </span>
+                  )}
+                </p>
               </div>
             )}
 
-            {/* Allocation Amount */}
+            {/* Funding Amount */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-xs font-bold text-foreground">Amount to Allocate (₹) *</Label>
-                {selectedFunder && (
+                <Label className="text-xs font-bold text-foreground">Funding Amount for this Loan (₹) *</Label>
+                {remainingNeeded > 0 && (
                   <button
                     type="button"
-                    onClick={() => {
-                      const maxFill = Math.min(remainingNeeded, selectedFunder.availableCapital);
-                      setAmount(maxFill.toString());
-                    }}
+                    onClick={() => setAmount(remainingNeeded.toString())}
                     className="text-[10px] text-primary hover:underline font-semibold"
                   >
-                    Fill Max Available (₹{Math.min(remainingNeeded, selectedFunder.availableCapital).toLocaleString("en-IN")})
+                    Fill Remaining Needed (₹{remainingNeeded.toLocaleString("en-IN")})
                   </button>
                 )}
               </div>
@@ -376,17 +352,12 @@ export function AllocateCapitalDialog({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className={`h-11 rounded-xl text-sm font-bold bg-accent/20 dark:bg-secondary/20 border-border/40 ${
-                  isOverFunderCap || isOverLoanNeeded ? "border-red-500 focus-visible:ring-red-500" : ""
+                  isOverLoanNeeded ? "border-red-500 focus-visible:ring-red-500" : ""
                 }`}
               />
 
               {/* Validation helper text */}
-              {isOverFunderCap ? (
-                <p className="text-[11px] text-red-400 font-bold flex items-center gap-1 mt-1">
-                  <AlertCircle className="h-3 w-3 shrink-0" />
-                  Insufficient available capital! {selectedFunder?.name} only has ₹{availableCap.toLocaleString("en-IN")} available.
-                </p>
-              ) : isOverLoanNeeded ? (
+              {isOverLoanNeeded ? (
                 <p className="text-[11px] text-red-400 font-bold flex items-center gap-1 mt-1">
                   <AlertCircle className="h-3 w-3 shrink-0" />
                   Over-allocation! Maximum required to fully fund this loan is ₹{remainingNeeded.toLocaleString("en-IN")}.
@@ -399,8 +370,8 @@ export function AllocateCapitalDialog({
               ) : null}
             </div>
 
-            {/* Date & Notes */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Date, Status & Notes */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-foreground">Funding Date *</Label>
                 <Input
@@ -411,10 +382,22 @@ export function AllocateCapitalDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-foreground">Internal Memo / Notes</Label>
+                <Label className="text-xs font-bold text-foreground">Funding Status *</Label>
+                <select
+                  value={fundingStatus}
+                  onChange={(e) => setFundingStatus(e.target.value as any)}
+                  className="w-full h-11 px-3 rounded-xl bg-accent/20 dark:bg-secondary/20 border border-border/40 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="allocated">Allocated</option>
+                  <option value="received">Received</option>
+                  <option value="pending">Pending</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-foreground">Notes (Optional)</Label>
                 <Input
                   type="text"
-                  placeholder="Optional reference memo"
+                  placeholder="e.g. On-demand transfer"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   className="h-11 rounded-xl text-xs bg-accent/20 dark:bg-secondary/20 border-border/40"
@@ -445,122 +428,86 @@ export function AllocateCapitalDialog({
                 ) : (
                   <>
                     <ShieldCheck className="h-4 w-4" />
-                    <span>Confirm Allocation</span>
+                    <span>Confirm Funding</span>
                   </>
                 )}
               </Button>
             </DialogFooter>
           </div>
         ) : (
-          /* ── INLINE: Create New Capital Person Form ───────────────────────── */
-          <form onSubmit={handleCreateNewFunder} className="space-y-3.5 pt-1">
+          /* ── Inline "Add New Capital Person" Form ────────────────────────── */
+          <form onSubmit={handleCreateNewFunder} className="space-y-3.5 pt-1 animate-in fade-in duration-200">
             <div className="flex items-center justify-between pb-1 border-b border-border/30">
               <span className="text-xs font-bold text-primary flex items-center gap-1.5">
-                <UserPlus className="h-4 w-4" /> Register New Capital Person
+                <UserPlus className="h-4 w-4" />
+                Register New On-Demand Capital Person
               </span>
               <button
                 type="button"
                 onClick={() => setIsCreatingFunder(false)}
-                className="text-xs text-muted-foreground hover:text-foreground font-semibold"
+                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
               >
-                ← Back to Selection
+                <ArrowLeft className="h-3 w-3" /> Back to Select
               </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-bold">Full Name *</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-foreground">Name *</Label>
                 <Input
-                  required
-                  placeholder="e.g. Suresh Kumar"
+                  placeholder="e.g. X or Person Name"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="h-10 rounded-xl text-xs bg-accent/20"
+                  required
+                  className="h-10 rounded-xl bg-accent/20 dark:bg-secondary/20 border-border/40 text-xs"
                 />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-bold">Mobile Number *</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-foreground">Phone Number *</Label>
                 <Input
-                  required
+                  type="tel"
                   placeholder="10-digit mobile"
                   value={newMobile}
                   onChange={(e) => setNewMobile(e.target.value)}
-                  className="h-10 rounded-xl text-xs bg-accent/20"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs font-bold">Address *</Label>
-              <Input
-                required
-                placeholder="Residential / Office address"
-                value={newAddress}
-                onChange={(e) => setNewAddress(e.target.value)}
-                className="h-10 rounded-xl text-xs bg-accent/20"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs font-bold">Capital Provided (₹) *</Label>
-                <Input
                   required
-                  type="number"
-                  placeholder="e.g. 50000"
-                  value={newCapitalAmount}
-                  onChange={(e) => setNewCapitalAmount(e.target.value)}
-                  className="h-10 rounded-xl text-xs font-bold bg-accent/20"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-bold">Investment Date *</Label>
-                <Input
-                  required
-                  type="date"
-                  value={newInvestmentDate}
-                  onChange={(e) => setNewInvestmentDate(e.target.value)}
-                  className="h-10 rounded-xl text-xs bg-accent/20"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-bold">Return Due Date</Label>
-                <Input
-                  type="date"
-                  value={newReturnDueDate}
-                  onChange={(e) => setNewReturnDueDate(e.target.value)}
-                  className="h-10 rounded-xl text-xs bg-accent/20"
+                  className="h-10 rounded-xl bg-accent/20 dark:bg-secondary/20 border-border/40 text-xs"
                 />
               </div>
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs font-bold">Notes</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-foreground">Notes (Optional)</Label>
               <Input
-                placeholder="Optional notes or repayment terms"
+                placeholder="e.g. On-demand emergency funder"
                 value={newNotes}
                 onChange={(e) => setNewNotes(e.target.value)}
-                className="h-10 rounded-xl text-xs bg-accent/20"
+                className="h-10 rounded-xl bg-accent/20 dark:bg-secondary/20 border-border/40 text-xs"
               />
             </div>
 
-            <DialogFooter className="pt-2 border-t border-border/40 flex items-center justify-between gap-2">
+            <p className="text-[11px] text-muted-foreground">
+              No fake pool balance required. Once created, you will record individual funding events as needed.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border/30">
               <Button
                 type="button"
                 variant="outline"
+                size="sm"
                 onClick={() => setIsCreatingFunder(false)}
                 className="h-10 rounded-xl text-xs font-semibold px-4"
               >
-                Back
+                Cancel
               </Button>
               <Button
                 type="submit"
                 disabled={isCreatingPending}
-                className="h-10 rounded-xl text-xs font-bold fx-brand-gradient text-white border-0 px-5"
+                size="sm"
+                className="h-10 rounded-xl text-xs font-black fx-brand-gradient text-white border-0 fx-cta-glow px-5"
               >
-                {isCreatingPending ? "Creating..." : "Save & Select Capital Person"}
+                {isCreatingPending ? "Registering..." : "Create & Select"}
               </Button>
-            </DialogFooter>
+            </div>
           </form>
         )}
       </DialogContent>

@@ -118,17 +118,25 @@ export async function createLoanAction(
       }).catch((e) => console.error("Async email dispatch error:", e));
     }
 
-    // Optional Capital Allocation during loan creation
+    // Optional Capital Allocation during loan creation (On-Demand Model)
     const funderId = (formData.get("funderId") as string)?.trim();
     if (funderId) {
       try {
+        const fundingAmountStr = (formData.get("fundingAmount") as string)?.trim();
+        const fundingDateStr = (formData.get("fundingDate") as string)?.trim();
+        const fundingStatusStr = (formData.get("fundingStatus") as string)?.trim() as any;
+
+        const allocAmount = fundingAmountStr ? Number(fundingAmountStr) : parsed.data.principal;
+        const allocDate = fundingDateStr || parsed.data.dateGiven;
+
         const { allocateCapitalAction } = await import("@/features/capital/actions/allocate-capital.action");
         await allocateCapitalAction({
           loanId: loan.loanId,
           funderId,
-          amount: parsed.data.principal,
-          allocationDate: parsed.data.dateGiven,
-          notes: "Allocated during loan creation",
+          amount: isNaN(allocAmount) || allocAmount <= 0 ? parsed.data.principal : allocAmount,
+          allocationDate: allocDate,
+          status: fundingStatusStr || "allocated",
+          notes: "On-demand funding recorded during loan creation",
         });
       } catch (allocErr) {
         console.error("Auto-allocation during loan creation error:", allocErr);

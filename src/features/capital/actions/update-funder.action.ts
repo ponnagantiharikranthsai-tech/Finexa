@@ -2,51 +2,42 @@
 
 import { requireAuth } from "@/lib/auth";
 import { capitalRepository } from "../repository/capital.repository";
-import { revalidatePath } from "next/cache";
+import { safeRevalidatePath } from "@/lib/safe-revalidate";
 import { auditLog } from "@/lib/audit-log";
 
 export async function updateFunderAction(prevState: any, formData: FormData) {
   try {
     await requireAuth();
 
-    const funderId = formData.get("funderId") as string;
-    const name = formData.get("name") as string;
-    const mobile = formData.get("mobile") as string;
-    const address = formData.get("address") as string;
-    const capitalAmountStr = formData.get("capitalAmount") as string;
-    const investmentDate = formData.get("investmentDate") as string;
-    const returnDueDate = formData.get("returnDueDate") as string;
-    const notes = formData.get("notes") as string;
+    const funderId = (formData.get("funderId") as string)?.trim();
+    const name = (formData.get("name") as string)?.trim();
+    const mobile = (formData.get("mobile") as string)?.trim();
+    const address = (formData.get("address") as string)?.trim() || "";
+    const notes = (formData.get("notes") as string)?.trim() || null;
+    const status = (formData.get("status") as string)?.trim() as any;
 
-    if (!funderId || !name || !mobile || !address || !capitalAmountStr || !investmentDate || !returnDueDate) {
-      return { success: false, error: "All required fields must be filled out." };
-    }
-
-    const capitalAmount = Number(capitalAmountStr);
-    if (isNaN(capitalAmount) || capitalAmount <= 0) {
-      return { success: false, error: "Capital amount must be a positive number." };
+    if (!funderId || !name || !mobile) {
+      return { success: false, error: "Funder ID, Name, and Mobile are required." };
     }
 
     const updated = await capitalRepository.updateFunder(funderId, {
       name,
       mobile,
       address,
-      capitalAmount: capitalAmount.toFixed(2),
-      investmentDate,
-      returnDueDate,
-      notes: notes || null,
+      notes,
+      ...(status ? { status } : {}),
     });
 
     if (!updated) {
-      return { success: false, error: "Funder investment record not found." };
+      return { success: false, error: "Capital person record not found." };
     }
 
     await auditLog("funder_updated", "funder", funderId, { name: updated.name });
 
-    revalidatePath("/capital-management");
+    safeRevalidatePath("/capital-management");
 
     return { success: true };
   } catch (err) {
-    return { success: false, error: (err as Error).message || "Failed to update funder profile." };
+    return { success: false, error: (err as Error).message || "Failed to update capital person profile." };
   }
 }

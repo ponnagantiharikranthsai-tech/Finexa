@@ -1,12 +1,19 @@
 import { db } from "@/db/client";
-import { fundersTable, capitalReturnsTable, capitalAllocationsTable, loansTable } from "@/db/schema";
-import { eq, and, gte, lte } from "drizzle-orm";
+import {
+  fundersTable,
+  capitalReturnsTable,
+  capitalAllocationsTable,
+  capitalFundingTransactionsTable,
+  loansTable,
+  borrowersTable,
+} from "@/db/schema";
+import { eq, and, sql, desc } from "drizzle-orm";
 
 export class CapitalRepository {
   async createFunder(data: typeof fundersTable.$inferInsert) {
     const [inserted] = await db.insert(fundersTable).values(data).returning();
     if (!inserted) {
-      throw new Error("Failed to insert funder investment record");
+      throw new Error("Failed to insert capital person record");
     }
     return inserted;
   }
@@ -50,24 +57,70 @@ export class CapitalRepository {
     return found || null;
   }
 
-  async findFundersByMobileList(mobile: string) {
-    if (!mobile) return [];
-    const cleanSubmitted = mobile.replace(/[^0-9]/g, "").slice(-10);
-    if (!cleanSubmitted) return [];
-
-    const allFunders = await this.findAllFunders();
-    return allFunders.filter((f) => {
-      const cleanDb = f.mobile.replace(/[^0-9]/g, "").slice(-10);
-      return cleanDb === cleanSubmitted;
-    });
-  }
-
   async findAllFunders() {
     return await db
       .select()
       .from(fundersTable)
-      .orderBy(fundersTable.createdAt);
+      .orderBy(fundersTable.name);
   }
+
+  // ── Capital Funding Transactions (On-Demand Events) ──────────────────────
+
+  async getNextTransactionCode(): Promise<string> {
+    const [latest] = await db
+      .select({ code: capitalFundingTransactionsTable.transactionCode })
+      .from(capitalFundingTransactionsTable)
+      .orderBy(desc(capitalFundingTransactionsTable.createdAt))
+      .limit(1);
+
+    if (!latest?.code) return "CF-001";
+    const numPart = parseInt(latest.code.replace(/[^0-9]/g, ""), 10);
+    const nextNum = isNaN(numPart) ? 1 : numPart + 1;
+    return `CF-${String(nextNum).padStart(3, "0")}`;
+  }
+
+  async createFundingTransaction(data: typeof capitalFundingTransactionsTable.$inferInsert) {
+    const code = data.transactionCode || (await this.getNextTransactionCode());
+    const [inserted] = await db
+      .insert(capitalFundingTransactionsTable)
+      .values({ ...data, transactionCode: code })
+      .returning();
+    if (!inserted) {
+      throw new Error("Failed to insert capital funding transaction");
+    }
+    return inserted;
+  }
+
+  async findFundingTransactionsByFunderId(funderId: string) {
+    return await db
+      .select({
+        transaction: capitalFundingTransactionsTable,
+        loan: loansTable,
+        borrower: borrowersTable,
+      })
+      .from(capitalFundingTransactionsTable)
+      .leftJoin(loansTable, eq(capitalFundingTransactionsTable.loanId, loansTable.loanId))
+      .leftJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
+      .where(eq(capitalFundingTransactionsTable.funderId, funderId))
+      .orderBy(desc(capitalFundingTransactionsTable.fundingDate), desc(capitalFundingTransactionsTable.createdAt));
+  }
+
+  async findAllFundingTransactions() {
+    return await db
+      .select({
+        transaction: capitalFundingTransactionsTable,
+        funder: fundersTable,
+        loan: loansTable,
+        borrower: borrowersTable,
+      })
+      .from(capitalFundingTransactionsTable)
+      .innerJoin(fundersTable, eq(capitalFundingTransactionsTable.funderId, fundersTable.funderId))
+      .leftJoin(loansTable, eq(capitalFundingTransactionsTable.loanId, loansTable.loanId))
+      .leftJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
+      .orderBy(desc(capitalFundingTransactionsTable.fundingDate), desc(capitalFundingTransactionsTable.createdAt));
+  }
+
+  // ── Capital Returns ───────────────────────────────────────────────────────
 
   async createCapitalReturn(data: typeof capitalReturnsTable.$inferInsert) {
     const [inserted] = await db.insert(capitalReturnsTable).values(data).returning();

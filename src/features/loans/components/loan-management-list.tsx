@@ -1911,7 +1911,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                                       type="button"
                                       onClick={() => {
                                         setDetailsOpen(false);
-                                        router.push(`/capital-management?funderId=${src.funderId}`);
+                                        router.push(`/capital-management/${src.funderId}`);
                                       }}
                                       className="px-2 py-1 rounded bg-secondary hover:bg-accent/40 text-[10px] font-bold text-primary flex items-center gap-1 transition-colors"
                                       title="View in Capital Management"

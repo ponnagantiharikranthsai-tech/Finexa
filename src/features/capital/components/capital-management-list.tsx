@@ -110,14 +110,9 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
   useEffect(() => {
     const funderIdParam = searchParams.get("funderId");
     if (funderIdParam && fundersList.length > 0) {
-      const match = fundersList.find((f) => f.funderId === funderIdParam);
-      if (match) {
-        setActiveTab("funders");
-        setSelectedFunder(match);
-        setDetailsOpen(true);
-      }
+      router.push(`/capital-management/${funderIdParam}`);
     }
-  }, [searchParams, fundersList]);
+  }, [searchParams, fundersList, router]);
 
   const resetFunderForm = () => {
     setName("");
@@ -289,8 +284,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
   };
 
   const handleViewDetails = (funder: FunderWithReturns) => {
-    setSelectedFunder(funder);
-    setDetailsOpen(true);
+    router.push(`/capital-management/${funder.funderId}`);
   };
 
   return (
@@ -921,158 +915,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
         </DialogContent>
       </Dialog>
 
-      {/* ── MODAL: VIEW DETAILS & FUNDING HISTORY ──────────────────────────── */}
-      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="rounded-2xl max-w-3xl max-h-[85vh] overflow-y-auto fx-glass-card border-border/50 bg-white dark:bg-card p-6 text-left">
-          {selectedFunder && (
-            <div className="space-y-6">
-              <DialogHeader className="border-b border-border/40 pb-4">
-                <DialogTitle className="text-xl font-black tracking-tight flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <User className="h-5 w-5 text-primary" />
-                    <span>{selectedFunder.name} — Funding File</span>
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20">
-                    On-Demand Funding
-                  </span>
-                </DialogTitle>
-                <DialogDescription>
-                  Verified on-demand funding history and loan connections.
-                </DialogDescription>
-              </DialogHeader>
-
-              {/* Personal Info & Financial Metrics */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-xl bg-accent/20 dark:bg-secondary/20 text-center">
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground">Mobile</span>
-                  <p className="font-extrabold text-foreground text-sm mt-0.5">{selectedFunder.mobile}</p>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Provided</span>
-                  <p className="font-extrabold text-foreground text-sm mt-0.5">
-                    ₹{fmt(selectedFunder.totalProvided)}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground">Currently Allocated</span>
-                  <p className="font-extrabold text-emerald-400 text-sm mt-0.5">
-                    ₹{fmt(selectedFunder.currentlyAllocated)}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground">Unallocated Received</span>
-                  <p className="font-extrabold text-blue-400 text-sm mt-0.5">
-                    ₹{fmt(selectedFunder.unallocatedReceived)}
-                  </p>
-                </div>
-              </div>
-
-              {/* ── Section 15: Funding History ────────────────────────────── */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between border-b border-border/40 pb-2">
-                  <h3 className="font-bold text-sm text-primary flex items-center gap-1.5">
-                    <History className="h-4 w-4" /> Funding History ({(selectedFunder.fundingHistory || []).length})
-                  </h3>
-                  <span className="text-[11px] text-muted-foreground">
-                    Chronological record of individual funding events
-                  </span>
-                </div>
-
-                {(!selectedFunder.fundingHistory || selectedFunder.fundingHistory.length === 0) ? (
-                  <div className="py-8 text-center bg-accent/10 rounded-xl text-xs text-muted-foreground">
-                    No funding events recorded yet for {selectedFunder.name}.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto border border-border/30 rounded-xl">
-                    <table className="w-full text-left border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b border-border/30 bg-muted/20">
-                          <th className="p-3 font-bold text-muted-foreground uppercase text-[10px]">Date</th>
-                          <th className="p-3 font-bold text-muted-foreground uppercase text-[10px]">Transaction</th>
-                          <th className="p-3 font-bold text-muted-foreground uppercase text-[10px]">Amount</th>
-                          <th className="p-3 font-bold text-muted-foreground uppercase text-[10px]">Borrower / Loan</th>
-                          <th className="p-3 font-bold text-muted-foreground uppercase text-[10px]">Status</th>
-                          <th className="p-3 font-bold text-muted-foreground uppercase text-[10px] text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border/20">
-                        {(selectedFunder.fundingHistory || []).map((item) => (
-                          <tr key={item.transactionId} className="hover:bg-muted/10">
-                            <td className="p-3 font-semibold text-foreground whitespace-nowrap">
-                              {item.fundingDate}
-                            </td>
-                            <td className="p-3 font-mono text-[11px] text-muted-foreground">
-                              {item.transactionCode}
-                            </td>
-                            <td className="p-3 font-black text-primary whitespace-nowrap">
-                              ₹{fmt(item.amount)}
-                            </td>
-                            <td className="p-3">
-                              {item.borrowerName ? (
-                                <div>
-                                  <strong className="text-foreground">{item.borrowerName}</strong>
-                                  <span className="text-[10px] text-muted-foreground block">
-                                    Loan ID: {item.loanId?.slice(0, 8)}...
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="text-blue-400 font-semibold">Advance Received (Unallocated)</span>
-                              )}
-                            </td>
-                            <td className="p-3">
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                {item.status}
-                              </span>
-                            </td>
-                            <td className="p-3 text-right">
-                              {item.loanId ? (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setDetailsOpen(false);
-                                    router.push(`/loan-management?loanId=${item.loanId}`);
-                                  }}
-                                  className="h-7 text-[10px] font-bold"
-                                >
-                                  <span>View Loan</span>
-                                  <ExternalLink className="h-2.5 w-2.5 ml-1" />
-                                </Button>
-                              ) : (
-                                <span className="text-[10px] text-muted-foreground italic">N/A</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* Capital Returns (if any recorded) */}
-              {selectedFunder.returnsList && selectedFunder.returnsList.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="font-bold text-sm text-emerald-400 flex items-center gap-1.5">
-                    <ArrowUpLeft className="h-4 w-4" /> Capital Returned to {selectedFunder.name}
-                  </h3>
-                  <div className="divide-y divide-border/20 border border-border/30 rounded-xl overflow-hidden">
-                    {(selectedFunder.returnsList || []).map((r) => (
-                      <div key={r.returnId} className="p-3 flex items-center justify-between text-xs bg-muted/10">
-                        <div>
-                          <span className="font-bold text-foreground">₹{fmt(r.amount)}</span>
-                          <span className="text-[10px] text-muted-foreground block">{r.returnDate}</span>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground">{r.notes || "Capital repaid"}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
+

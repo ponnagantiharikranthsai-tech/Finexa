@@ -2,9 +2,6 @@ import { getApplicationByCodeAction } from "@/features/applications/actions/get-
 import { BorrowerApplyForm } from "@/features/applications/components/borrower-apply-form";
 import { AlertTriangle } from "lucide-react";
 import { branding } from "@/config/branding";
-import { redirect } from "next/navigation";
-import { getVehicleLoanByCode } from "@/features/vehicle-loans/repository/vehicle-loan.repository";
-import { DEFAULT_VEHICLE_LOAN } from "@/features/vehicle-loans/schemas/vehicle-loan.schema";
 
 interface PageProps {
   params: Promise<{
@@ -15,11 +12,6 @@ interface PageProps {
 export default async function BorrowerApplyPage({ params }: PageProps) {
   const { code } = await params;
 
-  // Auto-detect vehicle collateral loan
-  const vehicleLoan = await getVehicleLoanByCode(code);
-  if (vehicleLoan || code === DEFAULT_VEHICLE_LOAN.applicationCode || code.toUpperCase().includes("DIO")) {
-    redirect(`/apply/vehicle/${code}`);
-  }
   const res = await getApplicationByCodeAction(code);
 
   const errorMessage = !res.success

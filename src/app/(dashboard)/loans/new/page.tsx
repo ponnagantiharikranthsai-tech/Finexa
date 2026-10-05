@@ -163,7 +163,7 @@ function NewLoanFormContent() {
           funderId: newFunder.funderId,
           name: newFunder.name,
           mobile: newFunder.mobile,
-          fundingModel: newFunder.fundingModel || "on_demand",
+          fundingModel: "on_demand",
           totalProvided: 0,
           currentlyAllocated: 0,
           unallocatedReceived: 0,
@@ -318,44 +318,46 @@ function NewLoanFormContent() {
       isOptimistic: true,
     };
 
-    // 3. Update React Query Cache immediately
-    queryClient.setQueryData<any[]>(LOANS_QUERY_KEY, (old) => {
-      if (!old) return [optimisticLoan];
-      return [optimisticLoan, ...old];
-    });
-
-    // 4. Instant UI Feedback & Navigation
-    toast.success("Loan created successfully!");
-    router.push("/loan-management");
-
-    // 5. Fire server action in background transition
+    // 3. Call server action FIRST and await the result before navigating.
+    //    Previously, router.push("/loan-management") fired on line 329 BEFORE
+    //    createLoanAction completed on line 333. When Next.js navigated away it
+    //    unmounted the component, aborting the in-flight server-action fetch.
+    //    The catch block then labelled that abort as
+    //    "Network error while saving loan. Rolled back." — even though the loan
+    //    may or may not have been saved. Fix: await the server action first;
+    //    only navigate after confirmed success.
     try {
       const res = await createLoanAction({ success: false, error: "" }, formData);
 
       if (res.success && res.data) {
-        if (res.data.loanId) {
-          const realLoan: any = {
-            ...res.data.newLoan,
-            borrower: {
-              ...res.data.newLoan.borrower,
-              name: borrowerName || res.data.newLoan.borrower?.name,
-              mobile: mobile || res.data.newLoan.borrower?.mobile,
-              email: email || res.data.newLoan.borrower?.email,
-              panDecrypted: pan || res.data.newLoan.borrower?.panDecrypted,
-              aadhaarDecrypted: aadhaar || res.data.newLoan.borrower?.aadhaarDecrypted,
-            },
-            isOptimistic: false,
-          };
-          queryClient.setQueryData<any[]>(LOANS_QUERY_KEY, (old) => {
-            if (!old) return [realLoan];
-            return old.map((l: any) => (l.loanId === tempLoanId ? realLoan : l));
-          });
-        }
-      } else {
+        // Build real loan object, merging server data with local form values
+        const realLoan: any = res.data.newLoan
+          ? {
+              ...res.data.newLoan,
+              borrower: {
+                ...res.data.newLoan.borrower,
+                name: borrowerName || res.data.newLoan.borrower?.name,
+                mobile: mobile || res.data.newLoan.borrower?.mobile,
+                email: email || res.data.newLoan.borrower?.email,
+                panDecrypted: pan || res.data.newLoan.borrower?.panDecrypted,
+                aadhaarDecrypted: aadhaar || res.data.newLoan.borrower?.aadhaarDecrypted,
+              },
+              funding: optimisticLoan.funding,
+              isOptimistic: false,
+            }
+          : { ...optimisticLoan, loanId: res.data.loanId, isOptimistic: false };
+
+        // Update React Query cache with confirmed real loan
         queryClient.setQueryData<any[]>(LOANS_QUERY_KEY, (old) => {
-          if (!old) return [];
-          return old.filter((l: any) => l.loanId !== tempLoanId);
+          if (!old) return [realLoan];
+          return [realLoan, ...old];
         });
+
+        // Show success and navigate only after server confirms
+        toast.success("Loan created successfully!");
+        router.push("/loan-management");
+      } else {
+        // Server returned a validation or business error — stay on the form
         const err = !res.success ? res.error : undefined;
         const errText =
           typeof err === "string"
@@ -364,11 +366,7 @@ function NewLoanFormContent() {
         toast.error(errText);
       }
     } catch (err: any) {
-      queryClient.setQueryData<any[]>(LOANS_QUERY_KEY, (old) => {
-        if (!old) return [];
-        return old.filter((l: any) => l.loanId !== tempLoanId);
-      });
-      toast.error("Network error while saving loan. Rolled back.");
+      toast.error("Failed to save loan. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

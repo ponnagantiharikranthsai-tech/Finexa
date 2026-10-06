@@ -326,7 +326,7 @@ export async function getFunderLedgerAction(
       });
     }
 
-    // Build Payments to Capital Person list (Finexa -> Chinni)
+    // Build Payments to Capital Person list (Finexa -> Capital Person)
     const paymentsToCapitalPerson: PaymentToCapitalPersonItem[] = rawReturns.map((r, idx) => ({
       returnId:    r.returnId,
       paymentCode: r.paymentCode || `CP-${String(idx + 1).padStart(3, "0")}`,
@@ -335,33 +335,6 @@ export async function getFunderLedgerAction(
       notes:       r.notes || "Capital principal repaid to capital person",
       createdAt:   r.createdAt.toISOString(),
     }));
-
-    // Also include returns in transaction list as RETURN type
-    rawReturns.forEach((r, idx) => {
-      transactions.push({
-        transactionId:        r.returnId,
-        transactionCode:      r.paymentCode || `CP-${String(idx + 1).padStart(3, "0")}`,
-        amount:               Number(r.amount),
-        originalAmount:       Number(r.amount),
-        currentlyAllocated:   0,
-        returnedFromBorrower: 0,
-        fundingDate:          r.returnDate,
-        status:               "released",
-        type:                 "RETURN",
-        notes:                r.notes || "Capital repaid to capital person",
-        loanId:               null,
-        loanCode:             null,
-        borrowerId:           null,
-        borrowerName:         null,
-        borrowerMobile:       null,
-        loanPrincipal:        null,
-        loanStatus:           null,
-        loanDueDate:          null,
-        loanDateGiven:        null,
-        createdAt:            r.createdAt.toISOString(),
-        hasReceipt:           false,
-      });
-    });
 
     // Sort all transactions newest first
     transactions.sort((a, b) => {

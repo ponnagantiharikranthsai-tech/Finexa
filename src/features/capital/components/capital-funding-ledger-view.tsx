@@ -1066,8 +1066,9 @@ export function CapitalFundingLedgerView({
                   <tr>
                     <th className="py-3 px-4 w-32">Date</th>
                     <th className="py-3 px-4 w-36">Payment ID</th>
-                    <th className="py-3 px-4 w-36">Type</th>
+                    <th className="py-3 px-4 w-48">Type</th>
                     <th className="py-3 px-4 text-right w-36">Amount</th>
+                    <th className="py-3 px-4 w-40">Recipient</th>
                     <th className="py-3 px-4">Notes / Remarks</th>
                   </tr>
                 </thead>
@@ -1078,11 +1079,14 @@ export function CapitalFundingLedgerView({
                       <td className="py-3 px-4 font-mono font-bold text-primary">{pay.paymentCode}</td>
                       <td className="py-3 px-4 font-bold text-foreground">
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                          Principal Return
+                          Capital Principal Repayment
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right font-black text-emerald-400 text-sm">
                         ₹{fmt(pay.amount)}
+                      </td>
+                      <td className="py-3 px-4 font-semibold text-foreground">
+                        To: {funder?.name || "Capital Person"}
                       </td>
                       <td className="py-3 px-4 text-muted-foreground">{pay.notes || "—"}</td>
                     </tr>

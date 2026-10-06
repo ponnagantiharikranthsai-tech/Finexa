@@ -137,7 +137,7 @@ export async function getFunderLedgerAction(
       ),
 
       // 3. Capital returns (Paid Back to Capital Person)
-      withDbRetry(() => capitalRepository.findCapitalReturnsByFunderId(funderId)),
+      withDbRetry(() => capitalRepository.findCapitalReturnsByFunderId(funderId)).catch(() => []),
     ]);
 
     // Extract all unique loan IDs connected to this funder's funding events

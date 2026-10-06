@@ -91,7 +91,7 @@ export async function getCapitalDataAction() {
     const [rawFunders, rawReturns, rawAllocations, rawTransactions, loanSumResult, rawPrincipalPayments] =
       await Promise.all([
         withDbRetry(() => capitalRepository.findAllFunders()),
-        withDbRetry(() => capitalRepository.findAllCapitalReturns()),
+        withDbRetry(() => capitalRepository.findAllCapitalReturns()).catch(() => []),
         withDbRetry(() =>
           db
             .select({
@@ -167,7 +167,7 @@ export async function getCapitalDataAction() {
     });
 
     // Group returns by funder
-    const returnsByFunder: Record<string, typeof rawReturns> = {};
+    const returnsByFunder: Record<string, any[]> = {};
     rawReturns.forEach((r) => {
       (returnsByFunder[r.funderId] ??= []).push(r);
     });

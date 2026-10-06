@@ -212,7 +212,9 @@ export async function getFunderLedgerAction(
         let txType: "FUNDING" | "ADVANCE" | "RETURN" | "UNALLOCATED";
         if (isAdvance) {
           txType = "ADVANCE";
-        } else if (isUnallocated || isDeletedLoan) {
+        } else if (isDeletedLoan) {
+          txType = "RETURN";
+        } else if (isUnallocated) {
           txType = "UNALLOCATED";
         } else {
           txType = "FUNDING";
@@ -409,9 +411,11 @@ export async function getFunderLedgerAction(
     const currentlyAllocated = loanFundingEvents.reduce((sum, t) => sum + t.currentlyAllocated, 0);
     const returnedFromBorrower = loanFundingEvents.reduce((sum, t) => sum + t.returnedFromBorrower, 0);
 
-    const unallocatedReceived = transactions
-      .filter((t) => (t.type === "ADVANCE" || t.type === "UNALLOCATED" || t.status === "unallocated" || (t.status === "received" && !t.loanId)) && t.status !== "released")
-      .reduce((sum, t) => sum + t.originalAmount, 0);
+    const rawUnallocatedTxs = transactions.filter((t) =>
+      (t.type === "ADVANCE" || t.type === "RETURN" || t.type === "UNALLOCATED" || t.status === "unallocated" || (t.status === "received" && !t.loanId)) &&
+      t.status !== "released"
+    );
+    const grossUnallocated = rawUnallocatedTxs.reduce((sum, t) => sum + t.originalAmount, 0);
 
     // Total actual principal received from funder (sum of all funding transactions from this funder)
     const totalProvided = rawTransactions.length > 0
@@ -419,6 +423,10 @@ export async function getFunderLedgerAction(
       : rawAllocations.reduce((sum, a) => sum + (Number(a.allocation.amount) || 0), 0);
 
     const paidBackToCapitalPerson = paymentsToCapitalPerson.reduce((sum, p) => sum + p.amount, 0);
+
+    // Paid from unallocated (if capital paid back exceeds principal returned from borrower)
+    const paidFromUnallocated = Math.max(0, paidBackToCapitalPerson - returnedFromBorrower);
+    const unallocatedReceived = Math.max(0, grossUnallocated - paidFromUnallocated);
 
     // Capital Still Payable to Person = Total Provided - Currently Allocated - Paid Back to Capital Person
     const capitalPayable = Math.max(0, totalProvided - currentlyAllocated - paidBackToCapitalPerson);

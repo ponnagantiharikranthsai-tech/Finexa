@@ -660,7 +660,7 @@ export function CapitalFundingLedgerView({
               : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
           }`}
         >
-          Capital Funding Events ({filteredTransactions.filter((t) => t.type === "FUNDING").length})
+          Capital Funding Events ({rawTransactions.length})
         </button>
 
         <button
@@ -1176,13 +1176,13 @@ export function CapitalFundingLedgerView({
                 <div className="p-3 flex justify-between">
                   <span className="text-muted-foreground">Transaction Type:</span>
                   <span className="font-bold text-foreground">
-                    {!selectedTx.loanId ? "UNALLOCATED" : selectedTx.type}
+                    {selectedTx.type}
                   </span>
                 </div>
                 <div className="p-3 flex justify-between">
                   <span className="text-muted-foreground">Current Status:</span>
                   <span className="font-bold uppercase text-blue-400">
-                    {!selectedTx.loanId ? "UNALLOCATED" : selectedTx.status}
+                    {selectedTx.status}
                   </span>
                 </div>
 

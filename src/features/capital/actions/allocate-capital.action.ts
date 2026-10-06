@@ -13,6 +13,7 @@ import { eq, and, desc, sql, asc } from "drizzle-orm";
 import { auditLog } from "@/lib/audit-log";
 import { invalidateLoanManagementCache } from "@/features/loans/actions/get-loan-management-data.action";
 import { capitalRepository } from "../repository/capital.repository";
+import { getFunderLedgerAction } from "./get-funder-ledger.action";
 import type { ActionResult } from "@/types/api.types";
 
 export interface AllocateCapitalInput {
@@ -118,17 +119,25 @@ export async function allocateCapitalAction(
       )
       .orderBy(asc(capitalFundingTransactionsTable.createdAt));
 
+    const ledgerRes = await getFunderLedgerAction(funderId);
+    let availableUnallocated = ledgerRes.success && ledgerRes.data ? ledgerRes.data.metrics.unallocatedReceived : 0;
+
     let remainingNeeded = numAmount;
     let primaryAllocationId = "";
     let primaryTxCode = "";
 
     // Consume existing unallocated funding records first (prevents creating new advances / double counting)
     for (const tx of unallocatedTxs) {
-      if (remainingNeeded <= 0) break;
+      if (remainingNeeded <= 0 || availableUnallocated <= 0) break;
       const txAmt = Number(tx.amount) || 0;
       if (txAmt <= 0) continue;
 
-      if (txAmt <= remainingNeeded + 0.001) {
+      const usableAmt = Math.min(txAmt, availableUnallocated);
+      if (usableAmt <= 0) continue;
+
+      if (usableAmt <= remainingNeeded + 0.001) {
+        // Entire unallocated record (or its usable portion) is consumed for this loan
+        availableUnallocated -= usableAmt;
         // Entire unallocated record is consumed for this loan
         const [updated] = await db
           .update(capitalFundingTransactionsTable)

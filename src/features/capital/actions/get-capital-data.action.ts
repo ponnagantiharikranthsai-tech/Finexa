@@ -318,9 +318,13 @@ export async function getCapitalDataAction() {
       const returnedFromBorrower = loanFundingEvents.reduce((sum, h) => sum + h.returnedFromBorrower, 0);
 
       // Standalone received / unallocated capital (advances or recovered from deleted loans)
-      const unallocatedReceived = fundingHistory
+      const grossUnallocated = fundingHistory
         .filter((h) => (!h.loanId || h.status === "received" || h.status === "unallocated") && h.status !== "released")
         .reduce((sum, h) => sum + h.originalAmount, 0);
+
+      // Paid back from unallocated (if capital paid back exceeds principal returned from borrower)
+      const paidFromUnallocated = Math.max(0, paidBackToCapitalPerson - returnedFromBorrower);
+      const unallocatedReceived = Math.max(0, grossUnallocated - paidFromUnallocated);
 
       // 4. Capital Still Payable to Person = Total Provided - Currently Allocated - Paid Back to Capital Person
       const capitalPayable = Math.max(0, totalProvided - currentlyAllocated - paidBackToCapitalPerson);

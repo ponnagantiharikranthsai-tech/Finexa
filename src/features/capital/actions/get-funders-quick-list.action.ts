@@ -6,6 +6,7 @@ import {
   fundersTable,
   capitalAllocationsTable,
   capitalFundingTransactionsTable,
+  capitalReturnsTable,
 } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import type { ActionResult } from "@/types/api.types";
@@ -50,8 +51,8 @@ export async function getFundersQuickListAction(): Promise<
 
     const funderIds = funders.map((f) => f.funderId);
 
-    // 2. Fetch active allocations and transactions in parallel
-    const [allocations, transactions] = await Promise.all([
+    // 2. Fetch active allocations, transactions, and returns in parallel
+    const [allocations, transactions, returns] = await Promise.all([
       withDbRetry(() =>
         db
           .select({
@@ -72,11 +73,25 @@ export async function getFundersQuickListAction(): Promise<
           .from(capitalFundingTransactionsTable)
           .where(inArray(capitalFundingTransactionsTable.funderId, funderIds))
       ),
+      withDbRetry(() =>
+        db
+          .select({
+            funderId: capitalReturnsTable.funderId,
+            amount: capitalReturnsTable.amount,
+          })
+          .from(capitalReturnsTable)
+          .where(inArray(capitalReturnsTable.funderId, funderIds))
+      ),
     ]);
 
     const allocationsMap = new Map<string, number>();
     allocations.forEach((a) => {
       allocationsMap.set(a.funderId, (allocationsMap.get(a.funderId) || 0) + Number(a.amount));
+    });
+
+    const returnsMap = new Map<string, number>();
+    returns.forEach((r) => {
+      returnsMap.set(r.funderId, (returnsMap.get(r.funderId) || 0) + Number(r.amount));
     });
 
     const totalProvidedMap = new Map<string, number>();
@@ -93,13 +108,14 @@ export async function getFundersQuickListAction(): Promise<
     // 4. Build final quick list with On-Demand metrics
     const result: FunderQuickOption[] = funders.map((f) => {
       const allocated = allocationsMap.get(f.funderId) || 0;
+      const returnedToPerson = returnsMap.get(f.funderId) || 0;
       // If transactions recorded, use sum of transactions; otherwise use allocations count
       const recordedProvided = totalProvidedMap.get(f.funderId) || allocated;
       const totalProvided = Math.max(recordedProvided, allocated);
 
-      // Unallocated received is only if capital was explicitly recorded as received without allocation
+      // Unallocated received net of any capital paid back to the capital person
       const standaloneReceived = totalReceivedStandaloneMap.get(f.funderId) || 0;
-      const unallocatedReceived = Math.max(0, standaloneReceived);
+      const unallocatedReceived = Math.max(0, standaloneReceived - returnedToPerson);
 
       return {
         funderId: f.funderId,

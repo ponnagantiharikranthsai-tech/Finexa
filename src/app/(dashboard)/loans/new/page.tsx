@@ -29,6 +29,8 @@ import {
   Plus,
   Calculator,
   UserPlus,
+  Coins,
+  CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -636,6 +638,49 @@ function NewLoanFormContent() {
                   </p>
                 )}
               </div>
+
+                {funderId && (() => {
+                  const selectedFunder = fundersList.find((f) => f.funderId === funderId);
+                  const unallocated = selectedFunder?.unallocatedReceived || 0;
+                  const reqAmount = Number(principal || 0);
+                  const useUnallocated = Math.min(unallocated, Number(fundingAmount || principal || 0));
+
+                  return (
+                    <>
+                      {unallocated > 0 && (
+                        <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 space-y-3 animate-in fade-in duration-200">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Coins className="h-4 w-4 text-primary" />
+                              <span className="font-bold text-xs text-foreground">Available Unallocated Capital</span>
+                            </div>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">
+                              Use Existing Capital
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                            <div className="p-2.5 rounded-lg bg-card/60 border border-border/50">
+                              <span className="text-[10px] uppercase font-bold text-muted-foreground block">Unallocated Available</span>
+                              <span className="font-black text-primary text-sm">₹{unallocated.toLocaleString("en-IN")}</span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-card/60 border border-border/50">
+                              <span className="text-[10px] uppercase font-bold text-muted-foreground block">Loan Funding Required</span>
+                              <span className="font-black text-foreground text-sm">₹{reqAmount.toLocaleString("en-IN")}</span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-card/60 border border-border/50">
+                              <span className="text-[10px] uppercase font-bold text-muted-foreground block">Use Existing Unallocated</span>
+                              <span className="font-black text-emerald-500 text-sm">₹{useUnallocated.toLocaleString("en-IN")}</span>
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Using existing unallocated capital from {selectedFunder?.name}. No new funding advance will be created.
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
 
               {funderId && (
                 <div className="p-4 rounded-xl bg-secondary/30 border border-border/60 space-y-3 animate-in fade-in duration-200">

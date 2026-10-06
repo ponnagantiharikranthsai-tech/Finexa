@@ -312,23 +312,52 @@ export function AllocateCapitalDialog({
               )}
             </div>
 
-            {/* Selected Funder Profile Info */}
+            {/* Selected Funder Profile Info & Unallocated Capital Card */}
             {selectedFunder && (
-              <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 text-xs space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-foreground flex items-center gap-1.5">
-                    <Coins className="h-4 w-4 text-primary" /> {selectedFunder.name}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">{selectedFunder.mobile}</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Funding Model: <strong className="text-foreground">On-Demand</strong> • Total Provided to Date: ₹{selectedFunder.totalProvided.toLocaleString("en-IN")}
-                  {selectedFunder.unallocatedReceived > 0 && (
-                    <span className="text-emerald-400 font-bold ml-1.5">
-                      (₹{selectedFunder.unallocatedReceived.toLocaleString("en-IN")} unallocated received)
+              <div className="space-y-2">
+                <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 text-xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-foreground flex items-center gap-1.5">
+                      <Coins className="h-4 w-4 text-primary" /> {selectedFunder.name}
                     </span>
-                  )}
-                </p>
+                    <span className="text-[10px] text-muted-foreground">{selectedFunder.mobile}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Funding Model: <strong className="text-foreground">On-Demand</strong> • Total Provided: ₹{selectedFunder.totalProvided.toLocaleString("en-IN")}
+                  </p>
+                </div>
+
+                {selectedFunder.unallocatedReceived > 0 && (
+                  <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-emerald-500 flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Existing Unallocated Capital Found
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-emerald-500/20 text-emerald-400">
+                        Pool Capital
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="p-2 rounded-lg bg-card/60 border border-border/40">
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground block">Unallocated Available</span>
+                        <span className="font-black text-primary text-xs">₹{selectedFunder.unallocatedReceived.toLocaleString("en-IN")}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-card/60 border border-border/40">
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground block">Loan Required</span>
+                        <span className="font-black text-foreground text-xs">₹{remainingNeeded.toLocaleString("en-IN")}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-card/60 border border-border/40">
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground block">Use Unallocated</span>
+                        <span className="font-black text-emerald-400 text-xs">
+                          ₹{Math.min(selectedFunder.unallocatedReceived, Number(amount || remainingNeeded || 0)).toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                      Using existing unallocated capital. No new funding advance will be created.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

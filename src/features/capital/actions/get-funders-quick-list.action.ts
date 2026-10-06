@@ -67,6 +67,7 @@ export async function getFundersQuickListAction(): Promise<
             funderId: capitalFundingTransactionsTable.funderId,
             amount: capitalFundingTransactionsTable.amount,
             status: capitalFundingTransactionsTable.status,
+            loanId: capitalFundingTransactionsTable.loanId,
           })
           .from(capitalFundingTransactionsTable)
           .where(inArray(capitalFundingTransactionsTable.funderId, funderIds))
@@ -84,7 +85,7 @@ export async function getFundersQuickListAction(): Promise<
     transactions.forEach((t) => {
       const amt = Number(t.amount);
       totalProvidedMap.set(t.funderId, (totalProvidedMap.get(t.funderId) || 0) + amt);
-      if (t.status === "received") {
+      if ((t.status === "received" || t.status === "unallocated" || !t.loanId) && t.status !== "released") {
         totalReceivedStandaloneMap.set(t.funderId, (totalReceivedStandaloneMap.get(t.funderId) || 0) + amt);
       }
     });

@@ -105,70 +105,146 @@ export async function allocateCapitalAction(
     }
 
     // 5. On-Demand Funding Model:
-    // Check if there is an existing unallocated funding transaction from this funder to reuse
-    const [unallocatedTx] = await db
+    // Query available unallocated funding transactions from this funder to reuse first
+    const unallocatedTxs = await db
       .select()
       .from(capitalFundingTransactionsTable)
       .where(
         and(
           eq(capitalFundingTransactionsTable.funderId, funderId),
           sql`(${capitalFundingTransactionsTable.loanId} IS NULL OR ${capitalFundingTransactionsTable.status} IN ('received', 'unallocated'))`,
-          sql`CAST(${capitalFundingTransactionsTable.amount} AS NUMERIC) = ${numAmount}`
+          sql`${capitalFundingTransactionsTable.status} != 'released'`
         )
       )
-      .orderBy(asc(capitalFundingTransactionsTable.createdAt))
-      .limit(1);
+      .orderBy(asc(capitalFundingTransactionsTable.createdAt));
 
-    let fundingTx: any;
-    if (unallocatedTx) {
-      // REUSE existing unallocated funding transaction — prevents duplicate CF creation
-      const [updated] = await db
-        .update(capitalFundingTransactionsTable)
-        .set({
-          loanId,
-          status: "allocated",
-          fundingDate: allocationDate,
-          notes: notes?.trim() || `Reallocated to ${borrower?.name || "borrower"} (Loan ID: ${loanId}). Previous: ${unallocatedTx.notes || ""}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(capitalFundingTransactionsTable.transactionId, unallocatedTx.transactionId))
-        .returning();
-      fundingTx = updated;
-    } else {
+    let remainingNeeded = numAmount;
+    let primaryAllocationId = "";
+    let primaryTxCode = "";
+
+    // Consume existing unallocated funding records first (prevents creating new advances / double counting)
+    for (const tx of unallocatedTxs) {
+      if (remainingNeeded <= 0) break;
+      const txAmt = Number(tx.amount) || 0;
+      if (txAmt <= 0) continue;
+
+      if (txAmt <= remainingNeeded + 0.001) {
+        // Entire unallocated record is consumed for this loan
+        const [updated] = await db
+          .update(capitalFundingTransactionsTable)
+          .set({
+            loanId,
+            status: "allocated",
+            fundingDate: allocationDate,
+            notes: notes?.trim()
+              ? `${notes.trim()} (Allocated from unallocated, previous: ${tx.notes || ""})`
+              : `Allocated to ${borrower?.name || "borrower"} (Loan ID: ${loanId}). Previous: ${tx.notes || ""}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(capitalFundingTransactionsTable.transactionId, tx.transactionId))
+          .returning();
+
+        const [alloc] = await db
+          .insert(capitalAllocationsTable)
+          .values({
+            funderId,
+            loanId,
+            fundingTransactionId: tx.transactionId,
+            amount: txAmt.toFixed(2),
+            allocationDate,
+            status: "active",
+            notes: notes?.trim() || null,
+          })
+          .returning();
+
+        if (!primaryAllocationId) primaryAllocationId = alloc.allocationId;
+        if (!primaryTxCode) primaryTxCode = updated.transactionCode;
+        remainingNeeded -= txAmt;
+      } else {
+        // Partial consumption of this unallocated record: split into allocated portion and unallocated remainder
+        const allocatedPortion = remainingNeeded;
+        const unallocatedPortion = txAmt - remainingNeeded;
+
+        const [updatedAllocated] = await db
+          .update(capitalFundingTransactionsTable)
+          .set({
+            amount: allocatedPortion.toFixed(2),
+            loanId,
+            status: "allocated",
+            fundingDate: allocationDate,
+            notes: notes?.trim()
+              ? `${notes.trim()} (Partial allocation from ${tx.transactionCode}, previous: ${tx.notes || ""})`
+              : `Allocated ₹${allocatedPortion.toLocaleString("en-IN")} to ${borrower?.name || "borrower"} (Loan ID: ${loanId}). Previous: ${tx.notes || ""}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(capitalFundingTransactionsTable.transactionId, tx.transactionId))
+          .returning();
+
+        const nextCode = await capitalRepository.getNextTransactionCode();
+        await db.insert(capitalFundingTransactionsTable).values({
+          transactionCode: nextCode,
+          funderId,
+          loanId: null,
+          amount: unallocatedPortion.toFixed(2),
+          fundingDate: tx.fundingDate,
+          status: "received",
+          notes: `[Unallocated balance remaining from ${tx.transactionCode}] ${tx.notes || ""}`.trim(),
+        });
+
+        const [alloc] = await db
+          .insert(capitalAllocationsTable)
+          .values({
+            funderId,
+            loanId,
+            fundingTransactionId: tx.transactionId,
+            amount: allocatedPortion.toFixed(2),
+            allocationDate,
+            status: "active",
+            notes: notes?.trim() || null,
+          })
+          .returning();
+
+        if (!primaryAllocationId) primaryAllocationId = alloc.allocationId;
+        if (!primaryTxCode) primaryTxCode = updatedAllocated.transactionCode;
+        remainingNeeded = 0;
+        break;
+      }
+    }
+
+    // 6. If unallocated capital was not enough (or didn't exist), create new funding transaction for remainder
+    if (remainingNeeded > 0) {
       const transactionCode = await capitalRepository.getNextTransactionCode();
-      fundingTx = await capitalRepository.createFundingTransaction({
+      const fundingTx = await capitalRepository.createFundingTransaction({
         transactionCode,
         funderId,
         loanId,
-        amount: numAmount.toFixed(2),
+        amount: remainingNeeded.toFixed(2),
         fundingDate: allocationDate,
         status: fundingStatus,
         notes: notes?.trim() || `On-demand funding for ${borrower?.name || "borrower"} (Loan ID: ${loanId})`,
       });
-    }
 
-    // 6. Insert Capital Allocation Record linked to this Funding Transaction
-    const [allocation] = await db
-      .insert(capitalAllocationsTable)
-      .values({
-        funderId,
-        loanId,
-        fundingTransactionId: fundingTx.transactionId,
-        amount: numAmount.toFixed(2),
-        allocationDate,
-        status: "active",
-        notes: notes?.trim() || null,
-      })
-      .returning();
+      const [alloc] = await db
+        .insert(capitalAllocationsTable)
+        .values({
+          funderId,
+          loanId,
+          fundingTransactionId: fundingTx.transactionId,
+          amount: remainingNeeded.toFixed(2),
+          allocationDate,
+          status: "active",
+          notes: notes?.trim() || null,
+        })
+        .returning();
 
-    if (!allocation) {
-      return { success: false, error: "Failed to record capital allocation in database." };
+      if (!primaryAllocationId) primaryAllocationId = alloc.allocationId;
+      if (!primaryTxCode) primaryTxCode = fundingTx.transactionCode;
     }
 
     // 7. Audit log & Cache Invalidation
     await auditLog("capital_allocated", "loan", loanId, {
-      allocationId: allocation.allocationId,
-      transactionCode: fundingTx.transactionCode,
+      allocationId: primaryAllocationId,
+      transactionCode: primaryTxCode,
       funderId,
       funderName: funder.name,
       borrowerName: borrower?.name || "Unknown Borrower",
@@ -183,9 +259,9 @@ export async function allocateCapitalAction(
     return {
       success: true,
       data: {
-        allocationId: allocation.allocationId,
+        allocationId: primaryAllocationId,
         amount: numAmount,
-        transactionCode: fundingTx.transactionCode,
+        transactionCode: primaryTxCode,
       },
     };
   } catch (err: any) {

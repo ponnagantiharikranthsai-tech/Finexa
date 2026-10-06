@@ -199,12 +199,13 @@ export async function getCapitalDataAction() {
       const loanPrincipal = item.loanPrincipal != null ? Number(item.loanPrincipal) : 0;
       
       const prevInfo = parsePreviousLoanFromNotes(item.txNotes);
+      const isReleased = item.txStatus === "released";
       const isDeletedLoan = !item.loanId && Boolean(prevInfo.borrowerName || prevInfo.loanId);
-      const isUnallocated = !item.loanId || item.txStatus === "received" || item.txStatus === "unallocated";
+      const isUnallocated = !isReleased && (!item.loanId || item.txStatus === "received" || item.txStatus === "unallocated");
 
       let returnedFromBorrower = 0;
-      let currentlyAllocated = isUnallocated ? 0 : origAmount;
-      let status = isUnallocated ? "unallocated" : item.txStatus;
+      let currentlyAllocated = isUnallocated || isReleased ? 0 : origAmount;
+      let status = isReleased ? "released" : isUnallocated ? "unallocated" : item.txStatus;
 
       if (item.loanId && !isUnallocated) {
         const repaid = principalRepaidByLoan[item.loanId] || 0;
@@ -307,10 +308,10 @@ export async function getCapitalDataAction() {
 
       // Calculations according to exact business rules:
       // 1. Original Provided: sum of all funding events
-      const loanFundingEvents = fundingHistory.filter((h) => h.loanId && h.status !== "received" && h.status !== "unallocated");
-      const totalLoanFunding = loanFundingEvents.reduce((sum, h) => sum + h.originalAmount, 0);
+      const totalProvided = fundingHistory.reduce((sum, h) => sum + h.originalAmount, 0);
 
       // 2. Currently Allocated to Borrower = sum of remaining active allocation
+      const loanFundingEvents = fundingHistory.filter((h) => h.loanId && h.status !== "received" && h.status !== "unallocated" && h.status !== "released");
       const currentlyAllocated = loanFundingEvents.reduce((sum, h) => sum + h.currentlyAllocated, 0);
 
       // 3. Principal Returned From Borrower = sum of borrower repaid principal
@@ -318,22 +319,20 @@ export async function getCapitalDataAction() {
 
       // Standalone received / unallocated capital (advances or recovered from deleted loans)
       const unallocatedReceived = fundingHistory
-        .filter((h) => !h.loanId || h.status === "received" || h.status === "unallocated")
+        .filter((h) => (!h.loanId || h.status === "received" || h.status === "unallocated") && h.status !== "released")
         .reduce((sum, h) => sum + h.originalAmount, 0);
 
-      const totalProvided = totalLoanFunding + unallocatedReceived;
-
-      // 4. Capital Still Payable to Chinni = Principal Returned By Borrower - Paid Back to Chinni
-      const capitalPayable = Math.max(0, returnedFromBorrower - paidBackToCapitalPerson);
+      // 4. Capital Still Payable to Person = Total Provided - Currently Allocated - Paid Back to Capital Person
+      const capitalPayable = Math.max(0, totalProvided - currentlyAllocated - paidBackToCapitalPerson);
 
       // Status determination
       let status: any = f.status;
       if (totalProvided > 0) {
         if (currentlyAllocated === 0 && capitalPayable === 0) {
           status = "settled"; // CAPITAL SETTLED
-        } else if (returnedFromBorrower > 0 && capitalPayable > 0) {
+        } else if (paidBackToCapitalPerson > 0 && capitalPayable > 0) {
           status = "partially_returned"; // PARTIALLY RETURNED
-        } else if (returnedFromBorrower > 0 && capitalPayable === 0) {
+        } else if (paidBackToCapitalPerson > 0 && capitalPayable === 0) {
           status = "settled";
         } else {
           status = "active";

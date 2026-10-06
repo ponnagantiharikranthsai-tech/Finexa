@@ -204,14 +204,15 @@ export async function getFunderLedgerAction(
       for (const item of rawTransactions) {
         const origAmount = Number(item.tx.amount) || 0;
         const prevInfo = parsePreviousLoanFromNotes(item.tx.notes);
+        const isReleased = item.tx.status === "released";
         const isDeletedLoan = !item.loan && Boolean(prevInfo.borrowerName || prevInfo.loanId);
-        const isUnallocated = !item.loan || item.tx.status === "received" || item.tx.status === "unallocated";
+        const isUnallocated = !isReleased && (!item.loan || item.tx.status === "received" || item.tx.status === "unallocated");
         const isAdvance = item.tx.status === "received" && !item.loan && !isDeletedLoan;
 
         let txType: "FUNDING" | "ADVANCE" | "RETURN" | "UNALLOCATED";
         if (isAdvance) {
           txType = "ADVANCE";
-        } else if (isUnallocated) {
+        } else if (isUnallocated || isDeletedLoan) {
           txType = "UNALLOCATED";
         } else {
           txType = "FUNDING";
@@ -231,8 +232,8 @@ export async function getFunderLedgerAction(
         const loanPrincipal = item.loan ? Number(item.loan.principal) : 0;
 
         let returnedFromBorrower = 0;
-        let currentlyAllocated = isUnallocated ? 0 : origAmount;
-        let status = isUnallocated ? "unallocated" : item.tx.status;
+        let currentlyAllocated = isUnallocated || isReleased ? 0 : origAmount;
+        let status = isReleased ? "released" : isUnallocated ? "unallocated" : item.tx.status;
 
         if (item.loan && !isUnallocated) {
           const repaid = principalRepaidByLoan[item.loan.loanId] || 0;
@@ -403,30 +404,33 @@ export async function getFunderLedgerAction(
       };
     });
 
-    // Calculate core metrics according to user rules:
+    // Calculate core metrics according to exact user rules:
     const loanFundingEvents = transactions.filter((t) => t.type === "FUNDING" && t.loanId);
-    const totalLoanProvided = loanFundingEvents.reduce((sum, t) => sum + t.originalAmount, 0);
     const currentlyAllocated = loanFundingEvents.reduce((sum, t) => sum + t.currentlyAllocated, 0);
     const returnedFromBorrower = loanFundingEvents.reduce((sum, t) => sum + t.returnedFromBorrower, 0);
 
     const unallocatedReceived = transactions
-      .filter((t) => t.type === "ADVANCE" || t.type === "UNALLOCATED" || t.status === "unallocated" || (t.status === "received" && !t.loanId))
+      .filter((t) => (t.type === "ADVANCE" || t.type === "UNALLOCATED" || t.status === "unallocated" || (t.status === "received" && !t.loanId)) && t.status !== "released")
       .reduce((sum, t) => sum + t.originalAmount, 0);
 
-    const totalProvided = totalLoanProvided + unallocatedReceived;
+    // Total actual principal received from funder (sum of all funding transactions from this funder)
+    const totalProvided = rawTransactions.length > 0
+      ? rawTransactions.reduce((sum, t) => sum + (Number(t.tx.amount) || 0), 0)
+      : rawAllocations.reduce((sum, a) => sum + (Number(a.allocation.amount) || 0), 0);
+
     const paidBackToCapitalPerson = paymentsToCapitalPerson.reduce((sum, p) => sum + p.amount, 0);
 
-    // Capital Still Payable to Chinni = Principal Returned By Borrower - Paid Back to Chinni
-    const capitalPayable = Math.max(0, returnedFromBorrower - paidBackToCapitalPerson);
+    // Capital Still Payable to Person = Total Provided - Currently Allocated - Paid Back to Capital Person
+    const capitalPayable = Math.max(0, totalProvided - currentlyAllocated - paidBackToCapitalPerson);
 
     // Status according to user rules
     let statusDisplay: "CAPITAL SETTLED" | "PARTIALLY RETURNED" | "ACTIVE" = "ACTIVE";
     if (totalProvided > 0) {
       if (currentlyAllocated === 0 && capitalPayable === 0) {
         statusDisplay = "CAPITAL SETTLED";
-      } else if (capitalPayable > 0) {
+      } else if (paidBackToCapitalPerson > 0 && capitalPayable > 0) {
         statusDisplay = "PARTIALLY RETURNED";
-      } else if (returnedFromBorrower > 0 && capitalPayable === 0) {
+      } else if (paidBackToCapitalPerson > 0 && capitalPayable === 0) {
         statusDisplay = "CAPITAL SETTLED";
       } else {
         statusDisplay = "ACTIVE";

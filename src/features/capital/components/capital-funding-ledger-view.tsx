@@ -321,7 +321,7 @@ export function CapitalFundingLedgerView({
 
     if (numAmount > metrics.capitalPayable) {
       toast.error(
-        `Maximum available principal to return: ₹${fmt(metrics.capitalPayable)}. Overpayment is not allowed.`
+        `Maximum payable amount is ₹${fmt(metrics.capitalPayable)}. Overpayment is not allowed.`
       );
       return;
     }
@@ -509,7 +509,7 @@ export function CapitalFundingLedgerView({
               }`}
             >
               <RotateCcw className="h-3.5 w-3.5 mr-1.5 text-white" />
-              <span>Pay Capital Person</span>
+              <span>{metrics.capitalPayable > 0 ? "Pay Capital Person" : "Nothing to Pay"}</span>
             </Button>
           </div>
         </div>
@@ -554,12 +554,12 @@ export function CapitalFundingLedgerView({
               }`}
             >
               <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-              <span>Pay Capital Person</span>
+              <span>{metrics.capitalPayable > 0 ? "Pay Capital Person" : "Nothing to Pay"}</span>
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* 1. Original Provided */}
           <div className="p-4 rounded-2xl bg-card/60 border border-border/60 flex flex-col justify-between">
             <div className="flex items-center justify-between text-muted-foreground">
@@ -584,14 +584,28 @@ export function CapitalFundingLedgerView({
               <p className="text-xl md:text-2xl font-black text-emerald-400 tracking-tight">
                 ₹{fmt(metrics.currentlyAllocated ?? metrics.totalAllocated)}
               </p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">With borrower in loans</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Active with borrowers</p>
             </div>
           </div>
 
-          {/* 3. Returned From Borrower */}
+          {/* 3. Unallocated Capital */}
+          <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/25 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-blue-400">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Unallocated</span>
+              <Clock className="h-3.5 w-3.5" />
+            </div>
+            <div className="mt-2">
+              <p className="text-xl md:text-2xl font-black text-blue-400 tracking-tight">
+                ₹{fmt(metrics.unallocatedReceived)}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Available to deploy</p>
+            </div>
+          </div>
+
+          {/* 4. Returned From Borrower */}
           <div className="p-4 rounded-2xl bg-card/60 border border-blue-500/20 flex flex-col justify-between">
             <div className="flex items-center justify-between text-blue-400">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Returned From Borrower</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider">Returned (Borrower)</span>
               <BadgeCheck className="h-3.5 w-3.5" />
             </div>
             <div className="mt-2">
@@ -602,7 +616,7 @@ export function CapitalFundingLedgerView({
             </div>
           </div>
 
-          {/* 4. Paid Back to Capital Person */}
+          {/* 5. Paid Back to Capital Person */}
           <div className="p-4 rounded-2xl bg-card/60 border border-purple-500/20 flex flex-col justify-between">
             <div className="flex items-center justify-between text-purple-400">
               <span className="text-[10px] font-bold uppercase tracking-wider">Paid Back to Person</span>
@@ -616,7 +630,7 @@ export function CapitalFundingLedgerView({
             </div>
           </div>
 
-          {/* 5. Payable to Capital Person */}
+          {/* 6. Payable to Capital Person */}
           <div className="p-4 rounded-2xl bg-primary/10 border border-primary/30 flex flex-col justify-between relative overflow-hidden">
             <div className="flex items-center justify-between text-primary">
               <span className="text-[10px] font-bold uppercase tracking-wider">Payable to Person</span>
@@ -1008,15 +1022,22 @@ export function CapitalFundingLedgerView({
             <div className="py-12 text-center text-xs text-muted-foreground bg-muted/20 rounded-xl border border-border/30 space-y-2">
               <RotateCcw className="h-6 w-6 mx-auto text-muted-foreground opacity-50" />
               <p className="font-semibold text-foreground text-sm">No payments recorded yet</p>
-              <p>When you return borrower principal back to {funder.name}, it will be listed here.</p>
+              <p>When you return capital principal back to {funder.name}, it will be listed here.</p>
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-border/40">
+              <div className="p-3 bg-accent/10 border-b border-border/30 flex items-center justify-between">
+                <span className="text-xs text-muted-foreground font-semibold">Payment History Records ({paymentsToCapitalPerson.length})</span>
+                <span className="px-3 py-1 rounded-full text-xs font-black bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                  Total Paid Back: ₹{fmt(metrics.paidBackToCapitalPerson)}
+                </span>
+              </div>
               <table className="w-full text-left text-xs">
                 <thead className="bg-accent/20 border-b border-border/30 text-[10px] font-bold uppercase text-muted-foreground">
                   <tr>
                     <th className="py-3 px-4 w-32">Date</th>
                     <th className="py-3 px-4 w-36">Payment ID</th>
+                    <th className="py-3 px-4 w-36">Type</th>
                     <th className="py-3 px-4 text-right w-36">Amount</th>
                     <th className="py-3 px-4">Notes / Remarks</th>
                   </tr>
@@ -1026,6 +1047,11 @@ export function CapitalFundingLedgerView({
                     <tr key={pay.returnId} className="hover:bg-accent/10">
                       <td className="py-3 px-4 font-medium text-foreground">{formatDate(pay.returnDate)}</td>
                       <td className="py-3 px-4 font-mono font-bold text-primary">{pay.paymentCode}</td>
+                      <td className="py-3 px-4 font-bold text-foreground">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                          Principal Return
+                        </span>
+                      </td>
                       <td className="py-3 px-4 text-right font-black text-emerald-400 text-sm">
                         ₹{fmt(pay.amount)}
                       </td>
@@ -1329,18 +1355,18 @@ export function CapitalFundingLedgerView({
               <RotateCcw className="h-5 w-5 text-primary" /> Pay Capital Person
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Return borrower-repaid principal to {funder.name}. Principal only — no interest.
+              Return capital principal to {funder.name}. Principal only — no interest.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmitPayCapitalPerson} className="space-y-4 pt-2">
             <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/20 space-y-1">
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Maximum available principal to return
+                Maximum Principal Available to Pay
               </span>
               <p className="text-2xl font-black text-primary">₹{fmt(metrics.capitalPayable)}</p>
               <p className="text-[10px] text-muted-foreground">
-                Calculated from actual borrower principal payments received. Overpayment is prevented.
+                Principal only. No interest, rent, or profit. Overpayment is prevented.
               </p>
             </div>
 
@@ -1357,7 +1383,7 @@ export function CapitalFundingLedgerView({
 
             <div>
               <label className="text-[11px] font-bold uppercase text-muted-foreground block mb-1">
-                Amount to Return (₹) *
+                Payment Amount (₹) *
               </label>
               <Input
                 type="number"
@@ -1372,7 +1398,7 @@ export function CapitalFundingLedgerView({
               />
               {Number(payAmount) > metrics.capitalPayable && (
                 <p className="text-[11px] text-destructive font-semibold mt-1">
-                  Amount exceeds maximum available principal of ₹{fmt(metrics.capitalPayable)}.
+                  Maximum payable amount is ₹{fmt(metrics.capitalPayable)}.
                 </p>
               )}
             </div>

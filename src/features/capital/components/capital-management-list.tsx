@@ -333,7 +333,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
     }
 
     if (numAmount > selectedFunder.capitalPayable) {
-      toast.error(`Maximum available principal to return: ₹${fmt(selectedFunder.capitalPayable)}. Overpayment is not allowed.`);
+      toast.error(`Maximum payable amount is ₹${fmt(selectedFunder.capitalPayable)}. Overpayment is not allowed.`);
       return;
     }
 
@@ -362,7 +362,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
   return (
     <div className="space-y-6">
       {/* ── TOP STATS CARDS GRID (CAPITAL PRINCIPAL TRACKING) ────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
         {/* Total Capital Provided */}
         <div className="fx-glass-card rounded-[22px] p-4 md:p-5 border border-primary/20 bg-card/60 backdrop-blur-xl flex flex-col justify-between space-y-2 fx-3d-hover">
           <div className="flex items-center justify-between">
@@ -392,6 +392,22 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
               ₹{fmt(stats.currentlyAllocated)}
             </p>
             <p className="text-[10px] text-muted-foreground mt-1">Active with borrowers</p>
+          </div>
+        </div>
+
+        {/* Unallocated Capital */}
+        <div className="fx-glass-card rounded-[22px] p-4 md:p-5 border border-blue-500/20 bg-blue-500/5 backdrop-blur-xl flex flex-col justify-between space-y-2 fx-3d-hover">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-blue-400 uppercase tracking-wider">Unallocated</span>
+            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400">
+              <Clock className="h-4 w-4" />
+            </div>
+          </div>
+          <div>
+            <p className="text-xl md:text-2xl font-black text-blue-400 tracking-tight">
+              ₹{fmt(stats.unallocatedReceived)}
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-1">Available to deploy</p>
           </div>
         </div>
 
@@ -428,7 +444,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
         </div>
 
         {/* Capital Still Payable */}
-        <div className="fx-glass-card rounded-[22px] p-4 md:p-5 border border-primary/30 bg-primary/5 backdrop-blur-xl flex flex-col justify-between space-y-2 fx-3d-hover col-span-2 md:col-span-1">
+        <div className="fx-glass-card rounded-[22px] p-4 md:p-5 border border-primary/30 bg-primary/5 backdrop-blur-xl flex flex-col justify-between space-y-2 fx-3d-hover">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-black text-primary uppercase tracking-wider">Capital Payable</span>
             <div className="p-2 rounded-xl bg-primary/20 text-primary">
@@ -580,7 +596,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                     </div>
 
                     {/* Metrics Grid */}
-                    <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-accent/20 dark:bg-secondary/20 text-xs">
+                    <div className="grid grid-cols-3 gap-2 p-3 rounded-xl bg-accent/20 dark:bg-secondary/20 text-xs">
                       <div>
                         <span className="text-[9px] uppercase font-bold text-muted-foreground">Provided</span>
                         <p className="font-extrabold text-foreground text-sm mt-0.5">₹{fmt(funder.totalProvided)}</p>
@@ -590,6 +606,10 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                         <p className="font-extrabold text-emerald-400 text-sm mt-0.5">₹{fmt(funder.currentlyAllocated)}</p>
                       </div>
                       <div>
+                        <span className="text-[9px] uppercase font-bold text-blue-400">Unallocated</span>
+                        <p className="font-extrabold text-blue-400 text-sm mt-0.5">₹{fmt(funder.unallocatedReceived)}</p>
+                      </div>
+                      <div>
                         <span className="text-[9px] uppercase font-bold text-muted-foreground">Returned (Borrower)</span>
                         <p className="font-extrabold text-blue-400 text-sm mt-0.5">₹{fmt(funder.returnedFromBorrower)}</p>
                       </div>
@@ -597,19 +617,27 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                         <span className="text-[9px] uppercase font-bold text-muted-foreground">Paid Back</span>
                         <p className="font-extrabold text-purple-400 text-sm mt-0.5">₹{fmt(funder.paidBackToCapitalPerson)}</p>
                       </div>
-                      <div className="col-span-2 bg-primary/10 rounded-lg p-2 border border-primary/20 flex items-center justify-between">
+                      <div>
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground">Loans</span>
+                        <p className="font-extrabold text-foreground text-sm mt-0.5">{(funder.loansFunded || []).length}</p>
+                      </div>
+                      <div className="col-span-3 bg-primary/10 rounded-lg p-2 border border-primary/20 flex items-center justify-between">
                         <div>
                           <span className="text-[9px] uppercase font-black text-primary block">Payable to Person</span>
                           <span className="font-black text-primary text-base">₹{fmt(funder.capitalPayable)}</span>
                         </div>
-                        {funder.capitalPayable > 0 && (
+                        {funder.capitalPayable > 0 ? (
                           <Button
                             size="sm"
                             onClick={(e) => handleReturnOpen(funder, e)}
                             className="h-7 px-2.5 rounded-lg text-[11px] font-black fx-brand-gradient text-white shadow-sm"
                           >
-                            <RotateCcw className="h-3 w-3 mr-1" /> Pay Person
+                            <RotateCcw className="h-3 w-3 mr-1" /> Pay Capital Person
                           </Button>
+                        ) : (
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase px-2 py-1 rounded bg-muted/40">
+                            Nothing to Pay
+                          </span>
                         )}
                       </div>
                     </div>
@@ -1034,18 +1062,18 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
               <RotateCcw className="h-5 w-5 text-primary" /> Pay Capital Person
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Return borrower-repaid principal to {selectedFunder?.name}. Principal only — no interest.
+              Return capital principal to {selectedFunder?.name}. Principal only — no interest.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleReturnSubmit} className="space-y-4">
             <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/20 space-y-1">
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Maximum available principal to return
+                Maximum Principal Available to Pay
               </span>
               <p className="text-2xl font-black text-primary">₹{fmt(selectedFunder?.capitalPayable)}</p>
               <p className="text-[10px] text-muted-foreground">
-                Calculated from actual borrower principal payments received. Overpayment is prevented.
+                Principal only. No interest, rent, or profit. Overpayment is prevented.
               </p>
             </div>
 
@@ -1059,7 +1087,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Amount to Return (₹)*</Label>
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Payment Amount (₹)*</Label>
               <Input
                 type="number"
                 placeholder={`Max: ${selectedFunder?.capitalPayable || 0}`}
@@ -1073,7 +1101,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
               />
               {Number(returnAmount) > (selectedFunder?.capitalPayable || 0) && (
                 <p className="text-[11px] text-destructive font-semibold">
-                  Amount exceeds maximum available principal of ₹{fmt(selectedFunder?.capitalPayable)}.
+                  Maximum payable amount is ₹{fmt(selectedFunder?.capitalPayable)}.
                 </p>
               )}
             </div>

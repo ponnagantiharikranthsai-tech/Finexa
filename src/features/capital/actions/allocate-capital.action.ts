@@ -9,7 +9,7 @@ import {
   capitalAllocationsTable,
   capitalFundingTransactionsTable,
 } from "@/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql, asc } from "drizzle-orm";
 import { auditLog } from "@/lib/audit-log";
 import { invalidateLoanManagementCache } from "@/features/loans/actions/get-loan-management-data.action";
 import { capitalRepository } from "../repository/capital.repository";
@@ -105,17 +105,47 @@ export async function allocateCapitalAction(
     }
 
     // 5. On-Demand Funding Model:
-    // Create an individual Capital Funding Transaction record linking Funder to this funding event
-    const transactionCode = await capitalRepository.getNextTransactionCode();
-    const fundingTx = await capitalRepository.createFundingTransaction({
-      transactionCode,
-      funderId,
-      loanId,
-      amount: numAmount.toFixed(2),
-      fundingDate: allocationDate,
-      status: fundingStatus,
-      notes: notes?.trim() || `On-demand funding for ${borrower?.name || "borrower"} (Loan ID: ${loanId})`,
-    });
+    // Check if there is an existing unallocated funding transaction from this funder to reuse
+    const [unallocatedTx] = await db
+      .select()
+      .from(capitalFundingTransactionsTable)
+      .where(
+        and(
+          eq(capitalFundingTransactionsTable.funderId, funderId),
+          sql`(${capitalFundingTransactionsTable.loanId} IS NULL OR ${capitalFundingTransactionsTable.status} IN ('received', 'unallocated'))`,
+          sql`CAST(${capitalFundingTransactionsTable.amount} AS NUMERIC) = ${numAmount}`
+        )
+      )
+      .orderBy(asc(capitalFundingTransactionsTable.createdAt))
+      .limit(1);
+
+    let fundingTx: any;
+    if (unallocatedTx) {
+      // REUSE existing unallocated funding transaction — prevents duplicate CF creation
+      const [updated] = await db
+        .update(capitalFundingTransactionsTable)
+        .set({
+          loanId,
+          status: "allocated",
+          fundingDate: allocationDate,
+          notes: notes?.trim() || `Reallocated to ${borrower?.name || "borrower"} (Loan ID: ${loanId}). Previous: ${unallocatedTx.notes || ""}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(capitalFundingTransactionsTable.transactionId, unallocatedTx.transactionId))
+        .returning();
+      fundingTx = updated;
+    } else {
+      const transactionCode = await capitalRepository.getNextTransactionCode();
+      fundingTx = await capitalRepository.createFundingTransaction({
+        transactionCode,
+        funderId,
+        loanId,
+        amount: numAmount.toFixed(2),
+        fundingDate: allocationDate,
+        status: fundingStatus,
+        notes: notes?.trim() || `On-demand funding for ${borrower?.name || "borrower"} (Loan ID: ${loanId})`,
+      });
+    }
 
     // 6. Insert Capital Allocation Record linked to this Funding Transaction
     const [allocation] = await db

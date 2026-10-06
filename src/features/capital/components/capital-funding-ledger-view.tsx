@@ -805,9 +805,11 @@ export function CapitalFundingLedgerView({
                         <td className="py-3 px-4">
                           {tx.borrowerName ? (
                             <div className="space-y-0.5">
-                              <p className="font-bold text-foreground text-xs">{tx.borrowerName}</p>
+                              <p className="font-bold text-foreground text-xs">
+                                {tx.loanId ? tx.borrowerName : `Previously: ${tx.borrowerName}`}
+                              </p>
                               <p className="text-[10px] text-muted-foreground font-mono">
-                                {tx.loanCode || (tx.loanId ? `LN-${tx.loanId.slice(0, 6).toUpperCase()}` : "—")}
+                                {tx.loanCode || (tx.loanId ? `LN-${tx.loanId.slice(0, 6).toUpperCase()}` : "Loan Deleted")}
                                 {tx.loanPrincipal ? ` • ₹${fmt(tx.loanPrincipal)} Principal` : ""}
                               </p>
                             </div>
@@ -818,7 +820,7 @@ export function CapitalFundingLedgerView({
                           )}
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap">
-                          {tx.type === "FUNDING" ? (
+                          {tx.type === "FUNDING" && tx.loanId ? (
                             tx.currentlyAllocated === 0 && (tx.originalAmount || tx.amount) > 0 ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                                 <CheckCircle2 className="h-2.5 w-2.5" /> Fully Returned
@@ -832,7 +834,7 @@ export function CapitalFundingLedgerView({
                                 <CheckCircle2 className="h-2.5 w-2.5" /> Allocated
                               </span>
                             )
-                          ) : tx.status === "received" ? (
+                          ) : (tx.status === "received" || tx.status === "unallocated" || tx.type === "UNALLOCATED" || !tx.loanId) ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20">
                               <Clock className="h-2.5 w-2.5" /> Unallocated
                             </span>
@@ -852,7 +854,7 @@ export function CapitalFundingLedgerView({
                             >
                               <Eye className="h-3 w-3 mr-1" /> View
                             </Button>
-                            {tx.loanId && (
+                            {tx.loanId ? (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -863,7 +865,11 @@ export function CapitalFundingLedgerView({
                                 <span>View Loan</span>
                                 <ExternalLink className="h-2.5 w-2.5 ml-1" />
                               </Button>
-                            )}
+                            ) : tx.borrowerName ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold text-muted-foreground bg-muted/30 border border-border/40">
+                                Previously Linked Loan Deleted
+                              </span>
+                            ) : null}
                           </div>
                         </td>
                       </tr>
@@ -1117,7 +1123,7 @@ export function CapitalFundingLedgerView({
                 <p className="text-xs text-muted-foreground">{formatDate(selectedTx.fundingDate)}</p>
               </div>
 
-              {selectedTx.type === "FUNDING" && (
+              {selectedTx.type === "FUNDING" && selectedTx.loanId ? (
                 <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-accent/15 text-center text-xs">
                   <div>
                     <span className="text-[10px] uppercase font-bold text-muted-foreground">Currently Allocated</span>
@@ -1128,6 +1134,12 @@ export function CapitalFundingLedgerView({
                     <p className="font-extrabold text-blue-400 text-base mt-0.5">₹{fmt(selectedTx.returnedFromBorrower)}</p>
                   </div>
                 </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-center text-xs space-y-0.5">
+                  <span className="text-[10px] uppercase font-bold text-blue-400">Available Unallocated Capital</span>
+                  <p className="font-extrabold text-blue-400 text-lg">₹{fmt(selectedTx.originalAmount || selectedTx.amount)}</p>
+                  <p className="text-[10px] text-muted-foreground">Available to allocate to future loans</p>
+                </div>
               )}
 
               <div className="divide-y divide-border/30 border border-border/30 rounded-xl overflow-hidden text-xs">
@@ -1137,13 +1149,23 @@ export function CapitalFundingLedgerView({
                 </div>
                 <div className="p-3 flex justify-between">
                   <span className="text-muted-foreground">Transaction Type:</span>
-                  <span className="font-bold text-foreground">{selectedTx.type}</span>
+                  <span className="font-bold text-foreground">
+                    {!selectedTx.loanId ? "UNALLOCATED" : selectedTx.type}
+                  </span>
+                </div>
+                <div className="p-3 flex justify-between">
+                  <span className="text-muted-foreground">Current Status:</span>
+                  <span className="font-bold uppercase text-blue-400">
+                    {!selectedTx.loanId ? "UNALLOCATED" : selectedTx.status}
+                  </span>
                 </div>
 
                 {selectedTx.borrowerName && (
                   <>
                     <div className="p-3 flex justify-between">
-                      <span className="text-muted-foreground">Borrower Name:</span>
+                      <span className="text-muted-foreground">
+                        {selectedTx.loanId ? "Borrower Name:" : "Previously Allocated To:"}
+                      </span>
                       <span className="font-bold text-foreground">{selectedTx.borrowerName}</span>
                     </div>
                     {selectedTx.borrowerMobile && (
@@ -1153,9 +1175,15 @@ export function CapitalFundingLedgerView({
                       </div>
                     )}
                     <div className="p-3 flex justify-between">
-                      <span className="text-muted-foreground">Linked Loan:</span>
+                      <span className="text-muted-foreground">Loan Reference:</span>
                       <span className="font-mono font-bold text-primary">
-                        {selectedTx.loanCode || selectedTx.loanId?.slice(0, 8)}
+                        {selectedTx.loanCode || (selectedTx.loanId ? `LN-${selectedTx.loanId.slice(0, 6).toUpperCase()}` : "Loan Deleted")}
+                      </span>
+                    </div>
+                    <div className="p-3 flex justify-between">
+                      <span className="text-muted-foreground">Loan Status:</span>
+                      <span className={`font-bold ${selectedTx.loanId ? "text-emerald-400" : "text-amber-400"}`}>
+                        {selectedTx.loanId ? (selectedTx.loanStatus || "Active") : "Deleted"}
                       </span>
                     </div>
                     {selectedTx.loanPrincipal && (
@@ -1178,7 +1206,7 @@ export function CapitalFundingLedgerView({
               </div>
 
               <DialogFooter className="pt-2 flex flex-col sm:flex-row gap-2">
-                {selectedTx.loanId && (
+                {selectedTx.loanId ? (
                   <Button
                     onClick={() => {
                       setDetailsOpen(false);
@@ -1189,7 +1217,11 @@ export function CapitalFundingLedgerView({
                     <span>View Loan</span>
                     <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
                   </Button>
-                )}
+                ) : selectedTx.borrowerName ? (
+                  <div className="w-full sm:flex-1 p-2 rounded-lg bg-muted/40 border border-border/40 text-center text-[11px] font-semibold text-muted-foreground">
+                    Previously Linked Loan Deleted
+                  </div>
+                ) : null}
                 <Button
                   variant="outline"
                   onClick={() => setDetailsOpen(false)}

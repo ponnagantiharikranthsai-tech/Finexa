@@ -1,5 +1,5 @@
 import { db } from "@/db/client";
-import { loansTable, borrowersTable, paymentsTable, loanApplicationsTable, notificationsLogTable, auditLogTable, penaltyLedgerTable, type Loan, type InsertLoan, type LoanStatus, type Borrower, type PenaltyLedger } from "@/db/schema";
+import { loansTable, borrowersTable, paymentsTable, loanApplicationsTable, notificationsLogTable, auditLogTable, penaltyLedgerTable, capitalFundingTransactionsTable, capitalAllocationsTable, type Loan, type InsertLoan, type LoanStatus, type Borrower, type PenaltyLedger } from "@/db/schema";
 import { eq, or, like, sql, and, inArray, asc, desc } from "drizzle-orm";
 import { PaginatedResult } from "@/types/api.types";
 import { calculatePeriods, calculateMonthlyInterest, calculateOutstandingBalance } from "@/domain/interest-calculator";
@@ -440,6 +440,75 @@ export class LoanRepository {
 
   async deleteById(id: string): Promise<void> {
     await db.transaction(async (tx) => {
+      // 0. Handle linked Capital Funding Transactions & Allocations before deleting the loan
+      const [loan] = await tx
+        .select({
+          loanId: loansTable.loanId,
+          principal: loansTable.principal,
+          borrowerId: loansTable.borrowerId,
+        })
+        .from(loansTable)
+        .where(eq(loansTable.loanId, id))
+        .limit(1);
+
+      let borrowerName = "Borrower";
+      if (loan?.borrowerId) {
+        const [b] = await tx
+          .select({ name: borrowersTable.name })
+          .from(borrowersTable)
+          .where(eq(borrowersTable.borrowerId, loan.borrowerId))
+          .limit(1);
+        if (b?.name) borrowerName = b.name;
+      }
+
+      // Check principal repayments already collected on this loan
+      const principalPayments = await tx
+        .select({ amount: paymentsTable.amount })
+        .from(paymentsTable)
+        .where(
+          and(
+            eq(paymentsTable.loanId, id),
+            eq(paymentsTable.paymentType, "principal")
+          )
+        );
+      const totalPrincipalRepaid = principalPayments.reduce(
+        (sum, p) => sum + Number(p.amount),
+        0
+      );
+
+      // Find all linked capital funding transactions
+      const linkedTxs = await tx
+        .select()
+        .from(capitalFundingTransactionsTable)
+        .where(eq(capitalFundingTransactionsTable.loanId, id));
+
+      for (const fundingTx of linkedTxs) {
+        const originalAmount = Number(fundingTx.amount);
+        const lPrincipal = loan ? Number(loan.principal) : originalAmount;
+        const repayRatio = lPrincipal > 0 ? Math.min(1.0, totalPrincipalRepaid / lPrincipal) : 0;
+        const returnedByBorrower = Math.min(originalAmount, Math.round(originalAmount * repayRatio));
+
+        // Reclassify funding as unallocated (status: 'received')
+        // Unlink deleted loan (loanId: null)
+        // Preserve history in notes
+        const historyNote = `[Unallocated - Loan Deleted] Previously allocated to ${borrowerName} (Loan ID: ${id} - Deleted). Original: ${fundingTx.notes || ""}`;
+
+        await tx
+          .update(capitalFundingTransactionsTable)
+          .set({
+            loanId: null,
+            status: "received",
+            notes: historyNote,
+            updatedAt: new Date(),
+          })
+          .where(eq(capitalFundingTransactionsTable.transactionId, fundingTx.transactionId));
+      }
+
+      // Remove capital allocations linked to this loan
+      await tx
+        .delete(capitalAllocationsTable)
+        .where(eq(capitalAllocationsTable.loanId, id));
+
       // 1. Delete payments associated with this loan
       await tx
         .delete(paymentsTable)

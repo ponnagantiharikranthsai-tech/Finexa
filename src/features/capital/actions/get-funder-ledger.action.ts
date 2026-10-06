@@ -24,7 +24,7 @@ export interface LedgerTransactionItem {
   returnedFromBorrower: number;
   fundingDate: string;
   status: "allocated" | "partially_returned" | "returned" | "received" | "pending" | "released" | string;
-  type: "FUNDING" | "ADVANCE" | "RETURN";
+  type: "FUNDING" | "ADVANCE" | "RETURN" | "UNALLOCATED";
   notes: string | null;
   loanId: string | null;
   loanCode: string | null;
@@ -177,14 +177,45 @@ export async function getFunderLedgerAction(
       principalRepaidByLoan[p.loanId] = (principalRepaidByLoan[p.loanId] || 0) + Number(p.amount);
     });
 
+    // Helper to extract previously allocated loan info from notes if loan was deleted
+    function parsePreviousLoanFromNotes(notes: string | null) {
+      if (!notes) return { borrowerName: null, loanId: null };
+      const prevMatch = notes.match(/Previously allocated to\s+([^(\r\n]+?)(?:\s*\(Loan ID:\s*([a-f0-9\-]+)|\s*-\s*Deleted|\s*$)/i);
+      if (prevMatch) {
+        return {
+          borrowerName: prevMatch[1]?.trim() || null,
+          loanId: prevMatch[2]?.trim() || null,
+        };
+      }
+      const onDemandMatch = notes.match(/On-demand funding for\s+([^(\r\n]+?)(?:\s*\(Loan ID:\s*([a-f0-9\-]+)|\s*$)/i);
+      if (onDemandMatch) {
+        return {
+          borrowerName: onDemandMatch[1]?.trim() || null,
+          loanId: onDemandMatch[2]?.trim() || null,
+        };
+      }
+      return { borrowerName: null, loanId: null };
+    }
+
     // Build ledger items
     const transactions: LedgerTransactionItem[] = [];
 
     if (rawTransactions.length > 0) {
       for (const item of rawTransactions) {
         const origAmount = Number(item.tx.amount) || 0;
-        const isAdvance = item.tx.status === "received" && !item.loan;
-        const txType = isAdvance ? "ADVANCE" : "FUNDING";
+        const prevInfo = parsePreviousLoanFromNotes(item.tx.notes);
+        const isDeletedLoan = !item.loan && Boolean(prevInfo.borrowerName || prevInfo.loanId);
+        const isUnallocated = !item.loan || item.tx.status === "received" || item.tx.status === "unallocated";
+        const isAdvance = item.tx.status === "received" && !item.loan && !isDeletedLoan;
+
+        let txType: "FUNDING" | "ADVANCE" | "RETURN" | "UNALLOCATED";
+        if (isAdvance) {
+          txType = "ADVANCE";
+        } else if (isUnallocated) {
+          txType = "UNALLOCATED";
+        } else {
+          txType = "FUNDING";
+        }
 
         const hasReceipt = Boolean(
           item.tx.notes &&
@@ -194,14 +225,16 @@ export async function getFunderLedgerAction(
               item.tx.notes.toLowerCase().includes("utr"))
         );
 
-        const loanCode = item.loan ? `LN-${item.loan.loanId.slice(0, 6).toUpperCase()}` : null;
+        const loanCode = item.loan
+          ? `LN-${item.loan.loanId.slice(0, 6).toUpperCase()}`
+          : (isDeletedLoan && prevInfo.loanId ? `LN-${prevInfo.loanId.slice(0, 6).toUpperCase()} (Deleted)` : null);
         const loanPrincipal = item.loan ? Number(item.loan.principal) : 0;
 
         let returnedFromBorrower = 0;
-        let currentlyAllocated = origAmount;
-        let status = item.tx.status;
+        let currentlyAllocated = isUnallocated ? 0 : origAmount;
+        let status = isUnallocated ? "unallocated" : item.tx.status;
 
-        if (item.loan && !isAdvance) {
+        if (item.loan && !isUnallocated) {
           const repaid = principalRepaidByLoan[item.loan.loanId] || 0;
           const isClosed = item.loan.status === "closed";
           const repayRatio = isClosed ? 1.0 : (loanPrincipal > 0 ? Math.min(1.0, repaid / loanPrincipal) : 0);
@@ -231,10 +264,10 @@ export async function getFunderLedgerAction(
           loanId:               item.loan ? item.loan.loanId : null,
           loanCode,
           borrowerId:           item.borrower ? item.borrower.borrowerId : null,
-          borrowerName:         item.borrower ? item.borrower.name : null,
+          borrowerName:         item.borrower ? item.borrower.name : (isDeletedLoan ? prevInfo.borrowerName : null),
           borrowerMobile:       item.borrower ? item.borrower.mobile : null,
           loanPrincipal:        item.loan ? Number(item.loan.principal) : null,
-          loanStatus:           item.loan ? item.loan.status : null,
+          loanStatus:           item.loan ? item.loan.status : (isDeletedLoan ? "Deleted" : null),
           loanDueDate:          item.loan ? item.loan.dueDate : null,
           loanDateGiven:        item.loan ? item.loan.dateGiven : null,
           createdAt:            item.tx.createdAt.toISOString(),
@@ -377,7 +410,7 @@ export async function getFunderLedgerAction(
     const returnedFromBorrower = loanFundingEvents.reduce((sum, t) => sum + t.returnedFromBorrower, 0);
 
     const unallocatedReceived = transactions
-      .filter((t) => t.type === "ADVANCE" || (t.status === "received" && !t.loanId))
+      .filter((t) => t.type === "ADVANCE" || t.type === "UNALLOCATED" || t.status === "unallocated" || (t.status === "received" && !t.loanId))
       .reduce((sum, t) => sum + t.originalAmount, 0);
 
     const totalProvided = totalLoanProvided + unallocatedReceived;

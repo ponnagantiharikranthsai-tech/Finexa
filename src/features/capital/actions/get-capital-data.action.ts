@@ -172,18 +172,41 @@ export async function getCapitalDataAction() {
       (returnsByFunder[r.funderId] ??= []).push(r);
     });
 
+    // Helper to extract previously allocated loan info from notes if loan was deleted
+    function parsePreviousLoanFromNotes(notes: string | null) {
+      if (!notes) return { borrowerName: null, loanId: null };
+      const prevMatch = notes.match(/Previously allocated to\s+([^(\r\n]+?)(?:\s*\(Loan ID:\s*([a-f0-9\-]+)|\s*-\s*Deleted|\s*$)/i);
+      if (prevMatch) {
+        return {
+          borrowerName: prevMatch[1]?.trim() || null,
+          loanId: prevMatch[2]?.trim() || null,
+        };
+      }
+      const onDemandMatch = notes.match(/On-demand funding for\s+([^(\r\n]+?)(?:\s*\(Loan ID:\s*([a-f0-9\-]+)|\s*$)/i);
+      if (onDemandMatch) {
+        return {
+          borrowerName: onDemandMatch[1]?.trim() || null,
+          loanId: onDemandMatch[2]?.trim() || null,
+        };
+      }
+      return { borrowerName: null, loanId: null };
+    }
+
     // Group transactions by funder with principal repayment tracking
     const transactionsByFunder: Record<string, FundingTransactionHistoryItem[]> = {};
     rawTransactions.forEach((item) => {
       const origAmount = Number(item.txAmount);
       const loanPrincipal = item.loanPrincipal != null ? Number(item.loanPrincipal) : 0;
-      const isAdvance = item.txStatus === "received" && !item.loanId;
+      
+      const prevInfo = parsePreviousLoanFromNotes(item.txNotes);
+      const isDeletedLoan = !item.loanId && Boolean(prevInfo.borrowerName || prevInfo.loanId);
+      const isUnallocated = !item.loanId || item.txStatus === "received" || item.txStatus === "unallocated";
 
       let returnedFromBorrower = 0;
-      let currentlyAllocated = origAmount;
-      let status = item.txStatus;
+      let currentlyAllocated = isUnallocated ? 0 : origAmount;
+      let status = isUnallocated ? "unallocated" : item.txStatus;
 
-      if (item.loanId && !isAdvance) {
+      if (item.loanId && !isUnallocated) {
         const repaid = principalRepaidByLoan[item.loanId] || 0;
         const isClosed = item.loanStatus === "closed";
         const repayRatio = isClosed ? 1.0 : (loanPrincipal > 0 ? Math.min(1.0, repaid / loanPrincipal) : 0);
@@ -211,10 +234,10 @@ export async function getCapitalDataAction() {
         notes:                item.txNotes,
         loanId:               item.loanId ?? null,
         borrowerId:           item.borrowerId ?? null,
-        borrowerName:         item.borrowerName ?? null,
+        borrowerName:         item.borrowerName ?? (isDeletedLoan ? prevInfo.borrowerName : null),
         borrowerMobile:       item.borrowerMobile ?? null,
         loanPrincipal:        item.loanPrincipal != null ? Number(item.loanPrincipal) : null,
-        loanStatus:           item.loanStatus ?? null,
+        loanStatus:           item.loanStatus ?? (isDeletedLoan ? "Deleted" : null),
       });
     });
 
@@ -284,7 +307,7 @@ export async function getCapitalDataAction() {
 
       // Calculations according to exact business rules:
       // 1. Original Provided: sum of all funding events
-      const loanFundingEvents = fundingHistory.filter((h) => h.loanId && h.status !== "received");
+      const loanFundingEvents = fundingHistory.filter((h) => h.loanId && h.status !== "received" && h.status !== "unallocated");
       const totalLoanFunding = loanFundingEvents.reduce((sum, h) => sum + h.originalAmount, 0);
 
       // 2. Currently Allocated to Borrower = sum of remaining active allocation
@@ -293,9 +316,9 @@ export async function getCapitalDataAction() {
       // 3. Principal Returned From Borrower = sum of borrower repaid principal
       const returnedFromBorrower = loanFundingEvents.reduce((sum, h) => sum + h.returnedFromBorrower, 0);
 
-      // Standalone received capital (unallocated advances)
+      // Standalone received / unallocated capital (advances or recovered from deleted loans)
       const unallocatedReceived = fundingHistory
-        .filter((h) => h.status === "received" && !h.loanId)
+        .filter((h) => !h.loanId || h.status === "received" || h.status === "unallocated")
         .reduce((sum, h) => sum + h.originalAmount, 0);
 
       const totalProvided = totalLoanFunding + unallocatedReceived;

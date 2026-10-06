@@ -27,6 +27,10 @@ export async function deleteLoanAction(
     revalidatePath("/loans");
     revalidatePath("/borrowers");
     revalidatePath("/loan-management");
+    revalidatePath("/capital-management");
+
+    const { invalidateLoanManagementCache } = await import("./get-loan-management-data.action");
+    await invalidateLoanManagementCache().catch(() => {});
 
     return {
       success: true,

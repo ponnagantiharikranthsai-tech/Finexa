@@ -38,6 +38,7 @@ export interface LedgerTransactionItem {
   createdAt: string;
   hasReceipt: boolean;
   receiptNote?: string | null;
+  isFundingEvent?: boolean;
 }
 
 export interface PaymentToCapitalPersonItem {
@@ -276,6 +277,7 @@ export async function getFunderLedgerAction(
           createdAt:            item.tx.createdAt.toISOString(),
           hasReceipt,
           receiptNote:          hasReceipt ? item.tx.notes : null,
+          isFundingEvent:       true,
         });
       }
     } else if (rawAllocations.length > 0) {
@@ -322,6 +324,7 @@ export async function getFunderLedgerAction(
           loanDateGiven:        item.loan.dateGiven,
           createdAt:            item.allocation.createdAt.toISOString(),
           hasReceipt:           false,
+          isFundingEvent:       true,
         });
       });
     }
@@ -335,6 +338,34 @@ export async function getFunderLedgerAction(
       notes:       r.notes || "Capital principal repaid to capital person",
       createdAt:   r.createdAt.toISOString(),
     }));
+
+    // Include capital person repayments in transaction list with Status: Returned
+    rawReturns.forEach((r, idx) => {
+      transactions.push({
+        transactionId:        r.returnId,
+        transactionCode:      r.paymentCode || `CP-${String(idx + 1).padStart(3, "0")}`,
+        amount:               Number(r.amount),
+        originalAmount:       Number(r.amount),
+        currentlyAllocated:   0,
+        returnedFromBorrower: 0,
+        fundingDate:          r.returnDate,
+        status:               "returned",
+        type:                 "RETURN",
+        notes:                r.notes || "Capital principal repaid to capital person",
+        loanId:               null,
+        loanCode:             null,
+        borrowerId:           null,
+        borrowerName:         `Paid to ${funder.name}`,
+        borrowerMobile:       funder.mobile || null,
+        loanPrincipal:        null,
+        loanStatus:           null,
+        loanDueDate:          null,
+        loanDateGiven:        null,
+        createdAt:            r.createdAt.toISOString(),
+        hasReceipt:           false,
+        isFundingEvent:       false,
+      });
+    });
 
     // Sort all transactions newest first
     transactions.sort((a, b) => {
@@ -385,8 +416,11 @@ export async function getFunderLedgerAction(
     const returnedFromBorrower = loanFundingEvents.reduce((sum, t) => sum + t.returnedFromBorrower, 0);
 
     const rawUnallocatedTxs = transactions.filter((t) =>
+      t.isFundingEvent !== false &&
       (t.type === "ADVANCE" || t.type === "RETURN" || t.type === "UNALLOCATED" || t.status === "unallocated" || (t.status === "received" && !t.loanId)) &&
-      t.status !== "released"
+      t.status !== "released" &&
+      t.status !== "returned" &&
+      !t.transactionCode.startsWith("CP-")
     );
     const grossUnallocated = rawUnallocatedTxs.reduce((sum, t) => sum + t.originalAmount, 0);
 

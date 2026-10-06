@@ -39,6 +39,7 @@ export interface LedgerTransactionItem {
   hasReceipt: boolean;
   receiptNote?: string | null;
   isFundingEvent?: boolean;
+  sourceType?: "capital_funding" | "capital_return";
 }
 
 export interface PaymentToCapitalPersonItem {
@@ -278,6 +279,7 @@ export async function getFunderLedgerAction(
           hasReceipt,
           receiptNote:          hasReceipt ? item.tx.notes : null,
           isFundingEvent:       true,
+          sourceType:           "capital_funding",
         });
       }
     } else if (rawAllocations.length > 0) {
@@ -325,6 +327,7 @@ export async function getFunderLedgerAction(
           createdAt:            item.allocation.createdAt.toISOString(),
           hasReceipt:           false,
           isFundingEvent:       true,
+          sourceType:           "capital_funding",
         });
       });
     }
@@ -355,7 +358,7 @@ export async function getFunderLedgerAction(
         loanId:               null,
         loanCode:             null,
         borrowerId:           null,
-        borrowerName:         `Paid Back to ${funder.name}`,
+        borrowerName:         `Paid Back to ${funder.name ? (funder.name.charAt(0).toUpperCase() + funder.name.slice(1)) : "Sai"}`,
         borrowerMobile:       funder.mobile || null,
         loanPrincipal:        null,
         loanStatus:           null,
@@ -364,6 +367,7 @@ export async function getFunderLedgerAction(
         createdAt:            r.createdAt.toISOString(),
         hasReceipt:           false,
         isFundingEvent:       false,
+        sourceType:           "capital_return",
       });
     });
 

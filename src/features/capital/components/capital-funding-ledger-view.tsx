@@ -136,6 +136,7 @@ export function CapitalFundingLedgerView({
   const [isSubmittingPay, setIsSubmittingPay] = useState(false);
 
   const funder = data?.funder;
+  const funderDisplayName = funder?.name ? (funder.name.charAt(0).toUpperCase() + funder.name.slice(1)) : "Sai";
   const metrics = data?.metrics || {
     totalProvided: 0,
     totalAllocated: 0,
@@ -846,10 +847,10 @@ export function CapitalFundingLedgerView({
                           </div>
                         </td>
                         <td className="py-3 px-4">
-                          {tx.transactionCode?.startsWith("CP-") || tx.status === "returned" ? (
+                          {tx.sourceType === "capital_return" || tx.transactionCode?.startsWith("CP-") || tx.status === "returned" ? (
                             <div className="space-y-0.5">
                               <p className="font-bold text-foreground text-xs">
-                                Paid Back to {funder.name}
+                                Paid Back to {funderDisplayName}
                               </p>
                               <p className="text-[10px] text-muted-foreground">
                                 Capital Principal Repayment
@@ -872,7 +873,7 @@ export function CapitalFundingLedgerView({
                           )}
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap">
-                          {tx.status === "returned" || tx.transactionCode?.startsWith("CP-") ? (
+                          {tx.sourceType === "capital_return" || tx.status === "returned" || tx.transactionCode?.startsWith("CP-") ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20">
                               <CheckCircle2 className="h-2.5 w-2.5" /> Returned
                             </span>
@@ -921,7 +922,7 @@ export function CapitalFundingLedgerView({
                                 <span>View Loan</span>
                                 <ExternalLink className="h-2.5 w-2.5 ml-1" />
                               </Button>
-                            ) : tx.transactionCode?.startsWith("CP-") || tx.status === "returned" ? (
+                            ) : tx.sourceType === "capital_return" || tx.transactionCode?.startsWith("CP-") || tx.status === "returned" ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold text-purple-400 bg-purple-500/10 border border-purple-500/20">
                                 Repaid to Funder
                               </span>
@@ -960,13 +961,13 @@ export function CapitalFundingLedgerView({
                           ₹{fmt(tx.originalAmount || tx.amount)}
                         </p>
                         <span className={`inline-block mt-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                          tx.status === "returned" || tx.transactionCode?.startsWith("CP-")
+                          tx.sourceType === "capital_return" || tx.status === "returned" || tx.transactionCode?.startsWith("CP-")
                             ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
                             : tx.type === "FUNDING" && tx.loanId
                             ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                             : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
                         }`}>
-                          {tx.status === "returned" || tx.transactionCode?.startsWith("CP-")
+                          {tx.sourceType === "capital_return" || tx.status === "returned" || tx.transactionCode?.startsWith("CP-")
                             ? "Returned"
                             : tx.type === "FUNDING" && tx.loanId
                             ? (tx.currentlyAllocated === 0 ? "Fully Returned" : "Allocated")
@@ -991,11 +992,11 @@ export function CapitalFundingLedgerView({
                       <div className="p-2.5 rounded-xl bg-accent/20 dark:bg-secondary/20 text-xs space-y-1">
                         <div className="flex justify-between">
                           <span className="text-[10px] uppercase font-bold text-muted-foreground">
-                            {tx.transactionCode?.startsWith("CP-") || tx.status === "returned" ? "Recipient" : "Borrower"}
+                            {tx.sourceType === "capital_return" || tx.transactionCode?.startsWith("CP-") || tx.status === "returned" ? "Recipient" : "Borrower"}
                           </span>
                           <strong className="text-foreground">
-                            {tx.transactionCode?.startsWith("CP-") || tx.status === "returned"
-                              ? `Paid Back to ${funder.name}`
+                            {tx.sourceType === "capital_return" || tx.transactionCode?.startsWith("CP-") || tx.status === "returned"
+                              ? `Paid Back to ${funderDisplayName}`
                               : tx.borrowerName || "Unallocated Received Advance"}
                           </strong>
                         </div>
@@ -1125,7 +1126,7 @@ export function CapitalFundingLedgerView({
                         </span>
                       </td>
                       <td className="py-3 px-4 font-semibold text-foreground">
-                        To: {funder?.name || "Capital Person"}
+                        To: {funderDisplayName}
                       </td>
                       <td className="py-3 px-4 text-muted-foreground">{pay.notes || "—"}</td>
                     </tr>
@@ -1203,20 +1204,36 @@ export function CapitalFundingLedgerView({
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-black uppercase bg-primary/10 text-primary border border-primary/20">
                     {selectedTx.transactionCode}
                   </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    {selectedTx.currentlyAllocated === 0 ? "Fully Returned" : selectedTx.status}
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                    selectedTx.sourceType === "capital_return" || selectedTx.status === "returned" || selectedTx.transactionCode?.startsWith("CP-")
+                      ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                      : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                  }`}>
+                    {selectedTx.sourceType === "capital_return" || selectedTx.status === "returned" || selectedTx.transactionCode?.startsWith("CP-")
+                      ? "Returned"
+                      : selectedTx.currentlyAllocated === 0
+                      ? "Fully Returned"
+                      : selectedTx.status}
                   </span>
                 </div>
                 <DialogTitle className="text-lg font-black text-foreground pt-1">
-                  Funding Transaction Details
+                  {selectedTx.sourceType === "capital_return" || selectedTx.transactionCode?.startsWith("CP-") || selectedTx.status === "returned"
+                    ? "Capital Principal Return Details"
+                    : "Funding Transaction Details"}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Individual on-demand capital deployment record
+                  {selectedTx.sourceType === "capital_return" || selectedTx.transactionCode?.startsWith("CP-") || selectedTx.status === "returned"
+                    ? "Record of capital principal repaid back to capital person"
+                    : "Individual on-demand capital deployment record"}
                 </DialogDescription>
               </DialogHeader>
 
               <div className="p-4 rounded-xl bg-accent/25 dark:bg-secondary/25 text-center space-y-1">
-                <span className="text-[10px] font-bold uppercase text-muted-foreground">Original Funding Amount</span>
+                <span className="text-[10px] font-bold uppercase text-muted-foreground">
+                  {selectedTx.sourceType === "capital_return" || selectedTx.transactionCode?.startsWith("CP-") || selectedTx.status === "returned"
+                    ? "Repayment Amount"
+                    : "Original Funding Amount"}
+                </span>
                 <p className="text-2xl font-black text-primary">₹{fmt(selectedTx.originalAmount || selectedTx.amount)}</p>
                 <p className="text-xs text-muted-foreground">{formatDate(selectedTx.fundingDate)}</p>
               </div>
@@ -1232,11 +1249,11 @@ export function CapitalFundingLedgerView({
                     <p className="font-extrabold text-blue-400 text-base mt-0.5">₹{fmt(selectedTx.returnedFromBorrower)}</p>
                   </div>
                 </div>
-              ) : selectedTx.status === "returned" || selectedTx.transactionCode?.startsWith("CP-") ? (
+              ) : selectedTx.sourceType === "capital_return" || selectedTx.status === "returned" || selectedTx.transactionCode?.startsWith("CP-") ? (
                 <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-center text-xs space-y-0.5">
                   <span className="text-[10px] uppercase font-bold text-purple-400">Capital Principal Repaid</span>
                   <p className="font-extrabold text-purple-400 text-lg">₹{fmt(selectedTx.originalAmount || selectedTx.amount)}</p>
-                  <p className="text-[10px] text-muted-foreground">Paid back to {funder.name}</p>
+                  <p className="text-[10px] text-muted-foreground">Paid back to {funderDisplayName}</p>
                 </div>
               ) : (
                 <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-center text-xs space-y-0.5">
@@ -1248,25 +1265,31 @@ export function CapitalFundingLedgerView({
 
               <div className="divide-y divide-border/30 border border-border/30 rounded-xl overflow-hidden text-xs">
                 <div className="p-3 flex justify-between">
-                  <span className="text-muted-foreground">Capital Person:</span>
-                  <span className="font-bold text-foreground">{funder.name} ({funder.mobile})</span>
+                  <span className="text-muted-foreground">Funding/Payment ID:</span>
+                  <span className="font-mono font-bold text-primary">{selectedTx.transactionCode}</span>
                 </div>
                 <div className="p-3 flex justify-between">
-                  <span className="text-muted-foreground">Transaction Type:</span>
+                  <span className="text-muted-foreground">Capital Person:</span>
+                  <span className="font-bold text-foreground">{funderDisplayName} ({funder.mobile})</span>
+                </div>
+                <div className="p-3 flex justify-between">
+                  <span className="text-muted-foreground">Transaction:</span>
                   <span className="font-bold text-foreground">
-                    {selectedTx.type}
+                    {selectedTx.sourceType === "capital_return" || selectedTx.transactionCode?.startsWith("CP-") || selectedTx.status === "returned"
+                      ? "Capital Principal Return"
+                      : selectedTx.type}
                   </span>
                 </div>
                 <div className="p-3 flex justify-between">
                   <span className="text-muted-foreground">Current Status:</span>
                   <span className={`font-bold uppercase ${
-                    selectedTx.status === "returned" || selectedTx.transactionCode?.startsWith("CP-")
+                    selectedTx.sourceType === "capital_return" || selectedTx.status === "returned" || selectedTx.transactionCode?.startsWith("CP-")
                       ? "text-purple-400"
                       : selectedTx.loanId
                       ? "text-emerald-400"
                       : "text-blue-400"
                   }`}>
-                    {selectedTx.status === "returned" || selectedTx.transactionCode?.startsWith("CP-")
+                    {selectedTx.sourceType === "capital_return" || selectedTx.status === "returned" || selectedTx.transactionCode?.startsWith("CP-")
                       ? "Returned"
                       : selectedTx.loanId
                       ? "Allocated"
@@ -1274,15 +1297,16 @@ export function CapitalFundingLedgerView({
                   </span>
                 </div>
 
-                {selectedTx.borrowerName && (
+                {selectedTx.sourceType === "capital_return" || selectedTx.transactionCode?.startsWith("CP-") || selectedTx.status === "returned" ? (
+                  <div className="p-3 flex justify-between">
+                    <span className="text-muted-foreground">Paid To:</span>
+                    <span className="font-bold text-foreground">Paid Back to {funderDisplayName}</span>
+                  </div>
+                ) : selectedTx.borrowerName ? (
                   <>
                     <div className="p-3 flex justify-between">
                       <span className="text-muted-foreground">
-                        {selectedTx.transactionCode?.startsWith("CP-") || selectedTx.status === "returned"
-                          ? "Repaid To:"
-                          : selectedTx.loanId
-                          ? "Borrower Name:"
-                          : "Previously Allocated To:"}
+                        {selectedTx.loanId ? "Borrower Name:" : "Previously Allocated To:"}
                       </span>
                       <span className="font-bold text-foreground">{selectedTx.borrowerName}</span>
                     </div>
@@ -1311,7 +1335,7 @@ export function CapitalFundingLedgerView({
                       </div>
                     )}
                   </>
-                )}
+                ) : null}
 
                 {selectedTx.notes && (
                   <div className="p-3 space-y-1">

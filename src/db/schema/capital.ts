@@ -70,6 +70,9 @@ export const capitalReturnsTable = pgTable("capital_returns", {
     .notNull()
     .references(() => fundersTable.funderId, { onDelete: "cascade" }),
 
+  paymentCode: text("payment_code"), // e.g. CP-001
+  fundingTransactionId: uuid("funding_transaction_id"),
+
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   returnDate: date("return_date").notNull(),
   notes: text("notes"),

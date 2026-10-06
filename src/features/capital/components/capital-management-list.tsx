@@ -14,7 +14,8 @@ import {
   Trash2, Mail, FileText, MapPin, User, Edit, Clock,
   Check, CheckCircle2, XCircle, ListFilter,
   DollarSign, Wallet, Users, ArrowUpLeft, ArrowDownRight, Coins, Info,
-  CreditCard, ExternalLink, ShieldCheck, UserPlus, History
+  CreditCard, ExternalLink, ShieldCheck, UserPlus, History,
+  RotateCcw, BadgeCheck
 } from "lucide-react";
 import { createFunderAction } from "../actions/create-funder.action";
 import { updateFunderAction } from "../actions/update-funder.action";
@@ -30,6 +31,9 @@ interface CapitalManagementListProps {
       totalReceived: number;
       totalProvided: number;
       currentlyAllocated: number;
+      returnedFromBorrower?: number;
+      paidBackToCapitalPerson?: number;
+      capitalPayable?: number;
       unallocatedReceived: number;
       totalReturned: number;
       activeCapital: number;
@@ -53,9 +57,12 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
 
   // Defensively normalize stats
   const stats = {
-    totalProvided: Number(data?.stats?.totalProvided ?? data?.stats?.totalReceived ?? 0),
-    currentlyAllocated: Number(data?.stats?.currentlyAllocated ?? data?.stats?.activeCapital ?? 0),
-    unallocatedReceived: Number(data?.stats?.unallocatedReceived ?? data?.stats?.availableCapital ?? 0),
+    totalProvided: Number(data?.stats?.totalProvided ?? 0),
+    currentlyAllocated: Number(data?.stats?.currentlyAllocated ?? 0),
+    returnedFromBorrower: Number(data?.stats?.returnedFromBorrower ?? 0),
+    paidBackToCapitalPerson: Number(data?.stats?.paidBackToCapitalPerson ?? data?.stats?.totalReturned ?? 0),
+    capitalPayable: Number(data?.stats?.capitalPayable ?? 0),
+    unallocatedReceived: Number(data?.stats?.unallocatedReceived ?? 0),
     activeFunders: Number(data?.stats?.activeFunders ?? 0),
   };
 
@@ -64,7 +71,10 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
     ...f,
     totalProvided: Number(f.totalProvided ?? f.capitalAmount ?? 0),
     currentlyAllocated: Number(f.currentlyAllocated ?? 0),
-    unallocatedReceived: Number(f.unallocatedReceived ?? f.availableCapital ?? 0),
+    returnedFromBorrower: Number(f.returnedFromBorrower ?? 0),
+    paidBackToCapitalPerson: Number(f.paidBackToCapitalPerson ?? f.totalReturned ?? 0),
+    capitalPayable: Number(f.capitalPayable ?? 0),
+    unallocatedReceived: Number(f.unallocatedReceived ?? 0),
     fundingHistory: Array.isArray(f.fundingHistory) ? f.fundingHistory : [],
     loansFunded: Array.isArray(f.loansFunded) ? f.loansFunded : [],
     returnsList: Array.isArray(f.returnsList) ? f.returnsList : [],
@@ -174,6 +184,9 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
           updatedAt:                  new Date().toISOString(),
           totalProvided:              0,
           currentlyAllocated:         0,
+          returnedFromBorrower:       0,
+          paidBackToCapitalPerson:    0,
+          capitalPayable:             0,
           unallocatedReceived:        0,
           totalReturned:              0,
           remainingCapital:           0,
@@ -299,11 +312,11 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
     });
   };
 
-  // Handle Return Capital
+  // Handle Pay Capital Person
   const handleReturnOpen = (funder: FunderWithReturns, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedFunder(funder);
-    setReturnAmount(funder.remainingCapital > 0 ? funder.remainingCapital.toString() : "");
+    setReturnAmount(funder.capitalPayable > 0 ? funder.capitalPayable.toString() : "");
     setReturnDate(new Date().toISOString().split("T")[0]!);
     setReturnNotes("");
     setReturnOpen(true);
@@ -315,7 +328,12 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
 
     const numAmount = Number(returnAmount);
     if (isNaN(numAmount) || numAmount <= 0) {
-      toast.error("Please enter a valid return amount.");
+      toast.error("Please enter a valid payment amount greater than zero.");
+      return;
+    }
+
+    if (numAmount > selectedFunder.capitalPayable) {
+      toast.error(`Maximum available principal to return: ₹${fmt(selectedFunder.capitalPayable)}. Overpayment is not allowed.`);
       return;
     }
 
@@ -328,12 +346,11 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
       });
 
       if (res.success) {
-        toast.success(`Capital return of ₹${numAmount.toLocaleString("en-IN")} recorded!`);
+        toast.success(`Paid ₹${fmt(numAmount)} back to ${selectedFunder.name}! (${res.data?.paymentCode || "CP-001"})`);
         setReturnOpen(false);
-        // Background sync — no full page reload
         queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
       } else {
-        toast.error(res.error || "Failed to record return.");
+        toast.error(typeof res.error === "string" ? res.error : "Failed to record payment.");
       }
     });
   };
@@ -344,8 +361,8 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
 
   return (
     <div className="space-y-6">
-      {/* ── TOP STATS CARDS GRID (ON-DEMAND CAPITAL MODEL) ───────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+      {/* ── TOP STATS CARDS GRID (CAPITAL PRINCIPAL TRACKING) ────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
         {/* Total Capital Provided */}
         <div className="fx-glass-card rounded-[22px] p-4 md:p-5 border border-primary/20 bg-card/60 backdrop-blur-xl flex flex-col justify-between space-y-2 fx-3d-hover">
           <div className="flex items-center justify-between">
@@ -358,7 +375,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
             <p className="text-xl md:text-2xl font-black text-foreground tracking-tight">
               ₹{fmt(stats.totalProvided)}
             </p>
-            <p className="text-[10px] text-muted-foreground mt-1">Sum of actual funding transactions</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Total capital funded</p>
           </div>
         </div>
 
@@ -374,39 +391,55 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
             <p className="text-xl md:text-2xl font-black text-emerald-500 tracking-tight">
               ₹{fmt(stats.currentlyAllocated)}
             </p>
-            <p className="text-[10px] text-muted-foreground mt-1">Active capital funded to borrowers</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Active with borrowers</p>
           </div>
         </div>
 
-        {/* Unallocated Received Capital */}
+        {/* Returned From Borrowers */}
         <div className="fx-glass-card rounded-[22px] p-4 md:p-5 border border-blue-500/20 bg-card/60 backdrop-blur-xl flex flex-col justify-between space-y-2 fx-3d-hover">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Unallocated Received</span>
+            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Returned (Borrower)</span>
             <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
-              <Wallet className="h-4 w-4" />
+              <BadgeCheck className="h-4 w-4" />
             </div>
           </div>
           <div>
             <p className="text-xl md:text-2xl font-black text-blue-400 tracking-tight">
-              ₹{fmt(stats.unallocatedReceived)}
+              ₹{fmt(stats.returnedFromBorrower)}
             </p>
-            <p className="text-[10px] text-muted-foreground mt-1">Money received & pending assignment</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Borrower principal repaid</p>
           </div>
         </div>
 
-        {/* Active Capital Persons */}
-        <div className="fx-glass-card rounded-[22px] p-4 md:p-5 border border-amber-500/20 bg-card/60 backdrop-blur-xl flex flex-col justify-between space-y-2 fx-3d-hover">
+        {/* Paid Back to Capital Persons */}
+        <div className="fx-glass-card rounded-[22px] p-4 md:p-5 border border-purple-500/20 bg-card/60 backdrop-blur-xl flex flex-col justify-between space-y-2 fx-3d-hover">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Capital Persons</span>
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
-              <Users className="h-4 w-4" />
+            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Paid Back to Persons</span>
+            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500">
+              <RotateCcw className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <p className="text-xl md:text-2xl font-black text-amber-500 tracking-tight">
-              {stats.activeFunders}
+            <p className="text-xl md:text-2xl font-black text-purple-400 tracking-tight">
+              ₹{fmt(stats.paidBackToCapitalPerson)}
             </p>
-            <p className="text-[10px] text-muted-foreground mt-1">On-demand funding sources</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Returned to funders</p>
+          </div>
+        </div>
+
+        {/* Capital Still Payable */}
+        <div className="fx-glass-card rounded-[22px] p-4 md:p-5 border border-primary/30 bg-primary/5 backdrop-blur-xl flex flex-col justify-between space-y-2 fx-3d-hover col-span-2 md:col-span-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-black text-primary uppercase tracking-wider">Capital Payable</span>
+            <div className="p-2 rounded-xl bg-primary/20 text-primary">
+              <Coins className="h-4 w-4" />
+            </div>
+          </div>
+          <div>
+            <p className="text-xl md:text-2xl font-black text-primary tracking-tight">
+              ₹{fmt(stats.capitalPayable)}
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-1">Ready to pay back</p>
           </div>
         </div>
       </div>
@@ -531,30 +564,53 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                         </p>
                       </div>
 
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20">
-                        On-Demand
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                        funder.status === "settled" || (funder.currentlyAllocated === 0 && funder.capitalPayable === 0 && funder.totalProvided > 0)
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          : funder.capitalPayable > 0
+                          ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                          : "bg-primary/10 text-primary border border-primary/20"
+                      }`}>
+                        {funder.status === "settled" || (funder.currentlyAllocated === 0 && funder.capitalPayable === 0 && funder.totalProvided > 0)
+                          ? "CAPITAL SETTLED"
+                          : funder.capitalPayable > 0
+                          ? "PARTIALLY RETURNED"
+                          : "ACTIVE"}
                       </span>
                     </div>
 
                     {/* Metrics Grid */}
-                    <div className="grid grid-cols-3 gap-2 p-3 rounded-xl bg-accent/20 dark:bg-secondary/20 text-center">
+                    <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-accent/20 dark:bg-secondary/20 text-xs">
                       <div>
-                        <span className="text-[9px] uppercase font-bold text-muted-foreground">Total Provided</span>
-                        <p className="font-extrabold text-foreground text-sm mt-0.5">
-                          ₹{fmt(funder.totalProvided)}
-                        </p>
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground">Provided</span>
+                        <p className="font-extrabold text-foreground text-sm mt-0.5">₹{fmt(funder.totalProvided)}</p>
                       </div>
                       <div>
                         <span className="text-[9px] uppercase font-bold text-muted-foreground">Allocated</span>
-                        <p className="font-extrabold text-emerald-400 text-sm mt-0.5">
-                          ₹{fmt(funder.currentlyAllocated)}
-                        </p>
+                        <p className="font-extrabold text-emerald-400 text-sm mt-0.5">₹{fmt(funder.currentlyAllocated)}</p>
                       </div>
                       <div>
-                        <span className="text-[9px] uppercase font-bold text-muted-foreground">Unallocated</span>
-                        <p className="font-extrabold text-blue-400 text-sm mt-0.5">
-                          ₹{fmt(funder.unallocatedReceived)}
-                        </p>
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground">Returned (Borrower)</span>
+                        <p className="font-extrabold text-blue-400 text-sm mt-0.5">₹{fmt(funder.returnedFromBorrower)}</p>
+                      </div>
+                      <div>
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground">Paid Back</span>
+                        <p className="font-extrabold text-purple-400 text-sm mt-0.5">₹{fmt(funder.paidBackToCapitalPerson)}</p>
+                      </div>
+                      <div className="col-span-2 bg-primary/10 rounded-lg p-2 border border-primary/20 flex items-center justify-between">
+                        <div>
+                          <span className="text-[9px] uppercase font-black text-primary block">Payable to Person</span>
+                          <span className="font-black text-primary text-base">₹{fmt(funder.capitalPayable)}</span>
+                        </div>
+                        {funder.capitalPayable > 0 && (
+                          <Button
+                            size="sm"
+                            onClick={(e) => handleReturnOpen(funder, e)}
+                            className="h-7 px-2.5 rounded-lg text-[11px] font-black fx-brand-gradient text-white shadow-sm"
+                          >
+                            <RotateCcw className="h-3 w-3 mr-1" /> Pay Person
+                          </Button>
+                        )}
                       </div>
                     </div>
 
@@ -585,7 +641,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                               </div>
                               <div className="text-right shrink-0 flex items-center gap-1.5">
                                 <strong className="text-primary font-bold">
-                                  ₹{fmt(item.amount)}
+                                  ₹{fmt(item.originalAmount || item.amount)}
                                 </strong>
                                 {item.loanId && (
                                   <button
@@ -964,6 +1020,104 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                 className="h-11 rounded-xl text-xs font-bold fx-brand-gradient text-white border-0 fx-cta-glow px-5"
               >
                 {isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── MODAL: PAY CAPITAL PERSON ────────────────────────────────────────── */}
+      <Dialog open={returnOpen} onOpenChange={setReturnOpen}>
+        <DialogContent className="rounded-2xl max-w-md fx-glass-card border-border/50 bg-white dark:bg-card p-6">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black tracking-tight flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-primary" /> Pay Capital Person
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Return borrower-repaid principal to {selectedFunder?.name}. Principal only — no interest.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleReturnSubmit} className="space-y-4">
+            <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/20 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Maximum available principal to return
+              </span>
+              <p className="text-2xl font-black text-primary">₹{fmt(selectedFunder?.capitalPayable)}</p>
+              <p className="text-[10px] text-muted-foreground">
+                Calculated from actual borrower principal payments received. Overpayment is prevented.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Capital Person</Label>
+              <Input
+                value={`${selectedFunder?.name || ""} (${selectedFunder?.mobile || ""})`}
+                disabled
+                className="h-11 rounded-xl bg-muted/40 text-xs font-bold"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Amount to Return (₹)*</Label>
+              <Input
+                type="number"
+                placeholder={`Max: ${selectedFunder?.capitalPayable || 0}`}
+                value={returnAmount}
+                onChange={(e) => setReturnAmount(e.target.value)}
+                required
+                min="1"
+                max={selectedFunder?.capitalPayable || 0}
+                step="any"
+                className="h-11 rounded-xl bg-transparent border-border font-bold text-base"
+              />
+              {Number(returnAmount) > (selectedFunder?.capitalPayable || 0) && (
+                <p className="text-[11px] text-destructive font-semibold">
+                  Amount exceeds maximum available principal of ₹{fmt(selectedFunder?.capitalPayable)}.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Payment Date*</Label>
+              <Input
+                type="date"
+                value={returnDate}
+                onChange={(e) => setReturnDate(e.target.value)}
+                required
+                className="h-11 rounded-xl bg-transparent border-border text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Notes (Optional)</Label>
+              <Input
+                placeholder="e.g. Returned borrower principal"
+                value={returnNotes}
+                onChange={(e) => setReturnNotes(e.target.value)}
+                className="h-11 rounded-xl bg-transparent border-border text-xs"
+              />
+            </div>
+
+            <DialogFooter className="gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setReturnOpen(false)}
+                className="h-11 rounded-xl text-xs font-bold"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  isPending ||
+                  Number(returnAmount) <= 0 ||
+                  Number(returnAmount) > (selectedFunder?.capitalPayable || 0)
+                }
+                className="h-11 rounded-xl text-xs font-bold fx-brand-gradient text-white border-0 fx-cta-glow px-5"
+              >
+                {isPending ? "Processing..." : "Confirm Payment"}
               </Button>
             </DialogFooter>
           </form>

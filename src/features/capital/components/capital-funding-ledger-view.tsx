@@ -10,9 +10,17 @@ import {
   type LedgerTransactionItem,
 } from "../actions/get-funder-ledger.action";
 import { recordReceivedCapitalAction } from "../actions/record-received-capital.action";
+import { recordCapitalReturnAction } from "../actions/record-capital-return.action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   ArrowLeft,
   Coins,
@@ -27,14 +35,14 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  FileText,
   RotateCcw,
   Receipt,
   Layers,
-  Sparkles,
   ChevronLeft,
   ChevronRight,
   Landmark,
+  BadgeCheck,
+  CreditCard,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -70,7 +78,7 @@ export function CapitalFundingLedgerView({
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  // Query funder ledger with retry on connection errors
+  // Query funder ledger
   const { data, isLoading, isFetching, refetch, error: queryError } = useQuery({
     queryKey: ["capital-funder-ledger", funderId],
     queryFn: async () => {
@@ -84,7 +92,7 @@ export function CapitalFundingLedgerView({
     initialData: initialData || undefined,
     staleTime: 1000 * 60 * 2,
     retry: 3,
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000), // exponential: 2s, 4s, 8s
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
   });
 
   const isDbConnectionError =
@@ -106,6 +114,9 @@ export function CapitalFundingLedgerView({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
+  // Active view tab (Funding Transactions vs Payments To Funder vs Borrower Repayments)
+  const [activeLedgerTab, setActiveLedgerTab] = useState<"funding" | "payments_to_funder" | "borrower_repayments">("funding");
+
   // Dialog state: Transaction Details
   const [selectedTx, setSelectedTx] = useState<LedgerTransactionItem | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -117,15 +128,29 @@ export function CapitalFundingLedgerView({
   const [recordNotes, setRecordNotes] = useState("");
   const [isSubmittingRecord, setIsSubmittingRecord] = useState(false);
 
+  // Dialog state: Pay Capital Person
+  const [payPersonOpen, setPayPersonOpen] = useState(false);
+  const [payAmount, setPayAmount] = useState("");
+  const [payDate, setPayDate] = useState(new Date().toISOString().split("T")[0]!);
+  const [payNotes, setPayNotes] = useState("");
+  const [isSubmittingPay, setIsSubmittingPay] = useState(false);
+
   const funder = data?.funder;
   const metrics = data?.metrics || {
     totalProvided: 0,
     totalAllocated: 0,
+    currentlyAllocated: 0,
+    returnedFromBorrower: 0,
+    paidBackToCapitalPerson: 0,
+    capitalPayable: 0,
     unallocatedReceived: 0,
     totalReturned: 0,
     transactionCount: 0,
+    status: "ACTIVE",
   };
   const rawTransactions = data?.transactions || [];
+  const paymentsToCapitalPerson = data?.paymentsToCapitalPerson || [];
+  const borrowerRepayments = data?.borrowerRepayments || [];
 
   // Filter & Search logic
   const filteredTransactions = useMemo(() => {
@@ -148,6 +173,10 @@ export function CapitalFundingLedgerView({
     if (statusFilter !== "all") {
       if (statusFilter === "allocated") {
         list = list.filter((tx) => tx.status === "allocated" || tx.type === "FUNDING");
+      } else if (statusFilter === "partially_returned") {
+        list = list.filter((tx) => tx.status === "partially_returned");
+      } else if (statusFilter === "returned") {
+        list = list.filter((tx) => tx.status === "returned" || tx.currentlyAllocated === 0);
       } else if (statusFilter === "advance") {
         list = list.filter((tx) => tx.type === "ADVANCE" || (tx.status === "received" && !tx.loanId));
       } else if (statusFilter === "released") {
@@ -164,19 +193,14 @@ export function CapitalFundingLedgerView({
 
       if (dateFilter === "today") {
         list = list.filter((tx) => tx.fundingDate === todayStr);
-      } else if (dateFilter === "this_week") {
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        list = list.filter((tx) => new Date(tx.fundingDate) >= weekAgo);
-      } else if (dateFilter === "this_month") {
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        list = list.filter((tx) => new Date(tx.fundingDate) >= startOfMonth);
-      } else if (dateFilter === "custom") {
-        if (customStartDate) {
-          list = list.filter((tx) => tx.fundingDate >= customStartDate);
-        }
-        if (customEndDate) {
-          list = list.filter((tx) => tx.fundingDate <= customEndDate);
-        }
+      } else if (dateFilter === "last7") {
+        const d7 = new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString().split("T")[0]!;
+        list = list.filter((tx) => tx.fundingDate >= d7 && tx.fundingDate <= todayStr);
+      } else if (dateFilter === "thisMonth") {
+        const ym = todayStr.slice(0, 7);
+        list = list.filter((tx) => tx.fundingDate?.startsWith(ym));
+      } else if (dateFilter === "custom" && customStartDate && customEndDate) {
+        list = list.filter((tx) => tx.fundingDate >= customStartDate && tx.fundingDate <= customEndDate);
       }
     }
 
@@ -189,14 +213,14 @@ export function CapitalFundingLedgerView({
         return new Date(a.fundingDate).getTime() - new Date(b.fundingDate).getTime();
       }
       if (sortBy === "amount_desc") {
-        return b.amount - a.amount;
+        return (b.originalAmount || b.amount) - (a.originalAmount || a.amount);
       }
       if (sortBy === "amount_asc") {
-        return a.amount - b.amount;
+        return (a.originalAmount || a.amount) - (b.originalAmount || b.amount);
       }
       if (sortBy === "borrower") {
-        const nameA = a.borrowerName || "zzz";
-        const nameB = b.borrowerName || "zzz";
+        const nameA = a.borrowerName || "";
+        const nameB = b.borrowerName || "";
         return nameA.localeCompare(nameB);
       }
       return 0;
@@ -217,13 +241,13 @@ export function CapitalFundingLedgerView({
   const filteredProvidedSum = useMemo(() => {
     return filteredTransactions
       .filter((t) => t.type === "FUNDING" || t.type === "ADVANCE")
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + (t.originalAmount || t.amount), 0);
   }, [filteredTransactions]);
 
   const filteredAllocatedSum = useMemo(() => {
     return filteredTransactions
-      .filter((t) => t.status === "allocated")
-      .reduce((sum, t) => sum + t.amount, 0);
+      .filter((t) => t.type === "FUNDING")
+      .reduce((sum, t) => sum + t.currentlyAllocated, 0);
   }, [filteredTransactions]);
 
   const hasActiveFilters =
@@ -244,13 +268,12 @@ export function CapitalFundingLedgerView({
     setCurrentPage(1);
   };
 
-  // Handle open transaction details
   const handleViewTx = (tx: LedgerTransactionItem) => {
     setSelectedTx(tx);
     setDetailsOpen(true);
   };
 
-  // Handle Record Received Capital
+  // Handle Record Received Capital (Advance from Funder)
   const handleSubmitRecordCapital = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!recordAmount || Number(recordAmount) <= 0) {
@@ -277,7 +300,6 @@ export function CapitalFundingLedgerView({
       setRecordAmount("");
       setRecordNotes("");
 
-      // Invalidate queries
       await queryClient.invalidateQueries({ queryKey: ["capital-funder-ledger", funderId] });
       await queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
       await refetch();
@@ -285,6 +307,52 @@ export function CapitalFundingLedgerView({
       toast.error(err.message || "An unexpected error occurred.");
     } finally {
       setIsSubmittingRecord(false);
+    }
+  };
+
+  // Handle Pay Capital Person (Returning Principal Back to Capital Person)
+  const handleSubmitPayCapitalPerson = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const numAmount = Number(payAmount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      toast.error("Please enter a valid amount greater than zero.");
+      return;
+    }
+
+    if (numAmount > metrics.capitalPayable) {
+      toast.error(
+        `Maximum available principal to return: ₹${fmt(metrics.capitalPayable)}. Overpayment is not allowed.`
+      );
+      return;
+    }
+
+    try {
+      setIsSubmittingPay(true);
+      const res = await recordCapitalReturnAction({
+        funderId,
+        amount: numAmount,
+        returnDate: payDate,
+        notes: payNotes.trim() || undefined,
+      });
+
+      if (!res.success) {
+        toast.error(typeof res.error === "string" ? res.error : "Failed to record payment to capital person.");
+        return;
+      }
+
+      const pCode = res.data?.paymentCode ? ` (${res.data.paymentCode})` : "";
+      toast.success(`₹${fmt(numAmount)} paid back to ${funder?.name || "Capital Person"}!${pCode}`);
+      setPayPersonOpen(false);
+      setPayAmount("");
+      setPayNotes("");
+
+      await queryClient.invalidateQueries({ queryKey: ["capital-funder-ledger", funderId] });
+      await queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
+      await refetch();
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred.");
+    } finally {
+      setIsSubmittingPay(false);
     }
   };
 
@@ -299,7 +367,6 @@ export function CapitalFundingLedgerView({
 
   if (queryError && !data) {
     if (isDbConnectionError) {
-      // DB connection failure — show retry, not "not found"
       return (
         <div className="py-16 text-center space-y-4 max-w-md mx-auto">
           <div className="h-12 w-12 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto">
@@ -307,8 +374,7 @@ export function CapitalFundingLedgerView({
           </div>
           <h2 className="text-lg font-bold text-foreground">Database Connection Issue</h2>
           <p className="text-xs text-muted-foreground">
-            The local database connection was interrupted (ECONNRESET). This is a temporary glitch
-            with the local PostgreSQL server. Your data is safe — please retry.
+            The database connection was interrupted. Your data is safe — please retry.
           </p>
           <div className="flex items-center justify-center gap-2 pt-2">
             <Button
@@ -352,7 +418,6 @@ export function CapitalFundingLedgerView({
     );
   }
 
-  // TypeScript narrowing guard — funder is always defined past this point
   if (!funder) return null;
 
   return (
@@ -378,8 +443,14 @@ export function CapitalFundingLedgerView({
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20">
                 On-Demand Capital Provider
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-                <CheckCircle2 className="h-2.5 w-2.5" /> {funder.status}
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
+                metrics.status === "CAPITAL SETTLED"
+                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                  : metrics.status === "PARTIALLY RETURNED"
+                  ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                  : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+              }`}>
+                <CheckCircle2 className="h-2.5 w-2.5" /> {metrics.status}
               </span>
             </div>
 
@@ -415,518 +486,610 @@ export function CapitalFundingLedgerView({
             <Button
               onClick={() => setRecordOpen(true)}
               size="sm"
-              className="h-9 px-4 rounded-xl text-xs font-bold fx-brand-gradient border-0 text-white fx-cta-glow shadow-md"
+              variant="outline"
+              className="h-9 px-3 rounded-xl text-xs font-bold border-border/60 hover:bg-accent/40"
             >
-              <ArrowDownRight className="h-3.5 w-3.5 mr-1.5 text-emerald-300" />
-              <span>Record Received Capital</span>
+              <ArrowDownRight className="h-3.5 w-3.5 mr-1 text-emerald-400" />
+              <span>Record Advance</span>
+            </Button>
+
+            <Button
+              onClick={() => {
+                setPayAmount(metrics.capitalPayable > 0 ? String(metrics.capitalPayable) : "");
+                setPayDate(new Date().toISOString().split("T")[0]!);
+                setPayNotes("");
+                setPayPersonOpen(true);
+              }}
+              disabled={metrics.capitalPayable <= 0}
+              size="sm"
+              className={`h-9 px-4 rounded-xl text-xs font-black shadow-md transition-all ${
+                metrics.capitalPayable > 0
+                  ? "fx-brand-gradient border-0 text-white fx-cta-glow cursor-pointer"
+                  : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
+              }`}
+            >
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5 text-white" />
+              <span>Pay Capital Person</span>
             </Button>
           </div>
         </div>
       </div>
 
-      {/* ── Section 2: Summary Metric Cards (Calculated from Actuals) ────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Card 1: Total Provided */}
-        <div className="p-4 rounded-2xl bg-card/60 border border-border/60 relative overflow-hidden flex flex-col justify-between">
-          <div className="flex items-center justify-between text-muted-foreground mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Total Provided</span>
-            <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-              <Coins className="h-3.5 w-3.5" />
-            </div>
-          </div>
+      {/* ── Section 2: CAPITAL PRINCIPAL SUMMARY (Exact Business Flow) ────────── */}
+      <div className="bg-card/70 border border-border/60 rounded-[22px] p-5 space-y-4 backdrop-blur-md">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <p className="text-2xl font-black text-foreground tracking-tight">
-              ₹{fmt(metrics.totalProvided)}
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-black uppercase tracking-wider text-primary flex items-center gap-1.5">
+                <Landmark className="h-4 w-4" /> CAPITAL PRINCIPAL SUMMARY
+              </h2>
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                metrics.status === "CAPITAL SETTLED"
+                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                  : metrics.status === "PARTIALLY RETURNED"
+                  ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                  : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+              }`}>
+                {metrics.status}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Principal only — calculated directly from actual borrower payments. No interest or rent.
             </p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              Sum of actual funding transactions
-            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => {
+                setPayAmount(metrics.capitalPayable > 0 ? String(metrics.capitalPayable) : "");
+                setPayDate(new Date().toISOString().split("T")[0]!);
+                setPayNotes("");
+                setPayPersonOpen(true);
+              }}
+              disabled={metrics.capitalPayable <= 0}
+              className={`h-9 px-4 rounded-xl text-xs font-black shadow-md ${
+                metrics.capitalPayable > 0
+                  ? "fx-brand-gradient text-white fx-cta-glow hover:scale-[1.02]"
+                  : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
+              }`}
+            >
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              <span>Pay Capital Person</span>
+            </Button>
           </div>
         </div>
 
-        {/* Card 2: Currently Allocated */}
-        <div className="p-4 rounded-2xl bg-card/60 border border-border/60 relative overflow-hidden flex flex-col justify-between">
-          <div className="flex items-center justify-between text-muted-foreground mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Total Allocated</span>
-            <div className="h-7 w-7 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-              <CheckCircle2 className="h-3.5 w-3.5" />
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {/* 1. Original Provided */}
+          <div className="p-4 rounded-2xl bg-card/60 border border-border/60 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Original Provided</span>
+              <Coins className="h-3.5 w-3.5 text-primary" />
+            </div>
+            <div className="mt-2">
+              <p className="text-xl md:text-2xl font-black text-foreground tracking-tight">
+                ₹{fmt(metrics.totalProvided)}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Total capital funded</p>
             </div>
           </div>
-          <div>
-            <p className="text-2xl font-black text-emerald-400 tracking-tight">
-              ₹{fmt(metrics.totalAllocated)}
-            </p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              Deployed into active borrower loans
-            </p>
-          </div>
-        </div>
 
-        {/* Card 3: Unallocated Received */}
-        <div className="p-4 rounded-2xl bg-card/60 border border-border/60 relative overflow-hidden flex flex-col justify-between">
-          <div className="flex items-center justify-between text-muted-foreground mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Unallocated Received</span>
-            <div className="h-7 w-7 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400">
-              <Clock className="h-3.5 w-3.5" />
+          {/* 2. Currently Allocated */}
+          <div className="p-4 rounded-2xl bg-card/60 border border-emerald-500/20 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-emerald-400">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Currently Allocated</span>
+              <CreditCard className="h-3.5 w-3.5" />
+            </div>
+            <div className="mt-2">
+              <p className="text-xl md:text-2xl font-black text-emerald-400 tracking-tight">
+                ₹{fmt(metrics.currentlyAllocated ?? metrics.totalAllocated)}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">With borrower in loans</p>
             </div>
           </div>
-          <div>
-            <p className="text-2xl font-black text-blue-400 tracking-tight">
-              ₹{fmt(metrics.unallocatedReceived)}
-            </p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              Received advance ready to be deployed
-            </p>
-          </div>
-        </div>
 
-        {/* Card 4: Total Transactions */}
-        <div className="p-4 rounded-2xl bg-card/60 border border-border/60 relative overflow-hidden flex flex-col justify-between">
-          <div className="flex items-center justify-between text-muted-foreground mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Funding Events</span>
-            <div className="h-7 w-7 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400">
-              <Sparkles className="h-3.5 w-3.5" />
+          {/* 3. Returned From Borrower */}
+          <div className="p-4 rounded-2xl bg-card/60 border border-blue-500/20 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-blue-400">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Returned From Borrower</span>
+              <BadgeCheck className="h-3.5 w-3.5" />
+            </div>
+            <div className="mt-2">
+              <p className="text-xl md:text-2xl font-black text-blue-400 tracking-tight">
+                ₹{fmt(metrics.returnedFromBorrower)}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Borrower principal repaid</p>
             </div>
           </div>
-          <div>
-            <p className="text-2xl font-black text-foreground tracking-tight">
-              {metrics.transactionCount}
-            </p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              Individual on-demand funding events
-            </p>
+
+          {/* 4. Paid Back to Capital Person */}
+          <div className="p-4 rounded-2xl bg-card/60 border border-purple-500/20 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-purple-400">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Paid Back to Person</span>
+              <RotateCcw className="h-3.5 w-3.5" />
+            </div>
+            <div className="mt-2">
+              <p className="text-xl md:text-2xl font-black text-purple-400 tracking-tight">
+                ₹{fmt(metrics.paidBackToCapitalPerson ?? metrics.totalReturned)}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Capital returned to funder</p>
+            </div>
+          </div>
+
+          {/* 5. Payable to Capital Person */}
+          <div className="p-4 rounded-2xl bg-primary/10 border border-primary/30 flex flex-col justify-between relative overflow-hidden">
+            <div className="flex items-center justify-between text-primary">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Payable to Person</span>
+              {metrics.capitalPayable > 0 && (
+                <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+              )}
+            </div>
+            <div className="mt-2">
+              <p className="text-xl md:text-2xl font-black text-primary tracking-tight">
+                ₹{fmt(metrics.capitalPayable)}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {metrics.capitalPayable > 0 ? "Ready to pay back now" : "Fully settled with funder"}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Section 3: Toolbar (Search, Filter, Date Range, Sort) ───────────── */}
-      <div className="bg-card/70 border border-border/60 rounded-2xl p-4 space-y-3">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          {/* Search box */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search borrower, funding ID (CF-001), loan ID..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="pl-10 h-10 rounded-xl bg-background/70 border-border/50 text-xs"
-            />
-          </div>
+      {/* ── Section 3: Navigation Tabs for Financial Events ──────────────────── */}
+      <div className="flex items-center gap-1 bg-card/80 p-1.5 rounded-2xl border border-border/50 shadow-inner">
+        <button
+          onClick={() => setActiveLedgerTab("funding")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 ${
+            activeLedgerTab === "funding"
+              ? "fx-brand-gradient text-white shadow-md"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+          }`}
+        >
+          Capital Funding Events ({filteredTransactions.filter((t) => t.type === "FUNDING").length})
+        </button>
 
-          {/* Quick Filters */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Status Filter */}
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="h-10 px-3 rounded-xl bg-background/70 border border-border/50 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="all">All Statuses</option>
-              <option value="allocated">Allocated (Loans)</option>
-              <option value="advance">Advance (Unallocated)</option>
-              <option value="released">Released / Repaid</option>
-            </select>
+        <button
+          onClick={() => setActiveLedgerTab("payments_to_funder")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 ${
+            activeLedgerTab === "payments_to_funder"
+              ? "fx-brand-gradient text-white shadow-md"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+          }`}
+        >
+          Payments to Capital Person ({paymentsToCapitalPerson.length})
+        </button>
 
-            {/* Date Preset Filter */}
-            <select
-              value={dateFilter}
-              onChange={(e) => {
-                setDateFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="h-10 px-3 rounded-xl bg-background/70 border border-border/50 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="all">All Dates</option>
-              <option value="today">Today</option>
-              <option value="this_week">Past 7 Days</option>
-              <option value="this_month">This Month</option>
-              <option value="custom">Custom Date Range</option>
-            </select>
-
-            {/* Sort Dropdown */}
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="h-10 px-3 rounded-xl bg-background/70 border border-border/50 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="newest">Newest First</option>
-              <option value="oldest">Oldest First</option>
-              <option value="amount_desc">Amount (High to Low)</option>
-              <option value="amount_asc">Amount (Low to High)</option>
-              <option value="borrower">Borrower (A-Z)</option>
-            </select>
-
-            {hasActiveFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleResetFilters}
-                className="h-10 px-2.5 rounded-xl text-xs text-muted-foreground hover:text-foreground"
-              >
-                <RotateCcw className="h-3 w-3 mr-1" /> Reset
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Custom Date Range Inputs (if selected) */}
-        {dateFilter === "custom" && (
-          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-border/30">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Calendar className="h-3.5 w-3.5" />
-              <span>From:</span>
-              <Input
-                type="date"
-                value={customStartDate}
-                onChange={(e) => {
-                  setCustomStartDate(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="h-8 w-36 text-xs bg-background/80 rounded-lg"
-              />
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span>To:</span>
-              <Input
-                type="date"
-                value={customEndDate}
-                onChange={(e) => {
-                  setCustomEndDate(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="h-8 w-36 text-xs bg-background/80 rounded-lg"
-              />
-            </div>
-          </div>
-        )}
+        <button
+          onClick={() => setActiveLedgerTab("borrower_repayments")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 ${
+            activeLedgerTab === "borrower_repayments"
+              ? "fx-brand-gradient text-white shadow-md"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+          }`}
+        >
+          Borrower Repayments ({borrowerRepayments.length})
+        </button>
       </div>
 
-      {/* ── Section 4: Ledger Title & Subtitle ──────────────────────────────── */}
-      <div className="flex items-center justify-between px-1">
-        <div>
-          <h2 className="text-sm font-black uppercase tracking-wider text-primary flex items-center gap-2">
-            <Landmark className="h-4 w-4" /> CAPITAL FUNDING LEDGER
-          </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Complete chronological record of capital funding transactions and their linked loans.
-          </p>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Showing <strong>{filteredTransactions.length}</strong> record{filteredTransactions.length !== 1 ? "s" : ""}
-        </div>
-      </div>
-
-      {/* ── Section 5: The Ledger (Desktop Financial Table + Mobile Cards) ──── */}
-      {filteredTransactions.length === 0 ? (
-        <div className="py-16 text-center rounded-2xl bg-card/40 border border-border/50 p-6 space-y-3">
-          <div className="h-12 w-12 rounded-2xl bg-muted/40 text-muted-foreground flex items-center justify-center mx-auto">
-            <Coins className="h-6 w-6 opacity-60" />
-          </div>
-          <h3 className="font-bold text-sm text-foreground">No funding transactions found</h3>
-          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            {hasActiveFilters
-              ? "No transactions match your current search or date filters."
-              : `${funder.name} uses the On-Demand funding model. When you fund a loan with ${funder.name}, it will appear here automatically.`}
-          </p>
-          <div className="pt-2 flex justify-center gap-2">
-            {hasActiveFilters ? (
-              <Button size="sm" variant="outline" onClick={handleResetFilters} className="text-xs">
-                Clear Filters
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                onClick={() => setRecordOpen(true)}
-                className="fx-brand-gradient text-white text-xs font-bold"
-              >
-                <ArrowDownRight className="h-3.5 w-3.5 mr-1" /> Record Received Capital
-              </Button>
-            )}
-          </div>
-        </div>
-      ) : (
+      {/* ── TAB 1: CAPITAL FUNDING EVENTS (Chinni -> Borrower) ──────────────── */}
+      {activeLedgerTab === "funding" && (
         <div className="space-y-4">
-          {/* DESKTOP TABLE (Hidden on small screens, perfectly responsive without clipping) */}
-          <div className="hidden md:block rounded-2xl border border-border/60 bg-card/60 overflow-hidden shadow-sm">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-border/40 bg-accent/25 dark:bg-secondary/25">
-                  <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px] w-28">Date</th>
-                  <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px] w-28">Funding ID</th>
-                  <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px] w-24">Type</th>
-                  <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px] w-32">Amount</th>
-                  <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px]">Borrower / Loan</th>
-                  <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px] w-28">Status</th>
-                  <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px] text-right w-44">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/20">
+          {/* Toolbar */}
+          <div className="bg-card/70 border border-border/60 rounded-2xl p-4 space-y-3">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search borrower, funding ID (CF-001), loan ID..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="pl-10 h-10 rounded-xl bg-background/70 border-border/50 text-xs"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="h-10 px-3 rounded-xl bg-background/70 border border-border/50 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="allocated">Allocated</option>
+                  <option value="partially_returned">Partially Returned</option>
+                  <option value="returned">Fully Returned</option>
+                  <option value="advance">Advance Only</option>
+                </select>
+
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="h-10 px-3 rounded-xl bg-background/70 border border-border/50 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="amount_desc">Amount (High to Low)</option>
+                  <option value="amount_asc">Amount (Low to High)</option>
+                  <option value="borrower">Borrower (A-Z)</option>
+                </select>
+
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleResetFilters}
+                    className="h-10 px-2.5 rounded-xl text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <RotateCcw className="h-3 w-3 mr-1" /> Reset
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop Table */}
+          {filteredTransactions.length === 0 ? (
+            <div className="py-16 text-center rounded-2xl bg-card/40 border border-border/50 p-6 space-y-3">
+              <Coins className="h-8 w-8 mx-auto text-muted-foreground opacity-50" />
+              <h3 className="font-bold text-sm text-foreground">No funding transactions found</h3>
+              <p className="text-xs text-muted-foreground">
+                When you fund a loan with {funder.name}, it will appear here automatically.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="hidden md:block rounded-2xl border border-border/60 bg-card/60 overflow-hidden shadow-sm">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-border/40 bg-accent/25 dark:bg-secondary/25">
+                      <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px] w-28">Date</th>
+                      <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px] w-28">Funding ID</th>
+                      <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px] w-24">Type</th>
+                      <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px] w-48">Amount & Principal</th>
+                      <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px]">Borrower / Loan</th>
+                      <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px] w-36">Status</th>
+                      <th className="py-3 px-4 font-bold text-muted-foreground uppercase text-[10px] text-right w-36">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/20">
+                    {paginatedTransactions.map((tx) => (
+                      <tr
+                        key={tx.transactionId}
+                        onClick={() => handleViewTx(tx)}
+                        className="hover:bg-accent/20 dark:hover:bg-secondary/20 transition-colors cursor-pointer"
+                      >
+                        <td className="py-3 px-4 font-semibold text-foreground whitespace-nowrap">
+                          {formatDate(tx.fundingDate)}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-primary whitespace-nowrap">
+                          {tx.transactionCode}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {tx.type === "FUNDING" ? (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-primary/10 text-primary border border-primary/20">
+                              Funding
+                            </span>
+                          ) : tx.type === "ADVANCE" ? (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                              Advance
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                              Return
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div>
+                            <span className="font-extrabold text-foreground text-sm">
+                              ₹{fmt(tx.originalAmount || tx.amount)}
+                            </span>
+                            {tx.type === "FUNDING" && (
+                              <div className="text-[10px] space-y-0.5 mt-0.5">
+                                <div className="text-emerald-400 font-semibold">
+                                  Allocated: ₹{fmt(tx.currentlyAllocated)}
+                                </div>
+                                <div className="text-blue-400 font-semibold">
+                                  Returned: ₹{fmt(tx.returnedFromBorrower)}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          {tx.borrowerName ? (
+                            <div className="space-y-0.5">
+                              <p className="font-bold text-foreground text-xs">{tx.borrowerName}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono">
+                                {tx.loanCode || (tx.loanId ? `LN-${tx.loanId.slice(0, 6).toUpperCase()}` : "—")}
+                                {tx.loanPrincipal ? ` • ₹${fmt(tx.loanPrincipal)} Principal` : ""}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] font-medium text-blue-400">
+                              Unallocated Received Advance
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {tx.type === "FUNDING" ? (
+                            tx.currentlyAllocated === 0 && (tx.originalAmount || tx.amount) > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <CheckCircle2 className="h-2.5 w-2.5" /> Fully Returned
+                              </span>
+                            ) : tx.returnedFromBorrower > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                <Clock className="h-2.5 w-2.5" /> Partially Returned
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <CheckCircle2 className="h-2.5 w-2.5" /> Allocated
+                              </span>
+                            )
+                          ) : tx.status === "received" ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                              <Clock className="h-2.5 w-2.5" /> Unallocated
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-muted/40 text-muted-foreground border border-border/40">
+                              {tx.status}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleViewTx(tx)}
+                              className="h-7 px-2 text-[11px] font-bold text-foreground hover:bg-accent/40"
+                            >
+                              <Eye className="h-3 w-3 mr-1" /> View
+                            </Button>
+                            {tx.loanId && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => router.push(`/loan-management?loanId=${tx.loanId}`)}
+                                className="h-7 px-2.5 text-[11px] font-bold text-primary border-primary/30 hover:bg-primary/10"
+                                title="Open Loan File"
+                              >
+                                <span>View Loan</span>
+                                <ExternalLink className="h-2.5 w-2.5 ml-1" />
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards */}
+              <div className="md:hidden flex flex-col gap-3">
                 {paginatedTransactions.map((tx) => (
-                  <tr
+                  <div
                     key={tx.transactionId}
                     onClick={() => handleViewTx(tx)}
-                    className="hover:bg-accent/20 dark:hover:bg-secondary/20 transition-colors cursor-pointer"
+                    className="w-full rounded-2xl border border-border/60 bg-card/70 p-4 space-y-3 cursor-pointer hover:bg-card transition-colors shadow-sm"
                   >
-                    {/* Date */}
-                    <td className="py-3 px-4 font-semibold text-foreground whitespace-nowrap">
-                      {formatDate(tx.fundingDate)}
-                    </td>
-
-                    {/* Funding ID */}
-                    <td className="py-3 px-4 font-mono font-bold text-primary whitespace-nowrap">
-                      {tx.transactionCode}
-                    </td>
-
-                    {/* Type */}
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      {tx.type === "FUNDING" ? (
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-primary/10 text-primary border border-primary/20">
-                          Funding
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="text-[11px] font-semibold text-muted-foreground">
+                          {formatDate(tx.fundingDate)}
                         </span>
-                      ) : tx.type === "ADVANCE" ? (
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                          Advance
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          Return
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Amount */}
-                    <td className="py-3 px-4 font-black text-sm text-foreground whitespace-nowrap">
-                      ₹{fmt(tx.amount)}
-                    </td>
-
-                    {/* Borrower / Loan */}
-                    <td className="py-3 px-4">
-                      {tx.borrowerName ? (
-                        <div className="space-y-0.5">
-                          <p className="font-bold text-foreground text-xs">{tx.borrowerName}</p>
-                          <p className="text-[10px] text-muted-foreground font-mono">
-                            {tx.loanCode || (tx.loanId ? `LN-${tx.loanId.slice(0, 6).toUpperCase()}` : "—")}
-                            {tx.loanPrincipal ? ` • ₹${fmt(tx.loanPrincipal)} Principal` : ""}
-                          </p>
-                        </div>
-                      ) : (
-                        <span className="text-[11px] font-medium text-blue-400">
-                          Unallocated Received Advance
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Status */}
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      {tx.status === "allocated" ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          <CheckCircle2 className="h-2.5 w-2.5" /> Allocated
-                        </span>
-                      ) : tx.status === "received" ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                          <Clock className="h-2.5 w-2.5" /> Unallocated
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-muted/40 text-muted-foreground border border-border/40">
-                          {tx.status}
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleViewTx(tx)}
-                          className="h-7 px-2 text-[11px] font-bold text-foreground hover:bg-accent/40"
-                        >
-                          <Eye className="h-3 w-3 mr-1" /> View
-                        </Button>
-
-                        {tx.loanId && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => router.push(`/loan-management?loanId=${tx.loanId}`)}
-                            className="h-7 px-2.5 text-[11px] font-bold text-primary border-primary/30 hover:bg-primary/10"
-                            title="Open Loan File"
-                          >
-                            <span>View Loan</span>
-                            <ExternalLink className="h-2.5 w-2.5 ml-1" />
-                          </Button>
-                        )}
+                        <p className="font-mono font-black text-sm text-primary mt-0.5">
+                          {tx.transactionCode}
+                        </p>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* MOBILE CARDS (Visible only on < md screens, zero horizontal overflow) */}
-          <div className="md:hidden flex flex-col gap-3">
-            {paginatedTransactions.map((tx) => (
-              <div
-                key={tx.transactionId}
-                onClick={() => handleViewTx(tx)}
-                className="w-full rounded-2xl border border-border/60 bg-card/70 p-4 space-y-3 cursor-pointer hover:bg-card transition-colors shadow-sm"
-              >
-                {/* Header row */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-[11px] font-semibold text-muted-foreground">
-                      {formatDate(tx.fundingDate)}
-                    </span>
-                    <p className="font-mono font-black text-sm text-primary mt-0.5">
-                      {tx.transactionCode}
-                    </p>
-                  </div>
-
-                  <div className="text-right">
-                    <p className="font-black text-base text-foreground">
-                      ₹{fmt(tx.amount)}
-                    </p>
-                    <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      {tx.status}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Borrower / Allocation Info */}
-                <div className="p-2.5 rounded-xl bg-accent/20 dark:bg-secondary/20 text-xs space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Borrower</span>
-                    <strong className="text-foreground">{tx.borrowerName || "Unallocated"}</strong>
-                  </div>
-                  {tx.loanCode && (
-                    <div className="flex justify-between">
-                      <span className="text-[10px] uppercase font-bold text-muted-foreground">Loan</span>
-                      <span className="font-mono text-muted-foreground">{tx.loanCode}</span>
+                      <div className="text-right">
+                        <p className="font-black text-base text-foreground">
+                          ₹{fmt(tx.originalAmount || tx.amount)}
+                        </p>
+                        <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          {tx.currentlyAllocated === 0 ? "Fully Returned" : tx.status}
+                        </span>
+                      </div>
                     </div>
-                  )}
-                </div>
 
-                {/* Mobile Action Buttons */}
-                <div className="flex items-center justify-between pt-1 gap-2" onClick={(e) => e.stopPropagation()}>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleViewTx(tx)}
-                    className="h-8 px-3 text-xs font-semibold text-foreground flex-1"
-                  >
-                    <Eye className="h-3.5 w-3.5 mr-1" /> View Details
-                  </Button>
+                    {tx.type === "FUNDING" && (
+                      <div className="grid grid-cols-2 gap-2 p-2 rounded-xl bg-accent/15 text-[11px] text-center">
+                        <div>
+                          <span className="text-[9px] uppercase font-bold text-muted-foreground">Allocated</span>
+                          <p className="font-bold text-emerald-400">₹{fmt(tx.currentlyAllocated)}</p>
+                        </div>
+                        <div>
+                          <span className="text-[9px] uppercase font-bold text-muted-foreground">Returned</span>
+                          <p className="font-bold text-blue-400">₹{fmt(tx.returnedFromBorrower)}</p>
+                        </div>
+                      </div>
+                    )}
 
-                  {tx.loanId && (
+                    <div className="p-2.5 rounded-xl bg-accent/20 dark:bg-secondary/20 text-xs space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Borrower</span>
+                        <strong className="text-foreground">{tx.borrowerName || "Unallocated"}</strong>
+                      </div>
+                      {tx.loanCode && (
+                        <div className="flex justify-between">
+                          <span className="text-[10px] uppercase font-bold text-muted-foreground">Loan</span>
+                          <span className="font-mono text-muted-foreground">{tx.loanCode}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-2 px-1 text-xs text-muted-foreground">
+                  <span>
+                    Page {safeCurrentPage} of {totalPages}
+                  </span>
+                  <div className="flex items-center gap-1.5">
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => router.push(`/loan-management?loanId=${tx.loanId}`)}
-                      className="h-8 px-3 text-xs font-bold text-primary border-primary/30 flex-1"
+                      disabled={safeCurrentPage <= 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      className="h-8 px-2.5 text-xs font-semibold"
                     >
-                      <span>View Loan</span>
-                      <ExternalLink className="h-3 w-3 ml-1" />
+                      <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Previous
                     </Button>
-                  )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={safeCurrentPage >= totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      className="h-8 px-2.5 text-xs font-semibold"
+                    >
+                      Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-
-          {/* ── Section 6: Pagination & Summary Status Bar ─────────────────── */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 px-1 text-xs text-muted-foreground">
-            <div className="flex flex-wrap items-center gap-2">
-              <span>
-                Showing <strong>{(safeCurrentPage - 1) * pageSize + 1}</strong>–
-                <strong>{Math.min(safeCurrentPage * pageSize, filteredTransactions.length)}</strong> of{" "}
-                <strong>{filteredTransactions.length}</strong> transactions
-              </span>
-
-              <span className="hidden sm:inline">•</span>
-
-              <div className="flex items-center gap-1.5">
-                <span>Per page:</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="h-7 px-2 rounded-lg bg-card border border-border/40 text-xs font-semibold text-foreground"
-                >
-                  <option value={10}>10</option>
-                  <option value={15}>15</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                </select>
-              </div>
+              )}
             </div>
-
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1.5 self-center sm:self-auto">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={safeCurrentPage <= 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  className="h-8 px-2.5 text-xs font-semibold"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Previous
-                </Button>
-
-                <span className="px-2 font-mono text-xs">
-                  {safeCurrentPage} / {totalPages}
-                </span>
-
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={safeCurrentPage >= totalPages}
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  className="h-8 px-2.5 text-xs font-semibold"
-                >
-                  Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* Bottom Totals Bar */}
-          <div className="p-3.5 rounded-xl bg-accent/15 dark:bg-secondary/15 border border-border/40 text-xs flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 font-bold text-foreground">
-              <Landmark className="h-4 w-4 text-primary" />
-              <span>Ledger Summary (Current View)</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-4 text-xs">
-              <div>
-                <span className="text-muted-foreground mr-1">Filtered Sum:</span>
-                <strong className="text-foreground">₹{fmt(filteredProvidedSum)}</strong>
-              </div>
-              <div>
-                <span className="text-muted-foreground mr-1">Allocated:</span>
-                <strong className="text-emerald-400">₹{fmt(filteredAllocatedSum)}</strong>
-              </div>
-              <div>
-                <span className="text-muted-foreground mr-1">Unallocated:</span>
-                <strong className="text-blue-400">
-                  ₹{fmt(Math.max(0, filteredProvidedSum - filteredAllocatedSum))}
-                </strong>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* ── Section 7: Modal — Transaction Details ──────────────────────────── */}
+      {/* ── TAB 2: PAYMENTS TO CAPITAL PERSON (Section 17: Finexa -> Chinni) ── */}
+      {activeLedgerTab === "payments_to_funder" && (
+        <div className="bg-card/70 border border-border/60 rounded-[22px] p-5 space-y-4 backdrop-blur-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-wider text-foreground flex items-center gap-2">
+                <RotateCcw className="h-4 w-4 text-purple-400" /> PAYMENTS TO CAPITAL PERSON
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Record of principal paid back to {funder.name} from borrower repayments.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="px-3 py-1 rounded-full text-xs font-black bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                Total Paid: ₹{fmt(metrics.paidBackToCapitalPerson ?? metrics.totalReturned)}
+              </span>
+              <Button
+                onClick={() => {
+                  setPayAmount(metrics.capitalPayable > 0 ? String(metrics.capitalPayable) : "");
+                  setPayDate(new Date().toISOString().split("T")[0]!);
+                  setPayNotes("");
+                  setPayPersonOpen(true);
+                }}
+                disabled={metrics.capitalPayable <= 0}
+                size="sm"
+                className={`h-9 px-4 rounded-xl text-xs font-black shadow-md ${
+                  metrics.capitalPayable > 0
+                    ? "fx-brand-gradient text-white fx-cta-glow"
+                    : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
+                }`}
+              >
+                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                <span>Pay Capital Person</span>
+              </Button>
+            </div>
+          </div>
+
+          {paymentsToCapitalPerson.length === 0 ? (
+            <div className="py-12 text-center text-xs text-muted-foreground bg-muted/20 rounded-xl border border-border/30 space-y-2">
+              <RotateCcw className="h-6 w-6 mx-auto text-muted-foreground opacity-50" />
+              <p className="font-semibold text-foreground text-sm">No payments recorded yet</p>
+              <p>When you return borrower principal back to {funder.name}, it will be listed here.</p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-border/40">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-accent/20 border-b border-border/30 text-[10px] font-bold uppercase text-muted-foreground">
+                  <tr>
+                    <th className="py-3 px-4 w-32">Date</th>
+                    <th className="py-3 px-4 w-36">Payment ID</th>
+                    <th className="py-3 px-4 text-right w-36">Amount</th>
+                    <th className="py-3 px-4">Notes / Remarks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/20">
+                  {paymentsToCapitalPerson.map((pay) => (
+                    <tr key={pay.returnId} className="hover:bg-accent/10">
+                      <td className="py-3 px-4 font-medium text-foreground">{formatDate(pay.returnDate)}</td>
+                      <td className="py-3 px-4 font-mono font-bold text-primary">{pay.paymentCode}</td>
+                      <td className="py-3 px-4 text-right font-black text-emerald-400 text-sm">
+                        ₹{fmt(pay.amount)}
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground">{pay.notes || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB 3: BORROWER REPAYMENTS (Section 7: Borrower -> Finexa) ───────── */}
+      {activeLedgerTab === "borrower_repayments" && (
+        <div className="bg-card/70 border border-border/60 rounded-[22px] p-5 space-y-4 backdrop-blur-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-wider text-foreground flex items-center gap-2">
+                <BadgeCheck className="h-4 w-4 text-blue-400" /> BORROWER PRINCIPAL REPAYMENTS
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Actual principal repayments collected from borrowers for loans funded by {funder.name}.
+              </p>
+            </div>
+            <span className="px-3 py-1 rounded-full text-xs font-black bg-blue-500/10 text-blue-400 border border-blue-500/20">
+              Total Returned: ₹{fmt(metrics.returnedFromBorrower)}
+            </span>
+          </div>
+
+          {borrowerRepayments.length === 0 ? (
+            <div className="py-12 text-center text-xs text-muted-foreground bg-muted/20 rounded-xl border border-border/30 space-y-2">
+              <BadgeCheck className="h-6 w-6 mx-auto text-muted-foreground opacity-50" />
+              <p className="font-semibold text-foreground text-sm">No borrower principal repayments yet</p>
+              <p>When borrowers pay principal on loans funded by {funder.name}, payments will appear here.</p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-border/40">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-accent/20 border-b border-border/30 text-[10px] font-bold uppercase text-muted-foreground">
+                  <tr>
+                    <th className="py-3 px-4 w-32">Payment Date</th>
+                    <th className="py-3 px-4 w-32">Loan Code</th>
+                    <th className="py-3 px-4">Borrower Name</th>
+                    <th className="py-3 px-4 text-right w-36">Principal Amount</th>
+                    <th className="py-3 px-4">Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/20">
+                  {borrowerRepayments.map((p) => (
+                    <tr key={p.paymentId} className="hover:bg-accent/10">
+                      <td className="py-3 px-4 font-medium text-foreground">{formatDate(p.paymentDate)}</td>
+                      <td className="py-3 px-4 font-mono font-bold text-primary">{p.loanCode}</td>
+                      <td className="py-3 px-4 font-semibold text-foreground">
+                        {p.borrowerName} <span className="text-[10px] text-muted-foreground font-mono">({p.borrowerMobile})</span>
+                      </td>
+                      <td className="py-3 px-4 text-right font-black text-blue-400 text-sm">
+                        ₹{fmt(p.amount)}
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground">{p.notes || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Section 4: Modal — Transaction Details ──────────────────────────── */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="max-w-md w-full rounded-2xl p-6 bg-card border border-border/70 shadow-2xl">
           {selectedTx && (
@@ -937,7 +1100,7 @@ export function CapitalFundingLedgerView({
                     {selectedTx.transactionCode}
                   </span>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    {selectedTx.status}
+                    {selectedTx.currentlyAllocated === 0 ? "Fully Returned" : selectedTx.status}
                   </span>
                 </div>
                 <DialogTitle className="text-lg font-black text-foreground pt-1">
@@ -948,14 +1111,25 @@ export function CapitalFundingLedgerView({
                 </DialogDescription>
               </DialogHeader>
 
-              {/* Amount & Date Card */}
               <div className="p-4 rounded-xl bg-accent/25 dark:bg-secondary/25 text-center space-y-1">
-                <span className="text-[10px] font-bold uppercase text-muted-foreground">Funding Amount</span>
-                <p className="text-2xl font-black text-primary">₹{fmt(selectedTx.amount)}</p>
+                <span className="text-[10px] font-bold uppercase text-muted-foreground">Original Funding Amount</span>
+                <p className="text-2xl font-black text-primary">₹{fmt(selectedTx.originalAmount || selectedTx.amount)}</p>
                 <p className="text-xs text-muted-foreground">{formatDate(selectedTx.fundingDate)}</p>
               </div>
 
-              {/* Transaction Key Details */}
+              {selectedTx.type === "FUNDING" && (
+                <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-accent/15 text-center text-xs">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Currently Allocated</span>
+                    <p className="font-extrabold text-emerald-400 text-base mt-0.5">₹{fmt(selectedTx.currentlyAllocated)}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Returned by Borrower</span>
+                    <p className="font-extrabold text-blue-400 text-base mt-0.5">₹{fmt(selectedTx.returnedFromBorrower)}</p>
+                  </div>
+                </div>
+              )}
+
               <div className="divide-y divide-border/30 border border-border/30 rounded-xl overflow-hidden text-xs">
                 <div className="p-3 flex justify-between">
                   <span className="text-muted-foreground">Capital Person:</span>
@@ -964,10 +1138,6 @@ export function CapitalFundingLedgerView({
                 <div className="p-3 flex justify-between">
                   <span className="text-muted-foreground">Transaction Type:</span>
                   <span className="font-bold text-foreground">{selectedTx.type}</span>
-                </div>
-                <div className="p-3 flex justify-between">
-                  <span className="text-muted-foreground">Status:</span>
-                  <span className="font-bold text-emerald-400 capitalize">{selectedTx.status}</span>
                 </div>
 
                 {selectedTx.borrowerName && (
@@ -1005,23 +1175,8 @@ export function CapitalFundingLedgerView({
                     </p>
                   </div>
                 )}
-
-                {/* Receipt Status */}
-                <div className="p-3 flex items-center justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <Receipt className="h-3.5 w-3.5" /> Receipt:
-                  </span>
-                  {selectedTx.hasReceipt ? (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      Receipt Available
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground italic">No receipt attached</span>
-                  )}
-                </div>
               </div>
 
-              {/* Action Buttons */}
               <DialogFooter className="pt-2 flex flex-col sm:flex-row gap-2">
                 {selectedTx.loanId && (
                   <Button
@@ -1048,15 +1203,15 @@ export function CapitalFundingLedgerView({
         </DialogContent>
       </Dialog>
 
-      {/* ── Section 8: Modal — Record Received Capital ──────────────────────── */}
+      {/* ── Section 5: Modal — Record Received Advance ───────────────────────── */}
       <Dialog open={recordOpen} onOpenChange={setRecordOpen}>
         <DialogContent className="max-w-md w-full rounded-2xl p-6 bg-card border border-border/70 shadow-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-black text-foreground flex items-center gap-2">
-              <ArrowDownRight className="h-5 w-5 text-emerald-400" /> Record Received Capital
+              <ArrowDownRight className="h-5 w-5 text-emerald-400" /> Record Received Advance
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Record capital received in advance from {funder.name}.
+              Record capital received in advance from {funder.name} pending loan allocation.
             </DialogDescription>
           </DialogHeader>
 
@@ -1103,10 +1258,10 @@ export function CapitalFundingLedgerView({
 
             <div>
               <label className="text-[11px] font-bold uppercase text-muted-foreground block mb-1">
-                Notes / Purpose / Reference
+                Notes / Reference
               </label>
               <Input
-                placeholder="e.g. Received for Jagadeesh loan or advance transfer"
+                placeholder="e.g. Advance transfer"
                 value={recordNotes}
                 onChange={(e) => setRecordNotes(e.target.value)}
                 className="h-10 text-xs rounded-xl"
@@ -1127,7 +1282,113 @@ export function CapitalFundingLedgerView({
                 disabled={isSubmittingRecord}
                 className="fx-brand-gradient text-white text-xs font-bold"
               >
-                {isSubmittingRecord ? "Recording..." : "Record Capital"}
+                {isSubmittingRecord ? "Recording..." : "Record Advance"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Section 6: Modal — Pay Capital Person (Returning Principal) ───────── */}
+      <Dialog open={payPersonOpen} onOpenChange={setPayPersonOpen}>
+        <DialogContent className="max-w-md w-full rounded-2xl p-6 bg-card border border-border/70 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-foreground flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-primary" /> Pay Capital Person
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Return borrower-repaid principal to {funder.name}. Principal only — no interest.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitPayCapitalPerson} className="space-y-4 pt-2">
+            <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/20 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Maximum available principal to return
+              </span>
+              <p className="text-2xl font-black text-primary">₹{fmt(metrics.capitalPayable)}</p>
+              <p className="text-[10px] text-muted-foreground">
+                Calculated from actual borrower principal payments received. Overpayment is prevented.
+              </p>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold uppercase text-muted-foreground block mb-1">
+                Capital Person
+              </label>
+              <Input
+                value={`${funder.name} (${funder.mobile})`}
+                disabled
+                className="bg-muted/40 text-xs font-bold"
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold uppercase text-muted-foreground block mb-1">
+                Amount to Return (₹) *
+              </label>
+              <Input
+                type="number"
+                placeholder={`Max: ${metrics.capitalPayable}`}
+                value={payAmount}
+                onChange={(e) => setPayAmount(e.target.value)}
+                required
+                min="1"
+                max={metrics.capitalPayable}
+                step="any"
+                className="h-11 text-base font-bold tracking-tight rounded-xl"
+              />
+              {Number(payAmount) > metrics.capitalPayable && (
+                <p className="text-[11px] text-destructive font-semibold mt-1">
+                  Amount exceeds maximum available principal of ₹{fmt(metrics.capitalPayable)}.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold uppercase text-muted-foreground block mb-1">
+                Payment Date *
+              </label>
+              <Input
+                type="date"
+                value={payDate}
+                onChange={(e) => setPayDate(e.target.value)}
+                required
+                className="h-10 text-xs rounded-xl"
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold uppercase text-muted-foreground block mb-1">
+                Notes (Optional)
+              </label>
+              <Input
+                placeholder="e.g. Principal repaid from borrower payments"
+                value={payNotes}
+                onChange={(e) => setPayNotes(e.target.value)}
+                className="h-10 text-xs rounded-xl"
+              />
+            </div>
+
+            <DialogFooter className="pt-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPayPersonOpen(false)}
+                className="text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  isSubmittingPay ||
+                  Number(payAmount) <= 0 ||
+                  Number(payAmount) > metrics.capitalPayable
+                }
+                className="fx-brand-gradient text-white text-xs font-bold"
+              >
+                {isSubmittingPay ? "Processing..." : "Confirm Payment"}
               </Button>
             </DialogFooter>
           </form>

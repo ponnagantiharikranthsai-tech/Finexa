@@ -154,8 +154,33 @@ export class CapitalRepository {
 
   // ── Capital Returns ───────────────────────────────────────────────────────
 
+  async getNextPaymentCode(): Promise<string> {
+    try {
+      const [latest] = await db
+        .select({ code: capitalReturnsTable.paymentCode })
+        .from(capitalReturnsTable)
+        .where(sql`${capitalReturnsTable.paymentCode} IS NOT NULL`)
+        .orderBy(desc(capitalReturnsTable.createdAt))
+        .limit(1);
+
+      if (!latest?.code) return "CP-001";
+      const numPart = parseInt(latest.code.replace(/[^0-9]/g, ""), 10);
+      const nextNum = isNaN(numPart) ? 1 : numPart + 1;
+      return `CP-${String(nextNum).padStart(3, "0")}`;
+    } catch {
+      return `CP-${Date.now().toString().slice(-4)}`;
+    }
+  }
+
   async createCapitalReturn(data: typeof capitalReturnsTable.$inferInsert) {
-    const [inserted] = await db.insert(capitalReturnsTable).values(data).returning();
+    const paymentCode = data.paymentCode || (await this.getNextPaymentCode());
+    const [inserted] = await db
+      .insert(capitalReturnsTable)
+      .values({
+        ...data,
+        paymentCode,
+      })
+      .returning();
     if (!inserted) {
       throw new Error("Failed to insert capital return");
     }
@@ -167,14 +192,14 @@ export class CapitalRepository {
       .select()
       .from(capitalReturnsTable)
       .where(eq(capitalReturnsTable.funderId, funderId))
-      .orderBy(capitalReturnsTable.returnDate);
+      .orderBy(desc(capitalReturnsTable.returnDate), desc(capitalReturnsTable.createdAt));
   }
 
   async findAllCapitalReturns() {
     return await db
       .select()
       .from(capitalReturnsTable)
-      .orderBy(capitalReturnsTable.returnDate);
+      .orderBy(desc(capitalReturnsTable.returnDate), desc(capitalReturnsTable.createdAt));
   }
 
   // ── Capital Allocations ───────────────────────────────────────────────────

@@ -148,6 +148,16 @@ export function CapitalFundingLedgerView({
     transactionCount: 0,
     status: "ACTIVE",
   };
+
+  // Effective payable amount: guaranteed to recognize unallocated capital even if cached data has stale stats
+  const effectivePayable = Math.max(
+    0,
+    Number(metrics.capitalPayable ?? 0) > 0
+      ? Number(metrics.capitalPayable)
+      : Math.max(0, (Number(metrics.unallocatedReceived) || 0) + (Number(metrics.returnedFromBorrower) || 0) - (Number(metrics.paidBackToCapitalPerson) || 0)) ||
+        Math.max(0, (Number(metrics.totalProvided) || 0) - (Number(metrics.currentlyAllocated) || 0) - (Number(metrics.paidBackToCapitalPerson) || 0))
+  );
+
   const rawTransactions = data?.transactions || [];
   const paymentsToCapitalPerson = data?.paymentsToCapitalPerson || [];
   const borrowerRepayments = data?.borrowerRepayments || [];
@@ -319,9 +329,9 @@ export function CapitalFundingLedgerView({
       return;
     }
 
-    if (numAmount > metrics.capitalPayable) {
+    if (numAmount > effectivePayable) {
       toast.error(
-        `Maximum payable amount is ₹${fmt(metrics.capitalPayable)}. Overpayment is not allowed.`
+        `Maximum payable amount is ₹${fmt(effectivePayable)}. Overpayment is not allowed.`
       );
       return;
     }
@@ -495,21 +505,21 @@ export function CapitalFundingLedgerView({
 
             <Button
               onClick={() => {
-                setPayAmount(metrics.capitalPayable > 0 ? String(metrics.capitalPayable) : "");
+                setPayAmount(effectivePayable > 0 ? String(effectivePayable) : "");
                 setPayDate(new Date().toISOString().split("T")[0]!);
                 setPayNotes("");
                 setPayPersonOpen(true);
               }}
-              disabled={metrics.capitalPayable <= 0}
+              disabled={effectivePayable <= 0}
               size="sm"
               className={`h-9 px-4 rounded-xl text-xs font-black shadow-md transition-all ${
-                metrics.capitalPayable > 0
+                effectivePayable > 0
                   ? "fx-brand-gradient border-0 text-white fx-cta-glow cursor-pointer"
                   : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
               }`}
             >
               <RotateCcw className="h-3.5 w-3.5 mr-1.5 text-white" />
-              <span>{metrics.capitalPayable > 0 ? "Pay Capital Person" : "Nothing to Pay"}</span>
+              <span>{effectivePayable > 0 ? "Pay Capital Person" : "Nothing to Pay"}</span>
             </Button>
           </div>
         </div>
@@ -541,20 +551,20 @@ export function CapitalFundingLedgerView({
           <div className="flex items-center gap-2">
             <Button
               onClick={() => {
-                setPayAmount(metrics.capitalPayable > 0 ? String(metrics.capitalPayable) : "");
+                setPayAmount(effectivePayable > 0 ? String(effectivePayable) : "");
                 setPayDate(new Date().toISOString().split("T")[0]!);
                 setPayNotes("");
                 setPayPersonOpen(true);
               }}
-              disabled={metrics.capitalPayable <= 0}
+              disabled={effectivePayable <= 0}
               className={`h-9 px-4 rounded-xl text-xs font-black shadow-md ${
-                metrics.capitalPayable > 0
+                effectivePayable > 0
                   ? "fx-brand-gradient text-white fx-cta-glow hover:scale-[1.02]"
                   : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
               }`}
             >
               <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-              <span>{metrics.capitalPayable > 0 ? "Pay Capital Person" : "Nothing to Pay"}</span>
+              <span>{effectivePayable > 0 ? "Pay Capital Person" : "Nothing to Pay"}</span>
             </Button>
           </div>
         </div>
@@ -631,19 +641,38 @@ export function CapitalFundingLedgerView({
           </div>
 
           {/* 6. Payable to Capital Person */}
-          <div className="p-4 rounded-2xl bg-primary/10 border border-primary/30 flex flex-col justify-between relative overflow-hidden">
+          <div
+            onClick={() => {
+              if (effectivePayable > 0) {
+                setPayAmount(String(effectivePayable));
+                setPayDate(new Date().toISOString().split("T")[0]!);
+                setPayNotes("");
+                setPayPersonOpen(true);
+              }
+            }}
+            className={`p-4 rounded-2xl bg-primary/10 border border-primary/30 flex flex-col justify-between relative overflow-hidden transition-all ${
+              effectivePayable > 0 ? "cursor-pointer hover:border-primary/60 hover:bg-primary/15" : ""
+            }`}
+          >
             <div className="flex items-center justify-between text-primary">
               <span className="text-[10px] font-bold uppercase tracking-wider">Payable to Person</span>
-              {metrics.capitalPayable > 0 && (
+              {effectivePayable > 0 && (
                 <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
               )}
             </div>
             <div className="mt-2">
-              <p className="text-xl md:text-2xl font-black text-primary tracking-tight">
-                ₹{fmt(metrics.capitalPayable)}
-              </p>
+              <div className="flex items-baseline justify-between gap-1">
+                <p className="text-xl md:text-2xl font-black text-primary tracking-tight">
+                  ₹{fmt(effectivePayable)}
+                </p>
+                {effectivePayable > 0 && (
+                  <span className="text-[10px] font-black text-primary hover:underline">
+                    Pay Now →
+                  </span>
+                )}
+              </div>
               <p className="text-[10px] text-muted-foreground mt-0.5">
-                {metrics.capitalPayable > 0 ? "Ready to pay back now" : "Fully settled with funder"}
+                {effectivePayable > 0 ? "Ready to pay back now" : "Fully settled with funder"}
               </p>
             </div>
           </div>
@@ -999,15 +1028,15 @@ export function CapitalFundingLedgerView({
               </span>
               <Button
                 onClick={() => {
-                  setPayAmount(metrics.capitalPayable > 0 ? String(metrics.capitalPayable) : "");
+                  setPayAmount(effectivePayable > 0 ? String(effectivePayable) : "");
                   setPayDate(new Date().toISOString().split("T")[0]!);
                   setPayNotes("");
                   setPayPersonOpen(true);
                 }}
-                disabled={metrics.capitalPayable <= 0}
+                disabled={effectivePayable <= 0}
                 size="sm"
                 className={`h-9 px-4 rounded-xl text-xs font-black shadow-md ${
-                  metrics.capitalPayable > 0
+                  effectivePayable > 0
                     ? "fx-brand-gradient text-white fx-cta-glow"
                     : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
                 }`}
@@ -1364,7 +1393,7 @@ export function CapitalFundingLedgerView({
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Maximum Principal Available to Pay
               </span>
-              <p className="text-2xl font-black text-primary">₹{fmt(metrics.capitalPayable)}</p>
+              <p className="text-2xl font-black text-primary">₹{fmt(effectivePayable)}</p>
               <p className="text-[10px] text-muted-foreground">
                 Principal only. No interest, rent, or profit. Overpayment is prevented.
               </p>
@@ -1387,18 +1416,18 @@ export function CapitalFundingLedgerView({
               </label>
               <Input
                 type="number"
-                placeholder={`Max: ${metrics.capitalPayable}`}
+                placeholder={`Max: ${effectivePayable}`}
                 value={payAmount}
                 onChange={(e) => setPayAmount(e.target.value)}
                 required
                 min="1"
-                max={metrics.capitalPayable}
+                max={effectivePayable}
                 step="any"
                 className="h-11 text-base font-bold tracking-tight rounded-xl"
               />
-              {Number(payAmount) > metrics.capitalPayable && (
+              {Number(payAmount) > effectivePayable && (
                 <p className="text-[11px] text-destructive font-semibold mt-1">
-                  Maximum payable amount is ₹{fmt(metrics.capitalPayable)}.
+                  Maximum payable amount is ₹{fmt(effectivePayable)}.
                 </p>
               )}
             </div>
@@ -1442,7 +1471,7 @@ export function CapitalFundingLedgerView({
                 disabled={
                   isSubmittingPay ||
                   Number(payAmount) <= 0 ||
-                  Number(payAmount) > metrics.capitalPayable
+                  Number(payAmount) > effectivePayable
                 }
                 className="fx-brand-gradient text-white text-xs font-bold"
               >

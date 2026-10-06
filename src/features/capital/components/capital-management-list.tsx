@@ -61,7 +61,9 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
     currentlyAllocated: Number(data?.stats?.currentlyAllocated ?? 0),
     returnedFromBorrower: Number(data?.stats?.returnedFromBorrower ?? 0),
     paidBackToCapitalPerson: Number(data?.stats?.paidBackToCapitalPerson ?? data?.stats?.totalReturned ?? 0),
-    capitalPayable: Number(data?.stats?.capitalPayable ?? 0),
+    capitalPayable: Number(data?.stats?.capitalPayable ?? 0) > 0
+      ? Number(data?.stats?.capitalPayable)
+      : Math.max(0, Number(data?.stats?.totalProvided ?? 0) - Number(data?.stats?.currentlyAllocated ?? 0) - Number(data?.stats?.paidBackToCapitalPerson ?? 0)),
     unallocatedReceived: Number(data?.stats?.unallocatedReceived ?? 0),
     activeFunders: Number(data?.stats?.activeFunders ?? 0),
   };
@@ -73,7 +75,13 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
     currentlyAllocated: Number(f.currentlyAllocated ?? 0),
     returnedFromBorrower: Number(f.returnedFromBorrower ?? 0),
     paidBackToCapitalPerson: Number(f.paidBackToCapitalPerson ?? f.totalReturned ?? 0),
-    capitalPayable: Number(f.capitalPayable ?? 0),
+    capitalPayable: Math.max(
+      0,
+      Number(f.capitalPayable ?? 0) > 0
+        ? Number(f.capitalPayable)
+        : Math.max(0, (Number(f.unallocatedReceived) || 0) + (Number(f.returnedFromBorrower) || 0) - (Number(f.paidBackToCapitalPerson ?? f.totalReturned) || 0)) ||
+          Math.max(0, (Number(f.totalProvided ?? f.capitalAmount) || 0) - (Number(f.currentlyAllocated) || 0) - (Number(f.paidBackToCapitalPerson ?? f.totalReturned) || 0))
+    ),
     unallocatedReceived: Number(f.unallocatedReceived ?? 0),
     fundingHistory: Array.isArray(f.fundingHistory) ? f.fundingHistory : [],
     loansFunded: Array.isArray(f.loansFunded) ? f.loansFunded : [],

@@ -69,7 +69,14 @@ export async function recordCapitalReturnAction(
       return { success: false, error: "Failed to verify available capital balance." };
     }
 
-    const capitalPayable = ledgerRes.data.metrics.capitalPayable;
+    const metrics = ledgerRes.data.metrics;
+    const capitalPayable = Math.max(
+      0,
+      Number(metrics.capitalPayable ?? 0) > 0
+        ? Number(metrics.capitalPayable)
+        : Math.max(0, (Number(metrics.unallocatedReceived) || 0) + (Number(metrics.returnedFromBorrower) || 0) - (Number(metrics.paidBackToCapitalPerson) || 0)) ||
+          Math.max(0, (Number(metrics.totalProvided) || 0) - (Number(metrics.currentlyAllocated) || 0) - (Number(metrics.paidBackToCapitalPerson) || 0))
+    );
     if (amount > capitalPayable) {
       return {
         success: false,

@@ -1,17 +1,14 @@
-"use server";
+﻿"use server";
 
 import { requireAuth } from "@/lib/auth";
 import { db, withDbRetry } from "@/db/client";
 import {
-  fundersTable,
-  capitalReturnsTable,
   capitalAllocationsTable,
   capitalFundingTransactionsTable,
   loansTable,
   borrowersTable,
-  paymentsTable,
 } from "@/db/schema";
-import { eq, inArray, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { capitalRepository } from "../repository/capital.repository";
 
 export interface FundingTransactionHistoryItem {
@@ -41,13 +38,12 @@ export interface FunderWithReturns {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
-  // On-Demand Metrics
   totalProvided: number;
   currentlyAllocated: number;
   unallocatedReceived: number;
   totalReturned: number;
   remainingCapital: number;
-  availableCapital: number; // legacy alias for unallocatedReceived
+  availableCapital: number;
   investmentIndex?: number;
   totalFunderInvestments?: number;
   totalFunderCapitalProvided?: number;
@@ -81,134 +77,140 @@ export async function getCapitalDataAction() {
   try {
     await requireAuth();
 
-    // 1. Fetch all funders
-    const rawFunders = await withDbRetry(() => capitalRepository.findAllFunders());
-    // 2. Fetch all returns
-    const rawReturns = await withDbRetry(() => capitalRepository.findAllCapitalReturns());
+    // ALL QUERIES RUN IN PARALLEL - eliminates sequential waterfall
+    const [rawFunders, rawReturns, rawAllocations, rawTransactions, loanSumResult] =
+      await Promise.all([
+        withDbRetry(() => capitalRepository.findAllFunders()),
+        withDbRetry(() => capitalRepository.findAllCapitalReturns()),
+        withDbRetry(() =>
+          db
+            .select({
+              allocationId:   capitalAllocationsTable.allocationId,
+              funderId:       capitalAllocationsTable.funderId,
+              amount:         capitalAllocationsTable.amount,
+              allocationDate: capitalAllocationsTable.allocationDate,
+              status:         capitalAllocationsTable.status,
+              notes:          capitalAllocationsTable.notes,
+              loanId:         loansTable.loanId,
+              loanPrincipal:  loansTable.principal,
+              loanStatus:     loansTable.status,
+              loanDateGiven:  loansTable.dateGiven,
+              loanDueDate:    loansTable.dueDate,
+              borrowerId:     borrowersTable.borrowerId,
+              borrowerName:   borrowersTable.name,
+              borrowerMobile: borrowersTable.mobile,
+            })
+            .from(capitalAllocationsTable)
+            .innerJoin(loansTable, eq(capitalAllocationsTable.loanId, loansTable.loanId))
+            .innerJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
+            .orderBy(desc(capitalAllocationsTable.allocationDate))
+        ),
+        withDbRetry(() =>
+          db
+            .select({
+              transactionId:   capitalFundingTransactionsTable.transactionId,
+              transactionCode: capitalFundingTransactionsTable.transactionCode,
+              txFunderId:      capitalFundingTransactionsTable.funderId,
+              txAmount:        capitalFundingTransactionsTable.amount,
+              fundingDate:     capitalFundingTransactionsTable.fundingDate,
+              txStatus:        capitalFundingTransactionsTable.status,
+              txNotes:         capitalFundingTransactionsTable.notes,
+              loanId:          loansTable.loanId,
+              loanPrincipal:   loansTable.principal,
+              loanStatus:      loansTable.status,
+              borrowerId:      borrowersTable.borrowerId,
+              borrowerName:    borrowersTable.name,
+              borrowerMobile:  borrowersTable.mobile,
+            })
+            .from(capitalFundingTransactionsTable)
+            .leftJoin(loansTable, eq(capitalFundingTransactionsTable.loanId, loansTable.loanId))
+            .leftJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
+            .orderBy(
+              desc(capitalFundingTransactionsTable.fundingDate),
+              desc(capitalFundingTransactionsTable.createdAt)
+            )
+        ),
+        // Single SUM aggregate - replaces fetching all loan rows just for a total
+        withDbRetry(() =>
+          db
+            .select({ total: sql<string>`coalesce(sum(principal), '0')` })
+            .from(loansTable)
+        ).catch(() => [{ total: "0" }]),
+      ]);
 
     const returnsByFunder: Record<string, typeof rawReturns> = {};
     rawReturns.forEach((r) => {
-      if (!returnsByFunder[r.funderId]) {
-        returnsByFunder[r.funderId] = [];
-      }
-      returnsByFunder[r.funderId].push(r);
+      (returnsByFunder[r.funderId] ??= []).push(r);
     });
 
-    // 3. Fetch all allocations joined with loans & borrowers
-    const rawAllocations = await withDbRetry(() =>
-      db
-        .select({
-          allocation: capitalAllocationsTable,
-          loan: loansTable,
-          borrower: borrowersTable,
-        })
-        .from(capitalAllocationsTable)
-        .innerJoin(loansTable, eq(capitalAllocationsTable.loanId, loansTable.loanId))
-        .innerJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
-        .orderBy(desc(capitalAllocationsTable.allocationDate))
-    );
-
-    // 4. Fetch all funding transactions joined with loans & borrowers
-    const rawTransactions = await withDbRetry(() =>
-      db
-        .select({
-          tx: capitalFundingTransactionsTable,
-          loan: loansTable,
-          borrower: borrowersTable,
-        })
-        .from(capitalFundingTransactionsTable)
-        .leftJoin(loansTable, eq(capitalFundingTransactionsTable.loanId, loansTable.loanId))
-        .leftJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
-        .orderBy(desc(capitalFundingTransactionsTable.fundingDate), desc(capitalFundingTransactionsTable.createdAt))
-    );
-
-    // Group transactions by funderId
     const transactionsByFunder: Record<string, FundingTransactionHistoryItem[]> = {};
     rawTransactions.forEach((item) => {
-      const fId = item.tx.funderId;
-      if (!transactionsByFunder[fId]) {
-        transactionsByFunder[fId] = [];
-      }
-      transactionsByFunder[fId].push({
-        transactionId: item.tx.transactionId,
-        transactionCode: item.tx.transactionCode,
-        amount: Number(item.tx.amount),
-        fundingDate: item.tx.fundingDate,
-        status: item.tx.status,
-        notes: item.tx.notes,
-        loanId: item.loan ? item.loan.loanId : null,
-        borrowerId: item.borrower ? item.borrower.borrowerId : null,
-        borrowerName: item.borrower ? item.borrower.name : null,
-        borrowerMobile: item.borrower ? item.borrower.mobile : null,
-        loanPrincipal: item.loan ? Number(item.loan.principal) : null,
-        loanStatus: item.loan ? item.loan.status : null,
+      (transactionsByFunder[item.txFunderId] ??= []).push({
+        transactionId:   item.transactionId,
+        transactionCode: item.transactionCode,
+        amount:          Number(item.txAmount),
+        fundingDate:     item.fundingDate,
+        status:          item.txStatus,
+        notes:           item.txNotes,
+        loanId:          item.loanId ?? null,
+        borrowerId:      item.borrowerId ?? null,
+        borrowerName:    item.borrowerName ?? null,
+        borrowerMobile:  item.borrowerMobile ?? null,
+        loanPrincipal:   item.loanPrincipal != null ? Number(item.loanPrincipal) : null,
+        loanStatus:      item.loanStatus ?? null,
       });
     });
 
-    // Group allocations by funderId
     const allocationsByFunder: Record<string, any[]> = {};
     rawAllocations.forEach((item) => {
-      const fId = item.allocation.funderId;
-      if (!allocationsByFunder[fId]) {
-        allocationsByFunder[fId] = [];
-      }
-      const lPrincipal = Number(item.loan.principal);
-      const allocatedAmount = Number(item.allocation.amount);
-      const funderSharePercentage = lPrincipal > 0 ? Math.round((allocatedAmount / lPrincipal) * 100) : 0;
-
-      allocationsByFunder[fId].push({
-        allocationId: item.allocation.allocationId,
-        loanId: item.loan.loanId,
-        borrowerId: item.borrower.borrowerId,
-        borrowerName: item.borrower.name,
-        borrowerMobile: item.borrower.mobile,
-        loanPrincipal: lPrincipal,
+      const lPrincipal = Number(item.loanPrincipal);
+      const allocatedAmount = Number(item.amount);
+      (allocationsByFunder[item.funderId] ??= []).push({
+        allocationId:          item.allocationId,
+        loanId:                item.loanId,
+        borrowerId:            item.borrowerId,
+        borrowerName:          item.borrowerName,
+        borrowerMobile:        item.borrowerMobile,
+        loanPrincipal:         lPrincipal,
         allocatedAmount,
-        funderSharePercentage,
-        allocationDate: item.allocation.allocationDate,
-        status: item.allocation.status,
-        loanStatus: item.loan.status,
-        loanDateGiven: item.loan.dateGiven,
-        loanDueDate: item.loan.dueDate,
-        notes: item.allocation.notes,
+        funderSharePercentage: lPrincipal > 0 ? Math.round((allocatedAmount / lPrincipal) * 100) : 0,
+        allocationDate:        item.allocationDate,
+        status:                item.status,
+        loanStatus:            item.loanStatus,
+        loanDateGiven:         item.loanDateGiven,
+        loanDueDate:           item.loanDueDate,
+        notes:                 item.notes,
       });
     });
 
-    // 5. Map funders to On-Demand model
     const funders: FunderWithReturns[] = rawFunders.map((f, idx) => {
-      const funderReturns = returnsByFunder[f.funderId] || [];
-      const totalReturned = funderReturns.reduce((sum, r) => sum + Number(r.amount), 0);
-
-      const loansFunded = allocationsByFunder[f.funderId] || [];
+      const funderReturns      = returnsByFunder[f.funderId] || [];
+      const totalReturned      = funderReturns.reduce((sum, r) => sum + Number(r.amount), 0);
+      const loansFunded        = allocationsByFunder[f.funderId] || [];
       const currentlyAllocated = loansFunded.reduce(
-        (sum, a) => (a.status === "active" ? sum + a.allocatedAmount : sum),
-        0
+        (sum, a) => (a.status === "active" ? sum + a.allocatedAmount : sum), 0
       );
 
-      // Funding history from transactions (or synthesized from allocations if no tx yet)
       let fundingHistory = transactionsByFunder[f.funderId] || [];
       if (fundingHistory.length === 0 && loansFunded.length > 0) {
         fundingHistory = loansFunded.map((a, i) => ({
-          transactionId: a.allocationId,
+          transactionId:   a.allocationId,
           transactionCode: `CF-${String(i + 1).padStart(3, "0")}`,
-          amount: a.allocatedAmount,
-          fundingDate: a.allocationDate,
-          status: "allocated",
-          notes: a.notes,
-          loanId: a.loanId,
-          borrowerId: a.borrowerId,
-          borrowerName: a.borrowerName,
-          borrowerMobile: a.borrowerMobile,
-          loanPrincipal: a.loanPrincipal,
-          loanStatus: a.loanStatus,
+          amount:          a.allocatedAmount,
+          fundingDate:     a.allocationDate,
+          status:          "allocated",
+          notes:           a.notes,
+          loanId:          a.loanId,
+          borrowerId:      a.borrowerId,
+          borrowerName:    a.borrowerName,
+          borrowerMobile:  a.borrowerMobile,
+          loanPrincipal:   a.loanPrincipal,
+          loanStatus:      a.loanStatus,
         }));
       }
 
-      // Total provided is sum of actual funding events
       const totalProvidedFromHistory = fundingHistory.reduce((sum, h) => sum + h.amount, 0);
       const totalProvided = Math.max(totalProvidedFromHistory, currentlyAllocated);
-
-      // Standalone received capital (unallocated)
       const unallocatedReceived = Math.max(
         0,
         fundingHistory
@@ -217,67 +219,60 @@ export async function getCapitalDataAction() {
       );
 
       return {
-        funderId: f.funderId,
-        name: f.name,
-        mobile: f.mobile,
-        address: f.address || "",
-        fundingModel: f.fundingModel || "on_demand",
-        capitalAmount: totalProvided,
-        investmentDate: f.investmentDate,
-        status: f.status as any,
-        notes: f.notes,
-        createdAt: f.createdAt.toISOString(),
-        updatedAt: f.updatedAt.toISOString(),
+        funderId:                   f.funderId,
+        name:                       f.name,
+        mobile:                     f.mobile,
+        address:                    "",
+        fundingModel:               "on_demand",
+        capitalAmount:              totalProvided,
+        investmentDate:             f.createdAt.toISOString().split("T")[0]!,
+        status:                     f.status as any,
+        notes:                      f.notes,
+        createdAt:                  f.createdAt.toISOString(),
+        updatedAt:                  f.updatedAt.toISOString(),
         totalProvided,
         currentlyAllocated,
         unallocatedReceived,
         totalReturned,
-        remainingCapital: Math.max(0, currentlyAllocated - totalReturned),
-        availableCapital: unallocatedReceived,
-        investmentIndex: idx + 1,
-        totalFunderInvestments: fundingHistory.length,
+        remainingCapital:           Math.max(0, currentlyAllocated - totalReturned),
+        availableCapital:           unallocatedReceived,
+        investmentIndex:            idx + 1,
+        totalFunderInvestments:     fundingHistory.length,
         totalFunderCapitalProvided: totalProvided,
         fundingHistory,
         loansFunded,
         returnsList: funderReturns.map((r) => ({
-          returnId: r.returnId,
-          amount: Number(r.amount),
+          returnId:   r.returnId,
+          amount:     Number(r.amount),
           returnDate: r.returnDate,
-          notes: r.notes,
-          createdAt: r.createdAt.toISOString(),
+          notes:      r.notes,
+          createdAt:  r.createdAt.toISOString(),
         })),
       };
     });
 
-    // 6. Global Stats
-    const totalProvided = funders.reduce((sum, f) => sum + f.totalProvided, 0);
-    const currentlyAllocated = funders.reduce((sum, f) => sum + f.currentlyAllocated, 0);
+    const totalProvided       = funders.reduce((sum, f) => sum + f.totalProvided, 0);
+    const currentlyAllocated  = funders.reduce((sum, f) => sum + f.currentlyAllocated, 0);
     const unallocatedReceived = funders.reduce((sum, f) => sum + f.unallocatedReceived, 0);
-    const totalReturned = funders.reduce((sum, f) => sum + f.totalReturned, 0);
-    const activeFunders = funders.filter((f) => f.status === "active").length;
-
-    // Total loans principal in system
-    const allLoans = await db.select({ principal: loansTable.principal }).from(loansTable);
-    const totalOutstandingLoansPrincipal = allLoans.reduce(
-      (sum, l) => sum + Number(l.principal),
-      0
-    );
+    const totalReturned       = funders.reduce((sum, f) => sum + f.totalReturned, 0);
+    const activeFunders       = funders.filter((f) => f.status === "active").length;
+    const totalOutstandingLoansPrincipal = Number((loanSumResult as any)?.[0]?.total || 0);
 
     return {
       success: true,
       data: {
         funders,
         stats: {
-          totalReceived: totalProvided,
+          totalReceived:               totalProvided,
           totalProvided,
           currentlyAllocated,
           totalReturned,
-          activeCapital: currentlyAllocated,
-          availableCapital: unallocatedReceived,
+          activeCapital:               currentlyAllocated,
+          availableCapital:            unallocatedReceived,
           unallocatedReceived,
           activeFunders,
-          totalAllocated: currentlyAllocated,
-          totalCapitalWithBorrowers: currentlyAllocated,
+          totalAllocated:              currentlyAllocated,
+          totalCapitalWithBorrowers:   currentlyAllocated,
           totalOutstandingLoansPrincipal,
         },
       },

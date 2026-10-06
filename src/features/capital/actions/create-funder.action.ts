@@ -96,12 +96,7 @@ export async function createFunderAction(
       capitalRepository.createFunder({
         name,
         mobile,
-        address: address || "",
-        capitalAmount: "0.00",
-        investmentDate: todayStr,
-        returnDueDate: null,
         status: "active",
-        fundingModel: "on_demand",
         notes: notes || null,
       })
     );

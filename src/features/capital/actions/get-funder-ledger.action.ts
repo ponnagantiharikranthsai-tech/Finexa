@@ -73,38 +73,42 @@ export async function getFunderLedgerAction(
       return { success: false, error: "Capital Person not found." };
     }
 
-    // 2. Fetch all funding transactions for this funder
-    const rawTransactions = await withDbRetry(() =>
-      db
-        .select({
-          tx: capitalFundingTransactionsTable,
-          loan: loansTable,
-          borrower: borrowersTable,
-        })
-        .from(capitalFundingTransactionsTable)
-        .leftJoin(loansTable, eq(capitalFundingTransactionsTable.loanId, loansTable.loanId))
-        .leftJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
-        .where(eq(capitalFundingTransactionsTable.funderId, funderId))
-        .orderBy(desc(capitalFundingTransactionsTable.fundingDate), desc(capitalFundingTransactionsTable.createdAt))
-    );
+    // All 3 queries run in parallel instead of sequentially
+    const [rawTransactions, rawAllocations, rawReturns] = await Promise.all([
+      // 1. Funding transactions for this funder
+      withDbRetry(() =>
+        db
+          .select({
+            tx: capitalFundingTransactionsTable,
+            loan: loansTable,
+            borrower: borrowersTable,
+          })
+          .from(capitalFundingTransactionsTable)
+          .leftJoin(loansTable, eq(capitalFundingTransactionsTable.loanId, loansTable.loanId))
+          .leftJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
+          .where(eq(capitalFundingTransactionsTable.funderId, funderId))
+          .orderBy(desc(capitalFundingTransactionsTable.fundingDate), desc(capitalFundingTransactionsTable.createdAt))
+      ),
 
-    // 3. Fetch allocations for fallback synthesis if transactions table is empty
-    const rawAllocations = await withDbRetry(() =>
-      db
-        .select({
-          allocation: capitalAllocationsTable,
-          loan: loansTable,
-          borrower: borrowersTable,
-        })
-        .from(capitalAllocationsTable)
-        .innerJoin(loansTable, eq(capitalAllocationsTable.loanId, loansTable.loanId))
-        .innerJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
-        .where(eq(capitalAllocationsTable.funderId, funderId))
-        .orderBy(desc(capitalAllocationsTable.allocationDate))
-    );
+      // 2. Allocations for fallback synthesis
+      withDbRetry(() =>
+        db
+          .select({
+            allocation: capitalAllocationsTable,
+            loan: loansTable,
+            borrower: borrowersTable,
+          })
+          .from(capitalAllocationsTable)
+          .innerJoin(loansTable, eq(capitalAllocationsTable.loanId, loansTable.loanId))
+          .innerJoin(borrowersTable, eq(loansTable.borrowerId, borrowersTable.borrowerId))
+          .where(eq(capitalAllocationsTable.funderId, funderId))
+          .orderBy(desc(capitalAllocationsTable.allocationDate))
+      ),
 
-    // 4. Fetch capital returns
-    const rawReturns = await withDbRetry(() => capitalRepository.findCapitalReturnsByFunderId(funderId));
+      // 3. Capital returns
+      withDbRetry(() => capitalRepository.findCapitalReturnsByFunderId(funderId)),
+    ]);
+
     const totalReturned = rawReturns.reduce((sum, r) => sum + Number(r.amount), 0);
 
     // Build ledger items
@@ -229,9 +233,9 @@ export async function getFunderLedgerAction(
           funderId: funder.funderId,
           name: funder.name,
           mobile: funder.mobile,
-          address: funder.address || "",
+          address: (funder as any).address || "",
           status: funder.status,
-          fundingModel: funder.fundingModel || "on_demand",
+          fundingModel: (funder as any).fundingModel || "on_demand",
           notes: funder.notes,
           createdAt: funder.createdAt.toISOString(),
         },

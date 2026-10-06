@@ -11,7 +11,23 @@ import { eq, and, sql, desc } from "drizzle-orm";
 
 export class CapitalRepository {
   async createFunder(data: typeof fundersTable.$inferInsert) {
-    const [inserted] = await db.insert(fundersTable).values(data).returning();
+    const [inserted] = await db
+      .insert(fundersTable)
+      .values({
+        name: data.name,
+        mobile: data.mobile,
+        status: data.status || "active",
+        notes: data.notes || null,
+      })
+      .returning({
+        funderId: fundersTable.funderId,
+        name: fundersTable.name,
+        mobile: fundersTable.mobile,
+        status: fundersTable.status,
+        notes: fundersTable.notes,
+        createdAt: fundersTable.createdAt,
+        updatedAt: fundersTable.updatedAt,
+      });
     if (!inserted) {
       throw new Error("Failed to insert capital person record");
     }
@@ -37,7 +53,15 @@ export class CapitalRepository {
 
   async findFunderById(id: string) {
     const [funder] = await db
-      .select()
+      .select({
+        funderId: fundersTable.funderId,
+        name: fundersTable.name,
+        mobile: fundersTable.mobile,
+        status: fundersTable.status,
+        notes: fundersTable.notes,
+        createdAt: fundersTable.createdAt,
+        updatedAt: fundersTable.updatedAt,
+      })
       .from(fundersTable)
       .where(eq(fundersTable.funderId, id))
       .limit(1);
@@ -59,7 +83,15 @@ export class CapitalRepository {
 
   async findAllFunders() {
     return await db
-      .select()
+      .select({
+        funderId: fundersTable.funderId,
+        name: fundersTable.name,
+        mobile: fundersTable.mobile,
+        status: fundersTable.status,
+        notes: fundersTable.notes,
+        createdAt: fundersTable.createdAt,
+        updatedAt: fundersTable.updatedAt,
+      })
       .from(fundersTable)
       .orderBy(fundersTable.name);
   }

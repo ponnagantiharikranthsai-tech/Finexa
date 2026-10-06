@@ -16,7 +16,9 @@ export default function CapitalManagementPage() {
       }
       return res.data;
     },
-    staleTime: 1000 * 60 * 3,
+    staleTime: 1000 * 60 * 3,       // 3 min: no refetch while fresh
+    gcTime:    1000 * 60 * 5,       // 5 min: keep in memory after unmount
+    refetchOnWindowFocus: false,    // prevent refetch when user alt-tabs
   });
 
   const fallbackData = {

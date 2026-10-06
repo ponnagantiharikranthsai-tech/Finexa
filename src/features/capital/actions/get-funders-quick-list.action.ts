@@ -29,10 +29,16 @@ export async function getFundersQuickListAction(): Promise<
   try {
     await requireAuth();
 
-    // 1. Fetch all active funders
+    // 1. Fetch all active funders with ONLY needed fields
     const funders = await withDbRetry(() =>
       db
-        .select()
+        .select({
+          funderId: fundersTable.funderId,
+          name: fundersTable.name,
+          mobile: fundersTable.mobile,
+          status: fundersTable.status,
+          notes: fundersTable.notes,
+        })
         .from(fundersTable)
         .where(eq(fundersTable.status, "active"))
         .orderBy(fundersTable.name)
@@ -44,35 +50,33 @@ export async function getFundersQuickListAction(): Promise<
 
     const funderIds = funders.map((f) => f.funderId);
 
-    // 2. Fetch all active allocations for these funders
-    const allocations = await withDbRetry(() =>
-      db
-        .select({
-          funderId: capitalAllocationsTable.funderId,
-          amount: capitalAllocationsTable.amount,
-        })
-        .from(capitalAllocationsTable)
-        .where(
-          inArray(capitalAllocationsTable.funderId, funderIds)
-        )
-    );
+    // 2. Fetch active allocations and transactions in parallel
+    const [allocations, transactions] = await Promise.all([
+      withDbRetry(() =>
+        db
+          .select({
+            funderId: capitalAllocationsTable.funderId,
+            amount: capitalAllocationsTable.amount,
+          })
+          .from(capitalAllocationsTable)
+          .where(inArray(capitalAllocationsTable.funderId, funderIds))
+      ),
+      withDbRetry(() =>
+        db
+          .select({
+            funderId: capitalFundingTransactionsTable.funderId,
+            amount: capitalFundingTransactionsTable.amount,
+            status: capitalFundingTransactionsTable.status,
+          })
+          .from(capitalFundingTransactionsTable)
+          .where(inArray(capitalFundingTransactionsTable.funderId, funderIds))
+      ),
+    ]);
 
     const allocationsMap = new Map<string, number>();
     allocations.forEach((a) => {
       allocationsMap.set(a.funderId, (allocationsMap.get(a.funderId) || 0) + Number(a.amount));
     });
-
-    // 3. Fetch all funding transactions for these funders
-    const transactions = await withDbRetry(() =>
-      db
-        .select({
-          funderId: capitalFundingTransactionsTable.funderId,
-          amount: capitalFundingTransactionsTable.amount,
-          status: capitalFundingTransactionsTable.status,
-        })
-        .from(capitalFundingTransactionsTable)
-        .where(inArray(capitalFundingTransactionsTable.funderId, funderIds))
-    );
 
     const totalProvidedMap = new Map<string, number>();
     const totalReceivedStandaloneMap = new Map<string, number>();
@@ -100,7 +104,7 @@ export async function getFundersQuickListAction(): Promise<
         funderId: f.funderId,
         name: f.name,
         mobile: f.mobile,
-        fundingModel: f.fundingModel || "on_demand",
+        fundingModel: "on_demand",
         totalProvided: Math.round(totalProvided),
         currentlyAllocated: Math.round(allocated),
         unallocatedReceived: Math.round(unallocatedReceived),

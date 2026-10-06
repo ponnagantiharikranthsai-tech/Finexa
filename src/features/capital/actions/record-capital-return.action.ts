@@ -63,10 +63,7 @@ export async function recordCapitalReturnAction(
       notes: notes || null,
     });
 
-    const returns = await capitalRepository.findCapitalReturnsByFunderId(funderId);
-    const totalReturned = returns.reduce((sum, r) => sum + Number(r.amount), 0);
-
-    await auditLog("capital_returned", "funder", funderId, { amount, totalReturned });
+    await auditLog("capital_returned", "funder", funderId, { amount });
 
     safeRevalidatePath("/capital-management");
 

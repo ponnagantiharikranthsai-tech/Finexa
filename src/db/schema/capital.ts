@@ -16,12 +16,7 @@ export const fundersTable = pgTable("funders", {
 
   name: text("name").notNull(),
   mobile: text("mobile").notNull(),
-  address: text("address").default(""),
-  capitalAmount: numeric("capital_amount", { precision: 12, scale: 2 }).notNull().default("0.00"),
-  investmentDate: date("investment_date").notNull().default(sql`CURRENT_DATE`),
-  returnDueDate: date("return_due_date"),
   status: funderStatusEnum("status").notNull().default("active"),
-  fundingModel: text("funding_model").notNull().default("on_demand"), // 'on_demand' | 'pool'
   notes: text("notes"),
 
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -130,7 +125,18 @@ export const capitalAllocationsTable = pgTable("capital_allocations", {
   index("idx_capital_allocations_date").on(table.allocationDate),
 ]);
 
-export type Funder = typeof fundersTable.$inferSelect;
+export type Funder = typeof fundersTable.$inferSelect & {
+  fundingModel?: string;
+  capitalAmount?: string;
+  investmentDate?: string;
+  returnDueDate?: string | null;
+  address?: string | null;
+  totalProvided?: number;
+  currentlyAllocated?: number;
+  unallocatedReceived?: number;
+  totalCapital?: number;
+  availableCapital?: number;
+};
 export type InsertFunder = typeof fundersTable.$inferInsert;
 export type CapitalFundingTransaction = typeof capitalFundingTransactionsTable.$inferSelect;
 export type InsertCapitalFundingTransaction = typeof capitalFundingTransactionsTable.$inferInsert;

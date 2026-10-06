@@ -23,10 +23,9 @@ export async function updateFunderAction(prevState: any, formData: FormData) {
     const updated = await capitalRepository.updateFunder(funderId, {
       name,
       mobile,
-      address,
       notes,
       ...(status ? { status } : {}),
-    });
+    } as any);
 
     if (!updated) {
       return { success: false, error: "Capital person record not found." };

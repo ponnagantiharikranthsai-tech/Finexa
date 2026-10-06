@@ -154,11 +154,49 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
         fundingModel: "on_demand",
       });
 
-      if (res.success) {
+      if (res.success && res.data) {
         toast.success(res.message || "Capital person registered successfully!");
         setAddOpen(false);
         resetFunderForm();
-        router.refresh();
+
+        // Optimistic local update — new person appears instantly
+        const newFunder: FunderWithReturns = {
+          funderId:                   res.data.funderId,
+          name:                       (res.data as any).name ?? name.trim(),
+          mobile:                     (res.data as any).mobile ?? mobile.trim(),
+          address:                    "",
+          fundingModel:               "on_demand",
+          capitalAmount:              0,
+          investmentDate:             new Date().toISOString().split("T")[0]!,
+          status:                     ((res.data as any).status ?? "active") as any,
+          notes:                      (res.data as any).notes ?? null,
+          createdAt:                  new Date().toISOString(),
+          updatedAt:                  new Date().toISOString(),
+          totalProvided:              0,
+          currentlyAllocated:         0,
+          unallocatedReceived:        0,
+          totalReturned:              0,
+          remainingCapital:           0,
+          availableCapital:           0,
+          investmentIndex:            (data?.funders?.length ?? 0) + 1,
+          totalFunderInvestments:     0,
+          totalFunderCapitalProvided: 0,
+          fundingHistory:             [],
+          loansFunded:                [],
+          returnsList:                [],
+        };
+        setData((prev) => ({
+          ...prev,
+          funders: [...(prev?.funders ?? []), newFunder],
+          stats: { ...prev.stats, activeFunders: (prev?.stats?.activeFunders ?? 0) + 1 },
+        }));
+        // Background sync with server truth
+        queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
+      } else if (res.success) {
+        toast.success(res.message || "Capital person registered successfully!");
+        setAddOpen(false);
+        resetFunderForm();
+        queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
       } else {
         toast.error(res.error || "Failed to register capital person.");
       }
@@ -186,7 +224,8 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
         setRecordReceivedOpen(false);
         setReceivedAmount("");
         setReceivedNotes("");
-        router.refresh();
+        // Background sync — no full page reload
+        queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
       } else {
         toast.error(typeof res.error === "string" ? res.error : "Failed to record received capital.");
       }
@@ -220,7 +259,16 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
       if (res.success) {
         toast.success("Capital person profile updated successfully!");
         setEditOpen(false);
-        router.refresh();
+        // Instant local update — no page reload
+        setData((prev) => ({
+          ...prev,
+          funders: (prev?.funders ?? []).map((f) =>
+            f.funderId === selectedFunder.funderId
+              ? { ...f, name: name.trim(), mobile: mobile.trim(), address: address.trim(), notes: notes.trim() || null }
+              : f
+          ),
+        }));
+        queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
       } else {
         toast.error(res.error || "Failed to update capital person profile.");
       }
@@ -238,7 +286,13 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
       const res = await deleteFunderAction(funderId);
       if (res.success) {
         toast.success(`${funderName} removed.`);
-        router.refresh();
+        // Remove from local state immediately
+        setData((prev) => ({
+          ...prev,
+          funders: (prev?.funders ?? []).filter((f) => f.funderId !== funderId),
+          stats: { ...prev.stats, activeFunders: Math.max(0, (prev?.stats?.activeFunders ?? 1) - 1) },
+        }));
+        queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
       } else {
         toast.error(res.error || "Failed to delete funder.");
       }
@@ -276,7 +330,8 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
       if (res.success) {
         toast.success(`Capital return of ₹${numAmount.toLocaleString("en-IN")} recorded!`);
         setReturnOpen(false);
-        router.refresh();
+        // Background sync — no full page reload
+        queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
       } else {
         toast.error(res.error || "Failed to record return.");
       }

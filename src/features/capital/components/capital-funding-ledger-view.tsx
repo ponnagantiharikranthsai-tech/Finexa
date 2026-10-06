@@ -849,10 +849,10 @@ export function CapitalFundingLedgerView({
                           {tx.transactionCode?.startsWith("CP-") || tx.status === "returned" ? (
                             <div className="space-y-0.5">
                               <p className="font-bold text-foreground text-xs">
-                                To: {funder.name}
+                                Paid Back to {funder.name}
                               </p>
                               <p className="text-[10px] text-muted-foreground">
-                                Capital Person Repayment
+                                Capital Principal Repayment
                               </p>
                             </div>
                           ) : tx.borrowerName ? (
@@ -988,11 +988,17 @@ export function CapitalFundingLedgerView({
                       </div>
                     )}
 
-                    <div className="p-2.5 rounded-xl bg-accent/20 dark:bg-secondary/20 text-xs space-y-1">
-                      <div className="flex justify-between">
-                        <span className="text-[10px] uppercase font-bold text-muted-foreground">Borrower</span>
-                        <strong className="text-foreground">{tx.borrowerName || "Unallocated"}</strong>
-                      </div>
+                      <div className="p-2.5 rounded-xl bg-accent/20 dark:bg-secondary/20 text-xs space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-[10px] uppercase font-bold text-muted-foreground">
+                            {tx.transactionCode?.startsWith("CP-") || tx.status === "returned" ? "Recipient" : "Borrower"}
+                          </span>
+                          <strong className="text-foreground">
+                            {tx.transactionCode?.startsWith("CP-") || tx.status === "returned"
+                              ? `Paid Back to ${funder.name}`
+                              : tx.borrowerName || "Unallocated Received Advance"}
+                          </strong>
+                        </div>
                       {tx.loanCode && (
                         <div className="flex justify-between">
                           <span className="text-[10px] uppercase font-bold text-muted-foreground">Loan</span>
@@ -1272,7 +1278,11 @@ export function CapitalFundingLedgerView({
                   <>
                     <div className="p-3 flex justify-between">
                       <span className="text-muted-foreground">
-                        {selectedTx.loanId ? "Borrower Name:" : "Previously Allocated To:"}
+                        {selectedTx.transactionCode?.startsWith("CP-") || selectedTx.status === "returned"
+                          ? "Repaid To:"
+                          : selectedTx.loanId
+                          ? "Borrower Name:"
+                          : "Previously Allocated To:"}
                       </span>
                       <span className="font-bold text-foreground">{selectedTx.borrowerName}</span>
                     </div>

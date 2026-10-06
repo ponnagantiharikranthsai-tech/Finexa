@@ -355,7 +355,7 @@ export async function getFunderLedgerAction(
         loanId:               null,
         loanCode:             null,
         borrowerId:           null,
-        borrowerName:         `Paid to ${funder.name}`,
+        borrowerName:         `Paid Back to ${funder.name}`,
         borrowerMobile:       funder.mobile || null,
         loanPrincipal:        null,
         loanStatus:           null,

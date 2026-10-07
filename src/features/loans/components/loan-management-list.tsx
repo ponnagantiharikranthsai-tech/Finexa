@@ -33,10 +33,12 @@ import {
   Search, Plus, Send, Landmark, Calendar, RefreshCw, CreditCard, ChevronRight,
   Trash2, Users, Mail, FileText, MapPin, User, Eye, EyeOff, Edit, Clock,
   AlertTriangle, Check, CheckCircle2, XCircle, ChevronDown, ListFilter, X,
-  ShieldAlert, Settings, Percent, DollarSign, History, ExternalLink, Coins
+  ShieldAlert, Settings, Percent, DollarSign, History, ExternalLink, Coins, ArrowLeftRight
 } from "lucide-react";
 import { AllocateCapitalDialog } from "./allocate-capital-dialog";
 import { removeCapitalAllocationAction } from "@/features/capital/actions/remove-capital-allocation.action";
+import { reassignCapitalSourceAction } from "@/features/capital/actions/reassign-capital-source.action";
+import { getFundersQuickListAction, type FunderQuickOption } from "@/features/capital/actions/get-funders-quick-list.action";
 import type { LoanManagementDetailResult } from "../actions/get-loan-management-data.action";
 import type { Payment, NotificationLog, PenaltyLedger, LoanCycle } from "@/db/schema";
 import { calculatePeriods, calculateMonthlyInterest } from "@/domain/interest-calculator";
@@ -257,6 +259,17 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   const [loanToAllocate, setLoanToAllocate] = useState<LoanManagementDetailResult | null>(null);
   const [notesText, setNotesText] = useState("");
   const [originalNotesText, setOriginalNotesText] = useState("");
+
+  // Capital Source Switcher
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [reassignLoan, setReassignLoan] = useState<LoanManagementDetailResult | null>(null);
+  const [reassignAllocationId, setReassignAllocationId] = useState<string>("");
+  const [reassignAmount, setReassignAmount] = useState<number>(0);
+  const [reassignOldFunderName, setReassignOldFunderName] = useState<string>("");
+  const [reassignFunders, setReassignFunders] = useState<FunderQuickOption[]>([]);
+  const [reassignSelectedFunderId, setReassignSelectedFunderId] = useState<string>("");
+  const [reassignLoading, setReassignLoading] = useState(false);
+  const [reassignSubmitting, setReassignSubmitting] = useState(false);
 
   // Form inputs
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -499,6 +512,70 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       }
       setDetailsLoading(false);
     });
+  };
+
+  const handleOpenReassign = async (
+    loan: LoanManagementDetailResult,
+    allocationId: string,
+    amount: number,
+    oldFunderName: string,
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setReassignLoan(loan);
+    setReassignAllocationId(allocationId);
+    setReassignAmount(amount);
+    setReassignOldFunderName(oldFunderName);
+    setReassignSelectedFunderId("");
+    setReassignOpen(true);
+    setReassignLoading(true);
+    const res = await getFundersQuickListAction();
+    if (res.success && res.data) {
+      // Exclude the current funder from selection list
+      const others = res.data.filter((f) => f.name !== oldFunderName);
+      setReassignFunders(others);
+      if (others.length > 0) setReassignSelectedFunderId(others[0]!.funderId);
+    }
+    setReassignLoading(false);
+  };
+
+  const handleConfirmReassign = async () => {
+    if (!reassignLoan || !reassignAllocationId || !reassignSelectedFunderId) return;
+    setReassignSubmitting(true);
+    const res = await reassignCapitalSourceAction({
+      allocationId: reassignAllocationId,
+      newFunderId: reassignSelectedFunderId,
+      amount: reassignAmount,
+      loanId: reassignLoan.loanId,
+    });
+    setReassignSubmitting(false);
+    if (res.success) {
+      const newFunder = reassignFunders.find((f) => f.funderId === reassignSelectedFunderId);
+      toast.success(`Capital source switched to ${newFunder?.name || "new funder"} successfully!`);
+      // Optimistic UI update
+      setLoans((prev) =>
+        prev.map((l) => {
+          if (l.loanId !== reassignLoan.loanId) return l;
+          const updatedSources = l.funding.sources.map((s) =>
+            s.allocationId === reassignAllocationId
+              ? {
+                  ...s,
+                  allocationId: res.data.newAllocationId,
+                  funderId: reassignSelectedFunderId,
+                  funderName: newFunder?.name || s.funderName,
+                  funderMobile: newFunder?.mobile || s.funderMobile,
+                }
+              : s
+          );
+          return { ...l, funding: { ...l.funding, sources: updatedSources } };
+        })
+      );
+      setReassignOpen(false);
+      await queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+    } else {
+      toast.error(typeof res.error === "string" ? res.error : "Failed to reassign capital source.");
+    }
   };
 
   const handleRemoveAllocation = async (allocationId: string) => {
@@ -1160,8 +1237,11 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                           {loan.funding.sources.map((s) => (
                             <div
                               key={s.allocationId}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 text-[11px] font-semibold text-foreground"
+                              className="group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 hover:border-primary/50 hover:bg-primary/20 text-[11px] font-semibold text-foreground transition-all duration-200 cursor-pointer"
+                              title="Click to reassign capital source"
+                              onClick={(e) => handleOpenReassign(loan, s.allocationId, s.amount, s.funderName, e)}
                             >
+                              <ArrowLeftRight className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
                               <span>
                                 {s.funderName}: <strong className="text-primary font-bold">₹{s.amount.toLocaleString("en-IN")}</strong>
                                 <span className="text-muted-foreground text-[10px] ml-1">({s.funderSharePercentage}%)</span>
@@ -2282,6 +2362,109 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
           }
         }}
       />
+
+      {/* ── Modal: Capital Source Switcher ───────────────────────────────────── */}
+      <Dialog open={reassignOpen} onOpenChange={(o) => { if (!reassignSubmitting) setReassignOpen(o); }}>
+        <DialogContent className="rounded-2xl max-w-md fx-glass-card border-border/50 bg-white dark:bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black tracking-tight flex items-center gap-2">
+              <ArrowLeftRight className="h-4 w-4 text-primary" />
+              Reassign Capital Source
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Switching capital source for{" "}
+              <strong>{reassignLoan?.borrower.name}</strong> — ₹{reassignAmount.toLocaleString("en-IN")}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-1">
+            {/* Current source */}
+            <div className="p-3 rounded-xl bg-red-500/5 border border-red-500/20 text-xs">
+              <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">Current Source</p>
+              <p className="font-semibold text-foreground">{reassignOldFunderName}</p>
+              <p className="text-muted-foreground mt-0.5">₹{reassignAmount.toLocaleString("en-IN")} — will be released</p>
+            </div>
+
+            {/* New source selector */}
+            <div className="space-y-2">
+              <label className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Select New Capital Person</label>
+              {reassignLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
+                  <RefreshCw className="h-4 w-4 animate-spin" /> Loading funders...
+                </div>
+              ) : reassignFunders.length === 0 ? (
+                <div className="text-xs text-muted-foreground py-2 text-center">
+                  No other capital persons available.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {reassignFunders.map((f) => (
+                    <button
+                      key={f.funderId}
+                      type="button"
+                      onClick={() => setReassignSelectedFunderId(f.funderId)}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-semibold transition-all duration-150 ${
+                        reassignSelectedFunderId === f.funderId
+                          ? "border-primary bg-primary/10 text-foreground shadow-sm"
+                          : "border-border/50 bg-black/10 dark:bg-black/20 text-muted-foreground hover:border-primary/40 hover:bg-primary/5"
+                      }`}
+                    >
+                      <div className="text-left">
+                        <p className="font-bold text-foreground">{f.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{f.mobile}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-primary font-bold">₹{f.unallocatedReceived.toLocaleString("en-IN")} available</p>
+                        <p className="text-[10px] text-muted-foreground">{f.unallocatedReceived >= reassignAmount ? "✓ Sufficient" : "On-demand"}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Summary of what will happen */}
+            {reassignSelectedFunderId && reassignFunders.length > 0 && (() => {
+              const sel = reassignFunders.find(f => f.funderId === reassignSelectedFunderId);
+              return sel ? (
+                <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-xs space-y-1">
+                  <p className="text-[10px] text-emerald-400 uppercase font-bold tracking-wider">New Assignment</p>
+                  <p className="font-semibold text-foreground">{sel.name} → ₹{reassignAmount.toLocaleString("en-IN")}</p>
+                  {sel.unallocatedReceived >= reassignAmount ? (
+                    <p className="text-muted-foreground">Will use {sel.name}'s existing unallocated capital.</p>
+                  ) : (
+                    <p className="text-amber-400">On-demand: a new funding record will be created for {sel.name}.</p>
+                  )}
+                </div>
+              ) : null;
+            })()}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setReassignOpen(false)}
+              disabled={reassignSubmitting}
+              className="rounded-xl border-border"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmReassign}
+              disabled={reassignSubmitting || !reassignSelectedFunderId || reassignLoading}
+              className="rounded-xl fx-brand-gradient border-0 text-white fx-cta-glow font-bold"
+            >
+              {reassignSubmitting ? (
+                <><RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> Reassigning...</>
+              ) : (
+                <><ArrowLeftRight className="h-3.5 w-3.5 mr-1.5" /> Confirm Switch</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

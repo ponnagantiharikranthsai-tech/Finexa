@@ -11,13 +11,21 @@ import { eq, and, sql, desc } from "drizzle-orm";
 
 export class CapitalRepository {
   async createFunder(data: typeof fundersTable.$inferInsert) {
+    const todayStr = new Date().toISOString().split("T")[0]!;
     const [inserted] = await db
       .insert(fundersTable)
       .values({
+        funderId: data.funderId || crypto.randomUUID(),
         name: data.name,
         mobile: data.mobile,
+        address: data.address || null,
+        capitalAmount: data.capitalAmount || "0.00",
+        investmentDate: data.investmentDate || todayStr,
         status: data.status || "active",
         notes: data.notes || null,
+        fundingModel: data.fundingModel || "on_demand",
+        createdAt: data.createdAt || new Date(),
+        updatedAt: data.updatedAt || new Date(),
       })
       .returning({
         funderId: fundersTable.funderId,

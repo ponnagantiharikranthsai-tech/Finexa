@@ -16,8 +16,17 @@ export const fundersTable = pgTable("funders", {
 
   name: text("name").notNull(),
   mobile: text("mobile").notNull(),
+  address: text("address"),
+  capitalAmount: numeric("capital_amount", { precision: 12, scale: 2 })
+    .notNull()
+    .default("0.00"),
+  investmentDate: date("investment_date")
+    .notNull()
+    .default(sql`CURRENT_DATE`),
+  returnDueDate: date("return_due_date"),
   status: funderStatusEnum("status").notNull().default("active"),
   notes: text("notes"),
+  fundingModel: text("funding_model").notNull().default("on_demand"),
 
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

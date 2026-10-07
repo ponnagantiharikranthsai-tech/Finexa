@@ -94,10 +94,15 @@ export async function createFunderAction(
     // Create On-Demand Capital Person
     const funder = await withDbRetry(() =>
       capitalRepository.createFunder({
+        funderId: crypto.randomUUID(),
         name,
         mobile,
         status: "active",
         notes: notes || null,
+        fundingModel: fundingModel || "on_demand",
+        investmentDate: todayStr,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       })
     );
 

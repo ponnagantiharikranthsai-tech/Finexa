@@ -34,6 +34,7 @@ import {
 } from "@/features/capital/actions/get-funders-quick-list.action";
 import { allocateCapitalAction } from "@/features/capital/actions/allocate-capital.action";
 import { createFunderAction } from "@/features/capital/actions/create-funder.action";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { LOANS_QUERY_KEY } from "../hooks/use-loan-management-data";
 import type { LoanManagementDetailResult } from "../actions/get-loan-management-data.action";
 
@@ -115,33 +116,74 @@ export function AllocateCapitalDialog({
   // Handle Create Funder Inline (No fake balance required)
   const handleCreateNewFunder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newMobile.trim()) {
+    const funderName = newName.trim();
+    const funderPhone = newMobile.trim();
+    const notes = newNotes.trim();
+
+    if (!funderName || !funderPhone) {
       toast.error("Please enter capital person name and mobile number.");
       return;
     }
 
     startCreateTransition(async () => {
-      const res = await createFunderAction({
-        name: newName.trim(),
-        mobile: newMobile.trim(),
-        notes: newNotes.trim() || null,
-        fundingModel: "on_demand",
-      });
+      let createdFunderId: string | null = null;
+      let createdFunderName: string = funderName;
 
-      if (res.success && res.data) {
-        toast.success(`Capital person "${newName}" registered successfully!`);
-        await loadFunders();
-        setSelectedFunderId(res.data.funderId);
-        setIsCreatingFunder(false);
-        setNewName("");
-        setNewMobile("");
-        setNewNotes("");
-        // Pre-fill amount with remaining loan needed
-        if (remainingNeeded > 0) {
-          setAmount(remainingNeeded.toString());
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { data, error } = await supabase
+          .from('funders')
+          .insert([
+            {
+              name: funderName.trim(),
+              mobile: funderPhone.trim(),
+              status: 'active',
+              notes: notes.trim() || null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }
+          ])
+          .select()
+          .single();
+
+        if (!error && data) {
+          createdFunderId = data.funder_id;
+          createdFunderName = data.name || funderName;
         }
-      } else {
-        toast.error(typeof res.error === "string" ? res.error : "Failed to register capital person.");
+      } catch (err) {
+        // Fallback to server action
+      }
+
+      if (!createdFunderId) {
+        const res = await createFunderAction({
+          name: funderName,
+          mobile: funderPhone,
+          status: 'active',
+          notes: notes || null,
+          fundingModel: "on_demand",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+        if (res.success && res.data) {
+          createdFunderId = res.data.funderId;
+          createdFunderName = res.data.name;
+        } else {
+          toast.error(typeof res.error === "string" ? res.error : "Failed to register capital person.");
+          return;
+        }
+      }
+
+      toast.success(`Capital person "${createdFunderName}" registered successfully!`);
+      await loadFunders();
+      setSelectedFunderId(createdFunderId);
+      setIsCreatingFunder(false);
+      setNewName("");
+      setNewMobile("");
+      setNewNotes("");
+      // Pre-fill amount with remaining loan needed
+      if (remainingNeeded > 0) {
+        setAmount(remainingNeeded.toString());
       }
     });
   };

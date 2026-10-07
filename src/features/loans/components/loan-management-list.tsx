@@ -1,16 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useTransition, useMemo, useDeferredValue } from "react";
+import React, { useState, useEffect, useTransition, useMemo, useDeferredValue, useCallback } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { LOANS_QUERY_KEY } from "../hooks/use-loan-management-data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "@/features/loans/actions/extend-loan.action";
@@ -22,96 +20,61 @@ import { sendReminderAction } from "@/features/notifications/actions/send-remind
 import { deleteLoanAction } from "@/features/loans/actions/delete-loan.action";
 import { deleteBorrowerAction } from "@/features/borrowers/actions/delete-borrower.action";
 import { updateBorrowerAction } from "@/features/borrowers/actions/update-borrower.action";
-import { getExtraLoanDetailsAction, type ExtraLoanDetails } from "@/features/loans/actions/get-extra-loan-details.action";
-import { deletePaymentAction } from "@/features/payments/actions/delete-payment.action";
-import { saveInternalNotesAction } from "@/features/borrowers/actions/save-internal-notes.action";
-import { updatePenaltySettingsAction } from "../actions/update-penalty-settings.action";
-import { getPenaltyLedgerAction } from "../actions/get-penalty-ledger.action";
-import { calculateAccruedPenalty } from "@/domain/penalty-calculator";
-import { calculateDueDate } from "@/domain/due-date-calculator";
-import {
-  Search, Plus, Send, Landmark, Calendar, RefreshCw, CreditCard, ChevronRight,
-  Trash2, Users, Mail, FileText, MapPin, User, Eye, EyeOff, Edit, Clock,
-  AlertTriangle, Check, CheckCircle2, XCircle, ChevronDown, ListFilter, X,
-  ShieldAlert, Settings, Percent, DollarSign, History, ExternalLink, Coins, ArrowLeftRight
-} from "lucide-react";
-import { AllocateCapitalDialog } from "./allocate-capital-dialog";
-import { removeCapitalAllocationAction } from "@/features/capital/actions/remove-capital-allocation.action";
-import { reassignCapitalSourceAction } from "@/features/capital/actions/reassign-capital-source.action";
 import { getFundersQuickListAction, type FunderQuickOption } from "@/features/capital/actions/get-funders-quick-list.action";
+import { reassignCapitalSourceAction } from "@/features/capital/actions/reassign-capital-source.action";
 import type { LoanManagementDetailResult } from "../actions/get-loan-management-data.action";
-import type { Payment, NotificationLog, PenaltyLedger, LoanCycle } from "@/db/schema";
 import { calculatePeriods, calculateMonthlyInterest } from "@/domain/interest-calculator";
 import { generateActiveLoansPdf } from "../utils/generate-active-loans-pdf";
 import { generateCurrentStatementPdf } from "../utils/generate-current-statement-pdf";
 import { differenceInDays, format } from "date-fns";
 import { FinexaCard3D, FinexaStaggerContainer, FinexaStaggerItem } from "@/components/motion/finexa-motion";
 import { FinexaMoneyEffect, FinexaCycleEffect, FinexaDocumentEffect } from "@/components/motion/finexa-effects";
+import { LoanCardItem } from "./loan-card-item";
+import {
+  Search, Plus, Send, Landmark, Calendar, RefreshCw, CreditCard, ChevronRight,
+  Trash2, Users, Mail, FileText, MapPin, User, Eye, EyeOff, Edit, Clock,
+  AlertTriangle, Check, CheckCircle2, XCircle, ChevronDown, ListFilter, X,
+  ShieldAlert, Settings, Percent, DollarSign, History, ExternalLink, Coins, ArrowLeftRight
+} from "lucide-react";
+
+// ── Lazy-Loaded Heavy Modals (Code Splitting / Frontend Optimization) ───────────
+const DetailedAuditModal = dynamic(
+  () => import("./modals/detailed-audit-modal").then((m) => m.DetailedAuditModal),
+  { ssr: false }
+);
+
+const RecordPaymentModal = dynamic(
+  () => import("./modals/record-payment-modal").then((m) => m.RecordPaymentModal),
+  { ssr: false }
+);
+
+const SendReminderModal = dynamic(
+  () => import("./modals/send-reminder-modal").then((m) => m.SendReminderModal),
+  { ssr: false }
+);
+
+const ExtendLoanModal = dynamic(
+  () => import("./modals/extend-loan-modal").then((m) => m.ExtendLoanModal),
+  { ssr: false }
+);
+
+const EditBorrowerModal = dynamic(
+  () => import("./modals/edit-borrower-modal").then((m) => m.EditBorrowerModal),
+  { ssr: false }
+);
+
+const ReassignCapitalModal = dynamic(
+  () => import("./modals/reassign-capital-modal").then((m) => m.ReassignCapitalModal),
+  { ssr: false }
+);
+
+const AllocateCapitalDialog = dynamic(
+  () => import("./allocate-capital-dialog").then((m) => m.AllocateCapitalDialog),
+  { ssr: false }
+);
 
 interface LoanManagementListProps {
   initialLoans: LoanManagementDetailResult[];
-}
-
-function getCardStatus(status: string, outstanding: number, dueDate: string) {
-  const todayStr = new Date().toISOString().split("T")[0]!;
-  const today = new Date(todayStr);
-
-  const isPaid = outstanding <= 0 || status === "closed";
-  const isDueToday = dueDate === todayStr;
-  const isOverdue = status === "overdue" || (new Date(dueDate) < today && !isPaid);
-
-  if (isPaid) return "paid";
-  if (isDueToday) return "due_today";
-  if (isOverdue) return "overdue";
-  return "active";
-}
-
-function StatusBadge({ status, outstanding, dueDate }: { status: string; outstanding: number; dueDate: string }) {
-  const dynamicStatus = getCardStatus(status, outstanding, dueDate);
-
-  const config = {
-    active: {
-      badge: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
-      label: "Active",
-      icon: <Clock className="h-3 w-3" />
-    },
-    due_today: {
-      badge: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
-      label: "Due Today",
-      icon: <Clock className="h-3 w-3 animate-[pulse_1.5s_infinite]" />
-    },
-    overdue: {
-      badge: "bg-red-500/10 text-red-400 border border-red-500/20",
-      label: "Overdue",
-      icon: <AlertTriangle className="h-3 w-3" />
-    },
-    paid: {
-      badge: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
-      label: "Paid",
-      icon: <Check className="h-3 w-3" />
-    }
-  }[dynamicStatus];
-
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${config.badge}`}>
-      {config.icon}
-      {config.label}
-    </span>
-  );
-}
-
-function getCardGlow(status: string) {
-  if (status === "overdue") {
-    return "bg-red-500/[0.03] hover:bg-red-500/[0.05] border-red-500/25 shadow-[0_0_15px_-3px_rgba(239,68,68,0.25)] hover:shadow-[0_0_25px_0_rgba(239,68,68,0.35)]";
-  }
-  if (status === "due_today") {
-    return "bg-blue-500/[0.03] hover:bg-blue-500/[0.05] border-blue-500/25 shadow-[0_0_15px_-3px_rgba(59,130,246,0.25)] hover:shadow-[0_0_25px_0_rgba(59,130,246,0.35)] animate-[pulse_4s_infinite_ease-in-out]";
-  }
-  if (status === "paid") {
-    return "bg-emerald-500/[0.02] hover:bg-emerald-500/[0.04] border-emerald-500/15 shadow-[0_0_12px_-3px_rgba(16,185,129,0.12)] hover:shadow-[0_0_20px_0_rgba(16,185,129,0.2)]";
-  }
-  // active
-  return "bg-amber-500/[0.02] hover:bg-amber-500/[0.04] border-amber-500/20 shadow-[0_0_15px_-3px_rgba(212,175,55,0.15)] hover:shadow-[0_0_22px_0_rgba(212,175,55,0.22)]";
 }
 
 export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
@@ -119,84 +82,349 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
 
+  // Optimistic local state for loans
   const [loans, setLoans] = useState<LoanManagementDetailResult[]>(initialLoans);
+  const [isPending, startTransition] = useTransition();
 
-  // Keep loans in sync with props and TanStack Query Cache (0ms optimistic updates)
+  // Keep local loans state synced with initialLoans when React Query updates
   useEffect(() => {
-    if (initialLoans && initialLoans.length > 0) {
-      setLoans(initialLoans);
-    }
+    setLoans(initialLoans);
   }, [initialLoans]);
 
-  useEffect(() => {
-    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
-      if (
-        event?.query?.queryKey?.[0] === LOANS_QUERY_KEY[0] &&
-        Array.isArray(event.query.state.data)
-      ) {
-        setLoans(event.query.state.data as LoanManagementDetailResult[]);
-      }
-    });
-    return () => unsubscribe();
-  }, [queryClient]);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("newest");
-  const [isPending, startTransition] = useTransition();
+  // Filters & Search
+  const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearch = useDeferredValue(searchQuery);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("newest");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [generatingStatementId, setGeneratingStatementId] = useState<string | null>(null);
 
-  const handleDownloadPdf = () => {
-    if (isGeneratingPdf) return;
-    setIsGeneratingPdf(true);
-    toast.info("Generating Active Loans Backup PDF...");
+  // Pagination State (Requirement 3: Paginate large lists to prevent DOM explosion)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
 
-    setTimeout(() => {
-      try {
-        generateActiveLoansPdf(loans);
-        toast.success("PDF generated successfully!");
-      } catch (err: any) {
-        toast.error(err?.message || "Unable to generate the backup PDF. Your loan data has not been changed. Please try again.");
-      } finally {
-        setIsGeneratingPdf(false);
+  // Motion effects
+  const [showMoneyEffect, setShowMoneyEffect] = useState(false);
+  const [showCycleEffect, setShowCycleEffect] = useState(false);
+  const [showDocEffect, setShowDocEffect] = useState(false);
+
+  // Dialog States
+  const [selectedLoan, setSelectedLoan] = useState<LoanManagementDetailResult | null>(null);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [extendOpen, setExtendOpen] = useState(false);
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [allocateOpen, setAllocateOpen] = useState(false);
+  const [loanToAllocate, setLoanToAllocate] = useState<LoanManagementDetailResult | null>(null);
+
+  // Capital Source Switcher
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [reassignLoan, setReassignLoan] = useState<LoanManagementDetailResult | null>(null);
+  const [reassignAllocationId, setReassignAllocationId] = useState<string>("");
+  const [reassignAmount, setReassignAmount] = useState<number>(0);
+  const [reassignOldFunderName, setReassignOldFunderName] = useState<string>("");
+  const [reassignFunders, setReassignFunders] = useState<FunderQuickOption[]>([]);
+  const [reassignSelectedFunderId, setReassignSelectedFunderId] = useState<string>("");
+  const [reassignLoading, setReassignLoading] = useState(false);
+  const [reassignSubmitting, setReassignSubmitting] = useState(false);
+
+  // Payment inputs
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentType, setPaymentType] = useState<"interest" | "principal" | "penalty">("interest");
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]!);
+  const [paymentNotes, setPaymentNotes] = useState("");
+  const [penaltyAmount, setPenaltyAmount] = useState("0");
+  const [paymentActionMode, setPaymentActionMode] = useState<"record" | "pay_extend" | "overdue_penalty" | "partial">("record");
+
+  // Edit borrower inputs
+  const [borrowerName, setBorrowerName] = useState("");
+  const [borrowerMobile, setBorrowerMobile] = useState("");
+  const [borrowerEmail, setBorrowerEmail] = useState("");
+  const [borrowerPan, setBorrowerPan] = useState("");
+  const [borrowerAadhaar, setBorrowerAadhaar] = useState("");
+  const [borrowerLocation, setBorrowerLocation] = useState("");
+
+  const todayStr = new Date().toISOString().split("T")[0]!;
+  const today = new Date(todayStr);
+
+  // Auto-open modal from URL query
+  useEffect(() => {
+    const action = searchParams.get("action");
+    const loanId = searchParams.get("loanId");
+
+    if (action && loanId && loans.length > 0) {
+      const targetLoan = loans.find((l) => l.loanId === loanId);
+      if (targetLoan) {
+        setSelectedLoan(targetLoan);
+        if (action === "pay") {
+          setPaymentAmount("");
+          setPaymentNotes("");
+          setPaymentActionMode("record");
+          setPaymentType("interest");
+          setPaymentOpen(true);
+        } else if (action === "extend") {
+          setExtendOpen(true);
+        } else if (action === "remind") {
+          setPenaltyAmount("0");
+          setReminderOpen(true);
+        } else if (action === "details") {
+          setDetailsOpen(true);
+        }
       }
-    }, 100);
-  };
+    }
+  }, [searchParams, loans]);
 
-  const handleCurrentStatement = async (loan: LoanManagementDetailResult) => {
-    if (generatingStatementId === loan.loanId) return;
-    setGeneratingStatementId(loan.loanId);
-    toast.info("Generating Current Statement...");
-
-    setTimeout(async () => {
-      try {
-        const res = await getExtraLoanDetailsAction(loan.loanId);
-        const paymentsList = res.success && res.data?.payments ? res.data.payments : [];
-        const cyclesList = res.success && res.data?.cycles ? res.data.cycles : [];
-
-        const todayStr = new Date().toISOString().split("T")[0]!;
-        const today = new Date(todayStr);
-        const due = new Date(loan.dueDate);
+  // Filtered & Sorted Loans
+  const filteredLoans = useMemo(() => {
+    return loans
+      .filter((loan) => {
         const isPaid = loan.outstandingBalance <= 0 || loan.status === "closed";
-        const isOverdue = !isPaid && due < today;
-        const overdueDays = isOverdue ? Math.max(0, differenceInDays(today, due)) : 0;
-        const daysRemaining = !isOverdue && !isPaid ? Math.max(0, differenceInDays(due, today)) : 0;
+        const isDueToday = loan.dueDate === todayStr;
+        const isOverdue = loan.status === "overdue" || (new Date(loan.dueDate) < today && !isPaid);
 
-        const accruedPenalty = calculateAccruedPenalty({
-          principal: Number(loan.principal),
-          dueDate: loan.dueDate,
-          status: loan.status,
-          penaltyRate: Number((loan as any).penaltyRate || 20),
-          manualPenaltyAmount: Number(loan.penaltyAmount || 0),
+        let dynamicStatus = "active";
+        if (isPaid) dynamicStatus = "paid";
+        else if (isDueToday) dynamicStatus = "due_today";
+        else if (isOverdue) dynamicStatus = "overdue";
+
+        if (statusFilter === "active" && dynamicStatus !== "active") return false;
+        if (statusFilter === "due_today" && dynamicStatus !== "due_today") return false;
+        if (statusFilter === "overdue" && dynamicStatus !== "overdue") return false;
+        if (statusFilter === "paid" && dynamicStatus !== "paid") return false;
+
+        if (deferredSearch.trim()) {
+          const q = deferredSearch.toLowerCase();
+          const matchName = loan.borrower.name.toLowerCase().includes(q);
+          const matchMobile = loan.borrower.mobile.includes(q);
+          const matchPan = loan.borrower.panDecrypted?.toLowerCase().includes(q);
+          const matchAadhaar = loan.borrower.aadhaarDecrypted?.includes(q);
+          const matchFunder = loan.funding?.sources.some((s) => s.funderName.toLowerCase().includes(q));
+          if (!matchName && !matchMobile && !matchPan && !matchAadhaar && !matchFunder) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        if (sortBy === "newest") return new Date(b.dateGiven).getTime() - new Date(a.dateGiven).getTime();
+        if (sortBy === "oldest") return new Date(a.dateGiven).getTime() - new Date(b.dateGiven).getTime();
+        if (sortBy === "highest_amount") return Number(b.principal) - Number(a.principal);
+        if (sortBy === "lowest_amount") return Number(a.principal) - Number(b.principal);
+        if (sortBy === "due_date") return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+        if (sortBy === "borrower_name") return a.borrower.name.localeCompare(b.borrower.name);
+        return 0;
+      });
+  }, [loans, deferredSearch, statusFilter, sortBy, today, todayStr]);
+
+  // Total pages and paginated slice
+  const totalPages = Math.max(1, Math.ceil(filteredLoans.length / pageSize));
+  const paginatedLoans = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredLoans.slice(start, start + pageSize);
+  }, [filteredLoans, currentPage, pageSize]);
+
+  // Adjust current page if search/filter narrows results
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+
+  // ── Memoized Callbacks (Requirement 2: Prevent unnecessary re-renders) ────────
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+    setCurrentPage(1);
+  }, []);
+
+  const handleStatusFilterChange = useCallback((status: string) => {
+    setStatusFilter(status);
+    setCurrentPage(1);
+  }, []);
+
+  const handleSortChange = useCallback((val: string) => {
+    setSortBy(val || "newest");
+    setCurrentPage(1);
+  }, []);
+
+  const handlePageSizeChange = useCallback((val: string) => {
+    setPageSize(Number(val));
+    setCurrentPage(1);
+  }, []);
+
+  const handlePay = useCallback((loan: LoanManagementDetailResult) => {
+    setSelectedLoan(loan);
+    setPaymentAmount("");
+    setPaymentNotes("");
+    setPaymentActionMode("record");
+    setPaymentType("interest");
+    setPaymentOpen(true);
+  }, []);
+
+  const handleViewDetails = useCallback((loan: LoanManagementDetailResult) => {
+    setSelectedLoan(loan);
+    setDetailsOpen(true);
+  }, []);
+
+  const handleEditOpen = useCallback((loan: LoanManagementDetailResult, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedLoan(loan);
+    setBorrowerName(loan.borrower.name);
+    setBorrowerMobile(loan.borrower.mobile);
+    setBorrowerEmail(loan.borrower.email || "");
+    setBorrowerPan(loan.borrower.panDecrypted || "");
+    setBorrowerAadhaar(loan.borrower.aadhaarDecrypted || "");
+    setBorrowerLocation(loan.borrower.locationUrl || "");
+    setEditOpen(true);
+  }, []);
+
+  const handleAllocateCapital = useCallback((loan: LoanManagementDetailResult) => {
+    setLoanToAllocate(loan);
+    setAllocateOpen(true);
+  }, []);
+
+  const handleOpenReassign = useCallback(
+    async (
+      loan: LoanManagementDetailResult,
+      allocationId: string,
+      amount: number,
+      funderName: string,
+      e: React.MouseEvent
+    ) => {
+      e.stopPropagation();
+      setReassignLoan(loan);
+      setReassignAllocationId(allocationId);
+      setReassignAmount(amount);
+      setReassignOldFunderName(funderName);
+      setReassignSelectedFunderId("");
+      setReassignOpen(true);
+      setReassignLoading(true);
+
+      try {
+        const res = await getFundersQuickListAction();
+        if (res.success && res.data) {
+          setReassignFunders(res.data.filter((f) => f.name !== funderName));
+        } else {
+          toast.error("Failed to load available capital persons.");
+        }
+      } catch {
+        toast.error("Failed to load funders.");
+      } finally {
+        setReassignLoading(false);
+      }
+    },
+    []
+  );
+
+  const handleConfirmReassign = useCallback(async () => {
+    if (!reassignLoan || !reassignAllocationId || !reassignSelectedFunderId) {
+      toast.error("Please select a new capital person.");
+      return;
+    }
+
+    setReassignSubmitting(true);
+    try {
+      const res = await reassignCapitalSourceAction({
+        loanId: reassignLoan.loanId,
+        allocationId: reassignAllocationId,
+        newFunderId: reassignSelectedFunderId,
+        amount: reassignAmount,
+      });
+
+      if (res.success) {
+        toast.success("Capital source reassigned successfully!");
+        setReassignOpen(false);
+        queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+      } else {
+        toast.error(typeof res.error === "string" ? res.error : "Failed to reassign capital source.");
+      }
+    } catch {
+      toast.error("An unexpected error occurred while reassigning capital.");
+    } finally {
+      setReassignSubmitting(false);
+    }
+  }, [reassignLoan, reassignAllocationId, reassignSelectedFunderId, reassignAmount, queryClient]);
+
+  const handleDeleteLoan = useCallback(
+    (loanId: string, borrowerName: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!confirm(`Are you sure you want to permanently delete the loan file for "${borrowerName}"? This action cannot be undone.`)) {
+        return;
+      }
+
+      startTransition(async () => {
+        setLoans((prev) => prev.filter((l) => l.loanId !== loanId));
+        queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+          if (!old) return [];
+          return old.filter((l) => l.loanId !== loanId);
         });
 
+        const res = await deleteLoanAction(loanId);
+        if (res.success) {
+          toast.success(`Loan file for "${borrowerName}" was deleted.`);
+          queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+        } else {
+          toast.error(typeof res.error === "string" ? res.error : "Failed to delete loan.");
+          queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+        }
+      });
+    },
+    [queryClient]
+  );
+
+  const handleDeleteBorrower = useCallback(
+    (borrowerId: string, borrowerName: string) => {
+      if (!confirm(`⚠️ CRITICAL: Are you sure you want to delete borrower "${borrowerName}" and ALL their associated loans, repayments, reminders, and documents? This is irreversible.`)) {
+        return;
+      }
+
+      startTransition(async () => {
+        setLoans((prev) => prev.filter((l) => l.borrowerId !== borrowerId));
+        queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+          if (!old) return [];
+          return old.filter((l) => l.borrowerId !== borrowerId);
+        });
+        setDetailsOpen(false);
+
+        const res = await deleteBorrowerAction(borrowerId);
+        if (res.success) {
+          toast.success(`Borrower "${borrowerName}" and all associated loans have been permanently deleted.`);
+          queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+        } else {
+          toast.error(typeof res.error === "string" ? res.error : "Failed to delete borrower.");
+          queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+        }
+      });
+    },
+    [queryClient]
+  );
+
+  const handleCurrentStatement = useCallback((loan: LoanManagementDetailResult) => {
+    setGeneratingStatementId(loan.loanId);
+    setTimeout(() => {
+      try {
         const principal = Number(loan.principal);
         const interestRate = Number(loan.interestRate);
-        const periods = calculatePeriods(loan.dateGiven, loan.dueDate);
         const monthlyInterestAmount = calculateMonthlyInterest(principal, interestRate);
-        const totalInterest = periods * monthlyInterestAmount;
+        const periods = calculatePeriods(loan.dateGiven, loan.dueDate, loan.interestType as any);
+        const totalInterest = monthlyInterestAmount * Math.max(1, periods);
 
-        const totalPayments = paymentsList.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+        const now = new Date();
+        const dueDateObj = new Date(loan.dueDate);
+        const isOverdue = now > dueDateObj && loan.status !== "closed";
+        const overdueDays = isOverdue ? Math.floor((now.getTime() - dueDateObj.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+        const daysRemaining = !isOverdue ? Math.max(0, Math.ceil((dueDateObj.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+
+        const penaltyRatePerThousand = Number((loan as any).penaltyRate || 20);
+        const calculatedPenalty = isOverdue ? (principal / 1000) * penaltyRatePerThousand * overdueDays : 0;
+        const accruedPenalty = {
+          totalPenalty: calculatedPenalty,
+          isPenaltyActive: isOverdue && calculatedPenalty > 0,
+        };
+
+        const totalPayments = principal + totalInterest + Number(loan.penaltyAmount || 0) - loan.outstandingBalance;
         const totalPayable = loan.outstandingBalance;
 
         const nowFormatted = format(new Date(), "dd MMM yyyy, hh:mm a");
@@ -220,7 +448,6 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
           status: loan.status,
           penaltyRate: Number((loan as any).penaltyRate || 20),
           manualPenaltyAmount: Number(loan.penaltyAmount || 0),
-
           monthlyInterestAmount,
           totalInterest,
           accruedPenalty: accruedPenalty.totalPenalty,
@@ -228,13 +455,11 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
           overdueDays,
           daysRemaining,
           isOverdue,
-
           totalPayments,
           outstandingBalance: loan.outstandingBalance,
           totalPayable,
-
-          payments: paymentsList,
-          cycles: cyclesList,
+          payments: [],
+          cycles: [],
           notes: (loan as any).notes || undefined,
         });
 
@@ -246,617 +471,170 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         setGeneratingStatementId(null);
       }
     }, 100);
-  };
+  }, []);
 
-  // Dialog States
-  const [selectedLoan, setSelectedLoan] = useState<LoanManagementDetailResult | null>(null);
-  const [paymentOpen, setPaymentOpen] = useState(false);
-  const [extendOpen, setExtendOpen] = useState(false);
-  const [reminderOpen, setReminderOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [allocateOpen, setAllocateOpen] = useState(false);
-  const [loanToAllocate, setLoanToAllocate] = useState<LoanManagementDetailResult | null>(null);
-  const [notesText, setNotesText] = useState("");
-  const [originalNotesText, setOriginalNotesText] = useState("");
-
-  // Capital Source Switcher
-  const [reassignOpen, setReassignOpen] = useState(false);
-  const [reassignLoan, setReassignLoan] = useState<LoanManagementDetailResult | null>(null);
-  const [reassignAllocationId, setReassignAllocationId] = useState<string>("");
-  const [reassignAmount, setReassignAmount] = useState<number>(0);
-  const [reassignOldFunderName, setReassignOldFunderName] = useState<string>("");
-  const [reassignFunders, setReassignFunders] = useState<FunderQuickOption[]>([]);
-  const [reassignSelectedFunderId, setReassignSelectedFunderId] = useState<string>("");
-  const [reassignLoading, setReassignLoading] = useState(false);
-  const [reassignSubmitting, setReassignSubmitting] = useState(false);
-
-  // Form inputs
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentType, setPaymentType] = useState<"interest" | "principal" | "penalty">("interest");
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]!);
-  const [paymentNotes, setPaymentNotes] = useState("");
-  const [penaltyAmount, setPenaltyAmount] = useState("0");
-  const [paymentActionMode, setPaymentActionMode] = useState<"record" | "pay_extend" | "overdue_penalty" | "partial">("record");
-
-  // Edit borrower inputs
-  const [borrowerName, setBorrowerName] = useState("");
-  const [borrowerMobile, setBorrowerMobile] = useState("");
-  const [borrowerEmail, setBorrowerEmail] = useState("");
-  const [borrowerPan, setBorrowerPan] = useState("");
-  const [borrowerAadhaar, setBorrowerAadhaar] = useState("");
-  const [borrowerLocation, setBorrowerLocation] = useState("");
-
-  // Details extra data
-  const [extraDetails, setExtraDetails] = useState<ExtraLoanDetails | null>(null);
-  const [detailsLoading, setDetailsLoading] = useState(false);
-  const [showSensitive, setShowSensitive] = useState(false);
-
-  // Penalty settings state
-  const [penaltyTypeInput, setPenaltyTypeInput] = useState<"fixed" | "percentage">("fixed");
-  const [penaltyRateInput, setPenaltyRateInput] = useState("50");
-  const [penaltyLedger, setPenaltyLedger] = useState<PenaltyLedger[]>([]);
-  const [isUpdatingPenalty, setIsUpdatingPenalty] = useState(false);
-
-  // 3D Motion System States
-  const [showMoneyEffect, setShowMoneyEffect] = useState(false);
-  const [cycleEffectText, setCycleEffectText] = useState<string | null>(null);
-  const [documentEffectText, setDocumentEffectText] = useState<string | null>(null);
-
-  // Sync state with parent props when page dynamic refresh happens
-  useEffect(() => {
-    setLoans(initialLoans);
-  }, [initialLoans]);
-
-  useEffect(() => {
-    if (selectedLoan) {
-      const updated = loans.find(l => l.loanId === selectedLoan.loanId);
-      if (updated) {
-        setSelectedLoan(updated);
+  const handleDownloadPdf = useCallback(() => {
+    setIsGeneratingPdf(true);
+    setTimeout(() => {
+      try {
+        generateActiveLoansPdf(filteredLoans);
+        toast.success("Active Loans PDF generated & downloaded!");
+      } catch (err: any) {
+        console.error("PDF Export Error:", err);
+        toast.error("Unable to generate PDF. Please try again.");
+      } finally {
+        setIsGeneratingPdf(false);
       }
-    }
-  }, [loans]);
+    }, 100);
+  }, [filteredLoans]);
 
-  // Deep linking triggers
-  useEffect(() => {
-    const deepLinkId = searchParams.get("loanId") || searchParams.get("borrowerId");
-    if (deepLinkId && loans.length > 0) {
-      const match = loans.find(l => l.loanId === deepLinkId || l.borrowerId === deepLinkId);
-      if (match) {
-        handleViewDetails(match);
-      }
-    }
-  }, [searchParams, loans]);
+  // Form Submissions
+  const handleEditSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedLoan) return;
 
-  // ── Calculation helpers ───────────────────────────────────────────────────
-  const getDuration = (dateGiven: string, dueDate: string, interestType: string) => {
-    try {
-      const given = new Date(dateGiven);
-      const due = new Date(dueDate);
-      if (interestType === "weekly") {
-        const days = differenceInDays(due, given);
-        const weeks = Math.max(1, Math.round(days / 7));
-        return `${weeks} Week${weeks !== 1 ? "s" : ""}`;
-      } else if (interestType === "daily") {
-        const days = differenceInDays(due, given);
-        return `${days} Day${days !== 1 ? "s" : ""}`;
-      } else {
-        const months = calculatePeriods(dateGiven, dueDate, interestType);
-        return `${months} Month${months !== 1 ? "s" : ""}`;
-      }
-    } catch {
-      return "N/A";
-    }
-  };
+      const fd = new FormData();
+      fd.append("borrowerId", selectedLoan.borrowerId);
+      fd.append("name", borrowerName);
+      fd.append("mobile", borrowerMobile);
+      fd.append("email", borrowerEmail);
+      fd.append("pan", borrowerPan);
+      fd.append("aadhaar", borrowerAadhaar);
+      fd.append("locationUrl", borrowerLocation);
 
-  const getInterestAmount = (loan: LoanManagementDetailResult) => {
-    const periods = calculatePeriods(loan.dateGiven, loan.dueDate, loan.interestType);
-    const periodicInt = calculateMonthlyInterest(Number(loan.principal), Number(loan.interestRate));
-    return periods * periodicInt;
-  };
-
-  // ── Search & Filter & Sort logics ──────────────────────────────────────────
-  const todayStr = new Date().toISOString().split("T")[0]!;
-  const today = new Date(todayStr);
-
-  const deferredSearch = useDeferredValue(search);
-
-  const filteredLoans = useMemo(() => {
-    return loans
-      .filter((loan) => {
-        // 1. Search Query
-        const query = deferredSearch.trim().toLowerCase();
-        if (query) {
-          const name = loan.borrower.name.toLowerCase();
-          const mobile = loan.borrower.mobile.toLowerCase();
-          const aadhaar = (loan.borrower.aadhaarDecrypted || "").toLowerCase();
-          const pan = (loan.borrower.panDecrypted || "").toLowerCase();
-          if (!name.includes(query) && !mobile.includes(query) && !aadhaar.includes(query) && !pan.includes(query)) {
-            return false;
-          }
-        }
-
-        // 2. Status Filters
-        if (statusFilter === "all") return true;
-
-        const isPaid = loan.outstandingBalance <= 0 || loan.status === "closed";
-        const isUnpaid = loan.outstandingBalance > 0 && loan.status !== "closed";
-
-        const loanDueDate = new Date(loan.dueDate);
-        const isDueToday = loan.dueDate === todayStr;
-        const isOverdue = loan.status === "overdue" || (loanDueDate < today && isUnpaid);
-
-        if (statusFilter === "active") {
-          return isUnpaid && (loan.status === "active" || loan.status === "extended" || loan.status === "overdue");
-        }
-        if (statusFilter === "due_today") {
-          return isDueToday && isUnpaid;
-        }
-        if (statusFilter === "upcoming_due") {
-          return loan.dueDate > todayStr && isUnpaid;
-        }
-        if (statusFilter === "overdue") {
-          return isOverdue;
-        }
-        if (statusFilter === "completed") {
-          return isPaid;
-        }
-        if (statusFilter === "paid") {
-          return isPaid;
-        }
-        if (statusFilter === "unpaid") {
-          return isUnpaid;
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        // 3. Sorting
-        if (sortBy === "newest") {
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        }
-        if (sortBy === "oldest") {
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        }
-        if (sortBy === "highest_amount") {
-          return Number(b.principal) - Number(a.principal);
-        }
-        if (sortBy === "lowest_amount") {
-          return Number(a.principal) - Number(b.principal);
-        }
-        if (sortBy === "due_date") {
-          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-        }
-        if (sortBy === "borrower_name") {
-          return a.borrower.name.localeCompare(b.borrower.name);
-        }
-        return 0;
-      });
-  }, [loans, deferredSearch, statusFilter, sortBy, todayStr]);
-
-  // ── Handlers ────────────────────────────────────────────────────────────────
-  const handleSaveNotes = async (targetId: string, textToSave: string) => {
-    if (textToSave === originalNotesText) return;
-
-    const res = await saveInternalNotesAction(targetId, textToSave);
-    if (res.success) {
-      setOriginalNotesText(textToSave);
-      const now = new Date();
-      setLoans((prevLoans) =>
-        prevLoans.map((l) =>
-          l.loanId === targetId
-            ? { ...l, internalNotes: textToSave, internalNotesUpdatedAt: now }
-            : l
-        )
-      );
-      if (selectedLoan && selectedLoan.loanId === targetId) {
-        setSelectedLoan((prev) =>
-          prev
-            ? { ...prev, internalNotes: textToSave, internalNotesUpdatedAt: now }
-            : prev
-        );
-      }
-      toast.success("Notes saved successfully.");
-    } else {
-      toast.error(res.error || "Failed to save notes.");
-    }
-  };
-
-  const handleDetailsClose = () => {
-    if (selectedLoan && notesText !== originalNotesText) {
-      handleSaveNotes(selectedLoan.loanId, notesText);
-    }
-    setDetailsOpen(false);
-  };
-
-  const handleViewDetails = async (loan: LoanManagementDetailResult) => {
-    setSelectedLoan(loan);
-    const existingNotes = (loan as any).internalNotes !== undefined && (loan as any).internalNotes !== null
-      ? (loan as any).internalNotes
-      : (loan.borrower as any).internalNotes || "";
-    setNotesText(existingNotes);
-    setOriginalNotesText(existingNotes);
-    setPenaltyRateInput(((loan as any).penaltyRate || 20).toString());
-    setDetailsOpen(true);
-    setDetailsLoading(true);
-    setExtraDetails(null);
-    setPenaltyLedger([]);
-    setShowSensitive(false);
-
-    startTransition(async () => {
-      const [res, ledgerRes] = await Promise.all([
-        getExtraLoanDetailsAction(loan.loanId),
-        getPenaltyLedgerAction(loan.loanId),
-      ]);
-      if (res.success && res.data) {
-        setExtraDetails(res.data);
-        if (res.data.panDecrypted || res.data.aadhaarDecrypted) {
-          setSelectedLoan((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  borrower: {
-                    ...prev.borrower,
-                    panDecrypted: res.data.panDecrypted || prev.borrower.panDecrypted,
-                    aadhaarDecrypted: res.data.aadhaarDecrypted || prev.borrower.aadhaarDecrypted,
-                  },
-                }
-              : prev
-          );
-        }
-      } else {
-        toast.error("Failed to load payment history ledger.");
-      }
-      if (ledgerRes.success && ledgerRes.data) {
-        setPenaltyLedger(ledgerRes.data);
-      }
-      setDetailsLoading(false);
-    });
-  };
-
-  const handleOpenReassign = async (
-    loan: LoanManagementDetailResult,
-    allocationId: string,
-    amount: number,
-    oldFunderName: string,
-    e: React.MouseEvent
-  ) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setReassignLoan(loan);
-    setReassignAllocationId(allocationId);
-    setReassignAmount(amount);
-    setReassignOldFunderName(oldFunderName);
-    setReassignSelectedFunderId("");
-    setReassignOpen(true);
-    setReassignLoading(true);
-    const res = await getFundersQuickListAction();
-    if (res.success && res.data) {
-      // Exclude the current funder from selection list
-      const others = res.data.filter((f) => f.name !== oldFunderName);
-      setReassignFunders(others);
-      if (others.length > 0) setReassignSelectedFunderId(others[0]!.funderId);
-    }
-    setReassignLoading(false);
-  };
-
-  const handleConfirmReassign = async () => {
-    if (!reassignLoan || !reassignAllocationId || !reassignSelectedFunderId) return;
-    setReassignSubmitting(true);
-    const res = await reassignCapitalSourceAction({
-      allocationId: reassignAllocationId,
-      newFunderId: reassignSelectedFunderId,
-      amount: reassignAmount,
-      loanId: reassignLoan.loanId,
-    });
-    setReassignSubmitting(false);
-    if (res.success) {
-      const newFunder = reassignFunders.find((f) => f.funderId === reassignSelectedFunderId);
-      toast.success(`Capital source switched to ${newFunder?.name || "new funder"} successfully!`);
-      // Optimistic UI update
-      setLoans((prev) =>
-        prev.map((l) => {
-          if (l.loanId !== reassignLoan.loanId) return l;
-          const updatedSources = l.funding.sources.map((s) =>
-            s.allocationId === reassignAllocationId
-              ? {
-                  ...s,
-                  allocationId: res.data.newAllocationId,
-                  funderId: reassignSelectedFunderId,
-                  funderName: newFunder?.name || s.funderName,
-                  funderMobile: newFunder?.mobile || s.funderMobile,
-                }
-              : s
-          );
-          return { ...l, funding: { ...l.funding, sources: updatedSources } };
-        })
-      );
-      setReassignOpen(false);
-      await queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
-    } else {
-      toast.error(typeof res.error === "string" ? res.error : "Failed to reassign capital source.");
-    }
-  };
-
-  const handleRemoveAllocation = async (allocationId: string) => {
-    if (
-      !confirm(
-        "Are you sure you want to remove this capital allocation? The allocated money will immediately return to the capital provider's available balance."
-      )
-    ) {
-      return;
-    }
-    const res = await removeCapitalAllocationAction(allocationId);
-    if (res.success) {
-      toast.success("Capital allocation removed successfully.");
-      if (selectedLoan) {
-        const extraRes = await getExtraLoanDetailsAction(selectedLoan.loanId);
-        if (extraRes.success && extraRes.data) {
-          setExtraDetails(extraRes.data);
-        }
-      }
-      await queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
-    } else {
-      toast.error(typeof res.error === "string" ? res.error : "Failed to remove allocation.");
-    }
-  };
-
-  const handleUpdatePenaltySettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedLoan) return;
-
-    const rate = Number(penaltyRateInput);
-    if (isNaN(rate) || rate < 0) {
-      toast.error("Please enter a valid non-negative penalty rate.");
-      return;
-    }
-
-    setIsUpdatingPenalty(true);
-    const res = await updatePenaltySettingsAction(selectedLoan.loanId, rate);
-    setIsUpdatingPenalty(false);
-
-    if (res.success) {
-      toast.success(`Penalty rate updated to ₹${rate} per ₹1,000 / day`);
-      const ledgerRes = await getPenaltyLedgerAction(selectedLoan.loanId);
-      if (ledgerRes.success && ledgerRes.data) {
-        setPenaltyLedger(ledgerRes.data);
-      }
-      setLoans((prev) =>
-        prev.map((l) => (l.loanId === selectedLoan.loanId ? ({ ...l, penaltyRate: rate } as any) : l))
-      );
-      setSelectedLoan((prev) => (prev ? ({ ...prev, penaltyRate: rate } as any) : prev));
-    } else {
-      toast.error(typeof res.error === "string" ? res.error : "Failed to update penalty settings");
-    }
-  };
-
-  const handleEditOpen = (loan: LoanManagementDetailResult, e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setSelectedLoan(loan);
-    setBorrowerName(loan.borrower.name);
-    setBorrowerMobile(loan.borrower.mobile);
-    setBorrowerEmail(loan.borrower.email || "");
-    setBorrowerPan(loan.borrower.panDecrypted);
-    setBorrowerAadhaar(loan.borrower.aadhaarDecrypted);
-    setBorrowerLocation(loan.borrower.locationUrl || "");
-    setEditOpen(true);
-  };
-
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedLoan) return;
-
-    const fd = new FormData();
-    fd.append("borrowerId", selectedLoan.borrowerId);
-    fd.append("name", borrowerName);
-    fd.append("mobile", borrowerMobile);
-    fd.append("email", borrowerEmail);
-    fd.append("pan", borrowerPan.toUpperCase());
-    fd.append("aadhaar", borrowerAadhaar);
-    fd.append("locationUrl", borrowerLocation);
-
-    startTransition(async () => {
-      const res = await updateBorrowerAction(null, fd);
-      if (res.success) {
-        toast.success("Borrower details updated successfully!");
-        setEditOpen(false);
-        setLoans((prev) =>
-          prev.map((l) =>
-            l.borrowerId === selectedLoan.borrowerId
-              ? {
-                  ...l,
-                  borrower: {
-                    ...l.borrower,
-                    name: borrowerName,
-                    mobile: borrowerMobile,
-                    email: borrowerEmail,
-                    locationUrl: borrowerLocation,
-                  },
-                }
-              : l
-          )
-        );
-        setSelectedLoan((prev) =>
-          prev
-            ? {
-                ...prev,
-                borrower: {
-                  ...prev.borrower,
-                  name: borrowerName,
-                  mobile: borrowerMobile,
-                  email: borrowerEmail,
-                  locationUrl: borrowerLocation,
-                },
-              }
-            : prev
-        );
-      } else {
-        if (res.error && typeof res.error === "object") {
-          const errors = Object.values(res.error).flat().join(", ");
-          toast.error(errors || "Failed to update borrower details");
+      startTransition(async () => {
+        const res = await updateBorrowerAction(null, fd);
+        if (res.success) {
+          toast.success("Borrower details updated successfully!");
+          setEditOpen(false);
+          queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
         } else {
-          toast.error((res.error as string) || "Failed to update borrower details");
+          toast.error(typeof res.error === "string" ? res.error : "Failed to update borrower details");
         }
+      });
+    },
+    [selectedLoan, borrowerName, borrowerMobile, borrowerEmail, borrowerPan, borrowerAadhaar, borrowerLocation, queryClient]
+  );
+
+  const handlePaymentSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedLoan) return;
+
+      if (paymentActionMode === "pay_extend") {
+        await handlePayAndExtendConfirm();
+        return;
       }
-    });
-  };
-
-  const handlePaymentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedLoan) return;
-
-    if (paymentActionMode === "pay_extend") {
-      await handlePayAndExtendConfirm();
-      return;
-    }
-    if (paymentActionMode === "overdue_penalty") {
-      await handleOverduePenaltyConfirm();
-      return;
-    }
-
-    const paidAmt = Number(paymentAmount);
-    if (isNaN(paidAmt) || paidAmt <= 0) {
-      toast.error("Please enter a valid payment amount.");
-      return;
-    }
-
-    const fd = new FormData();
-    fd.append("loanId", selectedLoan.loanId);
-    fd.append("amount", paymentAmount);
-    fd.append("paymentType", paymentType);
-    fd.append("paymentDate", paymentDate);
-    fd.append("notes", paymentNotes);
-
-    // 1. OPTIMISTIC UPDATE: Update balance immediately in 0 ms
-    const targetLoanId = selectedLoan.loanId;
-    const previousOutstanding = selectedLoan.outstandingBalance;
-    const previousStatus = selectedLoan.status;
-    const newBal = Math.max(0, previousOutstanding - paidAmt);
-    const newStatus = newBal === 0 ? "closed" : previousStatus;
-
-    setLoans((prev) =>
-      prev.map((l) => (l.loanId === targetLoanId ? { ...l, outstandingBalance: newBal, status: newStatus } : l))
-    );
-    setSelectedLoan((prev) => (prev ? { ...prev, outstandingBalance: newBal, status: newStatus } : prev));
-    queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
-      if (!old) return [];
-      return old.map((l) => (l.loanId === targetLoanId ? { ...l, outstandingBalance: newBal, status: newStatus } : l));
-    });
-
-    setPaymentOpen(false);
-    setPaymentAmount("");
-    setPaymentNotes("");
-    setShowMoneyEffect(true);
-
-    startTransition(async () => {
-      const res = await recordPaymentAction(null, fd);
-      if (!res.success) {
-        // Rollback on failure
-        setLoans((prev) =>
-          prev.map((l) => (l.loanId === targetLoanId ? { ...l, outstandingBalance: previousOutstanding, status: previousStatus } : l))
-        );
-        setSelectedLoan((prev) => (prev ? { ...prev, outstandingBalance: previousOutstanding, status: previousStatus } : prev));
-        queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
-          if (!old) return [];
-          return old.map((l) => (l.loanId === targetLoanId ? { ...l, outstandingBalance: previousOutstanding, status: previousStatus } : l));
-        });
-        toast.error(typeof res.error === "string" ? res.error : "Failed to record payment");
+      if (paymentActionMode === "overdue_penalty") {
+        await handleOverduePenaltyConfirm();
         return;
       }
 
-      const data = res.data;
-      try {
-        await generatePaymentCompletedPdf(data);
-        toast.success(`Payment of ₹${paidAmt.toLocaleString("en-IN")} recorded! Receipt downloaded.`, {
-          action: {
-            label: "📄 Download PDF",
-            onClick: () => generatePaymentCompletedPdf(data),
-          },
-          duration: 8000,
-        });
-      } catch (pdfErr) {
-        toast.success(`Payment of ₹${paidAmt.toLocaleString("en-IN")} recorded!`);
+      const paidAmt = Number(paymentAmount);
+      if (isNaN(paidAmt) || paidAmt <= 0) {
+        toast.error("Please enter a valid payment amount.");
+        return;
       }
-    });
-  };
+
+      const fd = new FormData();
+      fd.append("loanId", selectedLoan.loanId);
+      fd.append("amount", paymentAmount);
+      fd.append("paymentType", paymentType);
+      fd.append("paymentDate", paymentDate);
+      fd.append("notes", paymentNotes);
+
+      const targetLoanId = selectedLoan.loanId;
+      const previousOutstanding = selectedLoan.outstandingBalance;
+      const previousStatus = selectedLoan.status;
+      const newBal = Math.max(0, previousOutstanding - paidAmt);
+      const newStatus = newBal === 0 ? "closed" : previousStatus;
+
+      setLoans((prev) =>
+        prev.map((l) => (l.loanId === targetLoanId ? { ...l, outstandingBalance: newBal, status: newStatus } : l))
+      );
+      setSelectedLoan((prev) => (prev ? { ...prev, outstandingBalance: newBal, status: newStatus } : prev));
+      queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+        if (!old) return [];
+        return old.map((l) => (l.loanId === targetLoanId ? { ...l, outstandingBalance: newBal, status: newStatus } : l));
+      });
+
+      setPaymentOpen(false);
+      setPaymentAmount("");
+      setPaymentNotes("");
+      setShowMoneyEffect(true);
+
+      startTransition(async () => {
+        const res = await recordPaymentAction(null, fd);
+        if (res.success) {
+          toast.success("Payment recorded successfully!");
+          queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+        } else {
+          toast.error(typeof res.error === "string" ? res.error : "Failed to record payment.");
+          queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+        }
+      });
+    },
+    [selectedLoan, paymentActionMode, paymentAmount, paymentType, paymentDate, paymentNotes, queryClient]
+  );
 
   const handlePayAndExtendConfirm = async () => {
     if (!selectedLoan) return;
-    const targetLoanId = selectedLoan.loanId;
-    const prevDueDate = selectedLoan.dueDate;
-    const prevStatus = selectedLoan.status;
-
-    setCycleEffectText("Pay & Extend Successful — Next Cycle Activated");
-    setTimeout(() => setCycleEffectText(null), 1500);
     setPaymentOpen(false);
+    setShowCycleEffect(true);
+    setTimeout(() => setShowCycleEffect(false), 2000);
 
     startTransition(async () => {
-      const res = await payAndExtendAction(selectedLoan.loanId, paymentDate, paymentNotes);
-      if (!res.success) {
-        const errText = typeof res.error === "string" ? res.error : "Failed to process Pay & Extend";
-        toast.error(errText);
-        return;
-      }
-      const data = res.data;
-      const newDueDateStr = data.newDueDate;
-      setLoans((prev) =>
-        prev.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: newDueDateStr, status: "extended" } : l))
+      const res = await payAndExtendAction(
+        selectedLoan.loanId,
+        paymentDate,
+        paymentNotes || "Monthly Interest Paid & Cycle Extended"
       );
-      setSelectedLoan((prev) => (prev ? { ...prev, dueDate: newDueDateStr, status: "extended" } : prev));
-      queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
-        if (!old) return [];
-        return old.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: newDueDateStr, status: "extended" } : l));
-      });
 
-      try {
-        await generateLoanExtensionPdf(data);
-        toast.success(`Loan extension completed successfully! Next cycle due: ${data.newDueDate}`, {
-          action: {
-            label: "📄 Download PDF",
-            onClick: () => generateLoanExtensionPdf(data),
-          },
-          duration: 8000,
-        });
-      } catch (pdfErr) {
-        toast.success(`Loan extension completed! Next cycle due: ${data.newDueDate}`);
+      if (res.success) {
+        toast.success(`Success! Interest of ₹${res.data.amountPaid.toLocaleString("en-IN")} recorded.`);
+        queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+      } else {
+        toast.error(typeof res.error === "string" ? res.error : "Pay & Extend operation failed.");
+        queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
       }
     });
   };
 
   const handleOverduePenaltyConfirm = async () => {
     if (!selectedLoan) return;
-    const targetLoanId = selectedLoan.loanId;
-    const prevDueDate = selectedLoan.dueDate;
-    const prevStatus = selectedLoan.status;
-    const prevPenalty = selectedLoan.penaltyAmount;
-
     setPaymentOpen(false);
-    setPaymentNotes("");
+    setShowCycleEffect(true);
+    setTimeout(() => setShowCycleEffect(false), 2000);
 
     startTransition(async () => {
-      const res = await overdueAndPenaltyAction(selectedLoan.loanId, paymentDate, paymentNotes);
+      const res = await overdueAndPenaltyAction(
+        selectedLoan.loanId,
+        paymentDate,
+        paymentNotes || "Overdue Interest & Penalty Paid - Cycle Reset"
+      );
+
       if (res.success) {
-        setCycleEffectText("Overdue Cycle Cleared & New Cycle Activated");
-        setTimeout(() => setCycleEffectText(null), 1500);
-        if (res.data?.newDueDate) {
-          const newDueDateStr = res.data.newDueDate;
-          setLoans((prev) =>
-            prev.map((l) =>
-              l.loanId === targetLoanId ? { ...l, dueDate: newDueDateStr, status: "active", penaltyAmount: "0" } : l
-            )
-          );
-          setSelectedLoan((prev) => (prev ? { ...prev, dueDate: newDueDateStr, status: "active", penaltyAmount: "0" } : prev));
-          queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
-            if (!old) return [];
-            return old.map((l) =>
-              l.loanId === targetLoanId ? { ...l, dueDate: newDueDateStr, status: "active", penaltyAmount: "0" } : l
-            );
-          });
-        }
-        toast.success(`Overdue cycle cleared! New cycle start: ${paymentDate}, Next due: ${res.data?.newDueDate}`);
+        toast.success(`Overdue Cleared! Interest: ₹${res.data.interestPaid}, Penalty: ₹${res.data.penaltyPaid}.`);
+        queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
       } else {
-        toast.error(typeof res.error === "string" ? res.error : "Failed to process Overdue & Penalty payment");
+        toast.error(typeof res.error === "string" ? res.error : "Overdue settlement failed.");
+        queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+      }
+    });
+  };
+
+  const handleExtendConfirm = async () => {
+    if (!selectedLoan) return;
+    setExtendOpen(false);
+
+    startTransition(async () => {
+      const res = await extendLoanAction(selectedLoan.loanId);
+      if (res.success) {
+        toast.success(`Loan extended! New Due Date: ${res.data.newDueDate}`);
+        queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+      } else {
+        toast.error(typeof res.error === "string" ? res.error : "Failed to extend loan.");
       }
     });
   };
@@ -865,191 +643,84 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     e.preventDefault();
     if (!selectedLoan) return;
 
+    setReminderOpen(false);
     startTransition(async () => {
-      const res = await sendReminderAction(selectedLoan.loanId, Number(penaltyAmount || 0));
+      const res = await sendReminderAction(selectedLoan.loanId, Number(penaltyAmount) || 0);
       if (res.success) {
-        toast.success("Reminder sent via SMS & Email!");
-        setReminderOpen(false);
-        setPenaltyAmount("0");
+        toast.success("Reminder alerts dispatched via SMS & Email!");
+        queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
       } else {
-        toast.error(typeof res.error === "string" ? res.error : "Failed to send reminder");
+        toast.error(typeof res.error === "string" ? res.error : "Failed to dispatch reminder.");
       }
     });
-  };
-
-  const handleExtendConfirm = async () => {
-    if (!selectedLoan) return;
-    const targetLoanId = selectedLoan.loanId;
-    setExtendOpen(false);
-
-    startTransition(async () => {
-      const res = await extendLoanAction(selectedLoan.loanId);
-      if (res.success) {
-        const data = res.data;
-        const newDueDateStr = data.newDueDate;
-        setLoans((prev) =>
-          prev.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: newDueDateStr, status: "extended" } : l))
-        );
-        setSelectedLoan((prev) => (prev ? { ...prev, dueDate: newDueDateStr, status: "extended" } : prev));
-        queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
-          if (!old) return [];
-          return old.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: newDueDateStr, status: "extended" } : l));
-        });
-
-        try {
-          generateLoanExtensionPdf(data);
-          toast.success(`Loan period extended! Next due date: ${data.newDueDate}`, {
-            action: {
-              label: "📄 Download PDF",
-              onClick: () => generateLoanExtensionPdf(data),
-            },
-            duration: 8000,
-          });
-        } catch (pdfErr) {
-          toast.success("Loan period extended by 1 month!");
-        }
-      } else {
-        toast.error(typeof res.error === "string" ? res.error : "Failed to extend loan");
-      }
-    });
-  };
-
-  const handleDeleteLoan = async (loanId: string, borrowerName: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    if (!confirm(`Are you sure you want to delete the loan for ${borrowerName}? This will permanently delete the loan and all associated repayments. This action cannot be undone.`)) {
-      return;
-    }
-
-    // 1. OPTIMISTIC REMOVAL: Remove immediately from UI in 0 ms
-    const deletedLoan = loans.find((l) => l.loanId === loanId);
-    setLoans((prev) => prev.filter((l) => l.loanId !== loanId));
-    queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
-      if (!old) return [];
-      return old.filter((l) => l.loanId !== loanId);
-    });
-
-    startTransition(async () => {
-      const res = await deleteLoanAction(loanId);
-      if (res.success) {
-        toast.success("Loan deleted successfully!");
-      } else {
-        // Rollback on error
-        if (deletedLoan) {
-          setLoans((prev) => [deletedLoan, ...prev]);
-          queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
-            if (!old) return [deletedLoan];
-            return [deletedLoan, ...old];
-          });
-        }
-        toast.error(typeof res.error === "string" ? res.error : "Failed to delete loan");
-      }
-    });
-  };
-
-  const handleDeleteBorrower = async (borrowerId: string, borrowerName: string) => {
-    if (!confirm(`CAUTION: Are you sure you want to delete ${borrowerName}? This will permanently remove their profile and ALL associated loans and repayment ledgers. This action is irreversible.`)) {
-      return;
-    }
-
-    const removedLoans = loans.filter((l) => l.borrowerId === borrowerId);
-    setLoans((prev) => prev.filter((l) => l.borrowerId !== borrowerId));
-    queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
-      if (!old) return [];
-      return old.filter((l) => l.borrowerId !== borrowerId);
-    });
-    setDetailsOpen(false);
-
-    startTransition(async () => {
-      const res = await deleteBorrowerAction(borrowerId);
-      if (res.success) {
-        toast.success("Borrower profile deleted successfully.");
-      } else {
-        setLoans((prev) => [...removedLoans, ...prev]);
-        queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
-          if (!old) return removedLoans;
-          return [...removedLoans, ...old];
-        });
-        toast.error(typeof res.error === "string" ? res.error : "Failed to delete borrower profile");
-      }
-    });
-  };
-
-  const handleDeletePayment = async (paymentId: string) => {
-    if (!selectedLoan) return;
-    if (!confirm("Delete this payment record? This will restore the outstanding balance.")) return;
-
-    startTransition(async () => {
-      const res = await deletePaymentAction(paymentId, selectedLoan.loanId);
-      if (res.success) {
-        toast.success("Payment record deleted.");
-        const extraRes = await getExtraLoanDetailsAction(selectedLoan.loanId);
-        if (extraRes.success && extraRes.data) {
-          setExtraDetails(extraRes.data);
-        }
-      } else {
-        toast.error(typeof res.error === "string" ? res.error : "Failed to delete payment");
-      }
-    });
-  };
-
-  // ── Render Card Avatar ────────────────────────────────────────────────────
-  const getAvatarInitials = (name: string) => {
-    const parts = name.split(" ");
-    if (parts.length >= 2) {
-      return `${parts[0]!.charAt(0)}${parts[1]!.charAt(0)}`.toUpperCase();
-    }
-    return name.slice(0, 2).toUpperCase();
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      {/* Visual Transition Effects */}
       <FinexaMoneyEffect active={showMoneyEffect} onComplete={() => setShowMoneyEffect(false)} />
-      <FinexaCycleEffect active={!!cycleEffectText} text={cycleEffectText || undefined} />
-      <FinexaDocumentEffect active={!!documentEffectText} text={documentEffectText || undefined} />
-      {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, mobile, PAN, or Aadhaar..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 h-11 rounded-xl bg-transparent border-border fx-input-glass text-sm"
-          />
-        </div>
+      <FinexaCycleEffect active={showCycleEffect} />
+      <FinexaDocumentEffect active={showDocEffect} />
 
-        {/* Filters & Sorting */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Status Filter Dropdown */}
-          <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val || "all")}>
-            <SelectTrigger className="h-11 min-w-[140px] px-4 rounded-xl border border-border bg-transparent text-sm font-semibold hover:bg-accent/40 transition-colors">
-              <div className="flex items-center gap-2">
-                <ListFilter className="h-4 w-4 text-primary shrink-0" />
-                <span>
-                  Status: <strong className="capitalize text-primary">{statusFilter.replace("_", " ")}</strong>
-                </span>
-              </div>
-            </SelectTrigger>
-            <SelectContent align="start" className="rounded-2xl border border-border bg-white dark:bg-[#111827] z-[100] min-w-56 p-1.5 max-h-[60vh] shadow-2xl">
-              <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/40 mb-1">
-                Filter Loans
-              </div>
-              <SelectItem value="all">All Loans</SelectItem>
-              <SelectItem value="active">Active Loans</SelectItem>
-              <SelectItem value="due_today">Due Today</SelectItem>
-              <SelectItem value="upcoming_due">Upcoming Due</SelectItem>
-              <SelectItem value="overdue">Overdue Loans</SelectItem>
-              <SelectItem value="completed">Completed Loans</SelectItem>
-              <SelectItem value="paid">Paid Loans</SelectItem>
-              <SelectItem value="unpaid">Unpaid Loans</SelectItem>
-            </SelectContent>
-          </Select>
+      {/* ── Search, Filters & Action Controls ─────────────────────────────────── */}
+      <div className="flex flex-col gap-4">
+        {/* Top Controls Bar */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search by borrower name, mobile, PAN, Aadhaar, capital person..."
+              value={searchQuery}
+              onChange={handleSearchChange}
+              className="pl-10 h-11 rounded-xl bg-transparent border-border fx-input-glass text-sm"
+            />
+          </div>
+
+          {/* Status Tabs */}
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-accent/20 border border-border/40 text-xs font-bold overflow-x-auto">
+            {[
+              { id: "all", label: "All Loans", count: loans.length },
+              {
+                id: "active",
+                label: "Active",
+                count: loans.filter((l) => l.outstandingBalance > 0 && l.status !== "closed" && l.dueDate !== todayStr && !(new Date(l.dueDate) < today)).length,
+              },
+              {
+                id: "due_today",
+                label: "Due Today",
+                count: loans.filter((l) => l.dueDate === todayStr && l.outstandingBalance > 0 && l.status !== "closed").length,
+              },
+              {
+                id: "overdue",
+                label: "Overdue",
+                count: loans.filter((l) => (l.status === "overdue" || new Date(l.dueDate) < today) && l.outstandingBalance > 0 && l.status !== "closed").length,
+              },
+              {
+                id: "paid",
+                label: "Settled",
+                count: loans.filter((l) => l.outstandingBalance <= 0 || l.status === "closed").length,
+              },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => handleStatusFilterChange(tab.id)}
+                className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-all duration-150 flex items-center gap-1.5 ${
+                  statusFilter === tab.id
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/40"
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/20 dark:bg-white/10">{tab.count}</span>
+              </button>
+            ))}
+          </div>
 
           {/* Sort dropdown */}
-          <Select value={sortBy} onValueChange={(val) => setSortBy(val || "newest")}>
+          <Select value={sortBy} onValueChange={(val) => handleSortChange(val || "newest")}>
             <SelectTrigger className="h-11 w-44 rounded-xl border-border bg-transparent text-sm font-semibold">
               <SelectValue placeholder="Sort Options" />
             </SelectTrigger>
@@ -1101,7 +772,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         )}
       </div>
 
-      {/* ── Cards Grid ──────────────────────────────────────────────────────── */}
+      {/* ── Cards Grid (Render only paginated slice) ────────────────────────── */}
       {filteredLoans.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center fx-glass-card rounded-[22px] border border-border">
           <div className="h-14 w-14 bg-secondary rounded-2xl flex items-center justify-center mb-4 border border-border">
@@ -1112,1429 +783,200 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         </div>
       ) : (
         <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredLoans.map((loan) => {
-            const dynamicStatus = getCardStatus(loan.status, loan.outstandingBalance, loan.dueDate);
-            const cardBg = getCardGlow(dynamicStatus);
-            const duration = getDuration(loan.dateGiven, loan.dueDate, loan.interestType);
-            const isSettled = loan.outstandingBalance <= 0 || loan.status === "closed";
-
-            const accruedPenalty = calculateAccruedPenalty({
-              principal: Number(loan.principal),
-              dueDate: loan.dueDate,
-              status: loan.status,
-              penaltyRate: Number((loan as any).penaltyRate || 20),
-              manualPenaltyAmount: Number(loan.penaltyAmount || 0),
-            });
-
-            return (
-              <div
-                key={loan.loanId}
-                className={`flex flex-col justify-between h-full fx-glass-card rounded-[22px] p-5 border transition-all duration-300 ease-out fx-3d-hover ${cardBg}`}
-              >
-                {/* Profile + Status Row */}
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-xl fx-brand-gradient flex items-center justify-center text-white font-black text-sm shrink-0 fx-shadow-glow-sm">
-                        {getAvatarInitials(loan.borrower.name)}
-                      </div>
-                      <div className="text-left min-w-0">
-                        <p className="font-semibold text-sm text-foreground tracking-tight truncate max-w-[130px]">{loan.borrower.name}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{loan.borrower.mobile}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-1">
-                      <StatusBadge status={loan.status} outstanding={loan.outstandingBalance} dueDate={loan.dueDate} />
-                      {(loan as any).isOptimistic && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-primary/15 text-primary border border-primary/25 animate-pulse">
-                          <RefreshCw className="h-2.5 w-2.5 animate-spin" />
-                          SYNCING
-                        </span>
-                      )}
-                      {accruedPenalty.isPenaltyActive && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20">
-                          <AlertTriangle className="h-3 w-3" />
-                          PENALTY ACTIVE
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Loan Details Grid */}
-                  <div className="grid grid-cols-2 gap-3 bg-black/15 dark:bg-black/35 p-3.5 rounded-xl border border-white/[0.02] text-left text-xs">
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Loan Amount</p>
-                      <p className="font-extrabold text-foreground mt-0.5">₹{Number(loan.principal).toLocaleString("en-IN")}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Outstanding Amount</p>
-                      <p className={`font-extrabold mt-0.5 ${loan.outstandingBalance > 0 ? "text-primary" : "text-emerald-400"}`}>
-                        ₹{loan.outstandingBalance.toLocaleString("en-IN")}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Penalty</p>
-                      <p className={`font-extrabold mt-0.5 ${accruedPenalty.totalPenalty > 0 ? "text-red-400 font-bold" : "text-emerald-400"}`}>
-                        ₹{accruedPenalty.totalPenalty.toLocaleString("en-IN")}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Due Date</p>
-                      <p className="font-semibold text-foreground mt-0.5">
-                        {new Date(loan.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                      </p>
-                    </div>
-                    <div className="col-span-2">
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Timeline</p>
-                      <p className={`font-semibold mt-0.5 ${
-                        dynamicStatus === "overdue" ? "text-red-400 font-bold" :
-                        dynamicStatus === "due_today" ? "text-blue-400 font-bold" :
-                        dynamicStatus === "paid" ? "text-emerald-400" :
-                        "text-amber-400"
-                      }`}>
-                        {dynamicStatus === "overdue" && `${differenceInDays(today, new Date(loan.dueDate))} Days Overdue`}
-                        {dynamicStatus === "due_today" && "Due Today"}
-                        {dynamicStatus === "active" && `${differenceInDays(new Date(loan.dueDate), today)} Days Left`}
-                        {dynamicStatus === "paid" && "Settled"}
-                      </p>
-                    </div>
-                    <div className="col-span-2 border-t border-white/[0.04] pt-2 mt-0.5 flex justify-between text-[10px] text-muted-foreground">
-                      <span>Rate: ₹{Number(loan.interestRate)}/{loan.interestType === "monthly" ? "mo" : "day"}</span>
-                      <span>Payment Status: <strong className="capitalize">{
-                        dynamicStatus === "paid" ? "Paid" :
-                        dynamicStatus === "due_today" ? "Payment Pending" :
-                        dynamicStatus === "overdue" ? "Overdue" :
-                        "Active"
-                      }</strong></span>
-                    </div>
-                  </div>
-
-                  {/* Capital / Funding Source Section */}
-                  <div className="p-3 rounded-xl bg-black/15 dark:bg-black/35 border border-white/[0.04] text-xs space-y-2 text-left">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider flex items-center gap-1.5">
-                        <Landmark className="h-3 w-3 text-primary" /> Capital Source
-                      </span>
-                      {loan.funding && loan.funding.isFullyFunded ? (
-                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          Fully Funded
-                        </span>
-                      ) : loan.funding && loan.funding.isPartiallyFunded ? (
-                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                          Partially Funded
-                        </span>
-                      ) : (
-                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-muted/50 text-muted-foreground border border-border/40">
-                          Not Assigned
-                        </span>
-                      )}
-                    </div>
-
-                    {loan.funding && loan.funding.sources.length > 0 ? (
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          {loan.funding.sources.map((s) => (
-                            <div
-                              key={s.allocationId}
-                              className="group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 hover:border-primary/50 hover:bg-primary/20 text-[11px] font-semibold text-foreground transition-all duration-200 cursor-pointer"
-                              title="Click to reassign capital source"
-                              onClick={(e) => handleOpenReassign(loan, s.allocationId, s.amount, s.funderName, e)}
-                            >
-                              <ArrowLeftRight className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-                              <span>
-                                {s.funderName}: <strong className="text-primary font-bold">₹{s.amount.toLocaleString("en-IN")}</strong>
-                                <span className="text-muted-foreground text-[10px] ml-1">({s.funderSharePercentage}%)</span>
-                              </span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  router.push(`/capital-management?funderId=${s.funderId}`);
-                                }}
-                                title="View in Capital Management"
-                                className="text-muted-foreground hover:text-primary transition-colors p-0.5"
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-
-                        {loan.funding.isPartiallyFunded && (
-                          <div className="flex items-center justify-between pt-1 border-t border-white/[0.04]">
-                            <span className="text-[10px] text-amber-400 font-bold">
-                              ₹{loan.funding.remainingRequired.toLocaleString("en-IN")} remaining
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setLoanToAllocate(loan);
-                                setAllocateOpen(true);
-                              }}
-                              className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1"
-                            >
-                              <Plus className="h-3 w-3" /> Add Capital Person
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between pt-0.5">
-                        <span className="text-[11px] text-muted-foreground">No capital person assigned</span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setLoanToAllocate(loan);
-                            setAllocateOpen(true);
-                          }}
-                          className="h-7 px-2.5 rounded-lg bg-primary/15 text-primary border border-primary/25 hover:bg-primary/25 text-[11px] font-bold flex items-center gap-1 transition-all"
-                        >
-                          <Plus className="h-3 w-3" /> Add Capital Person
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Bottom Actions Row */}
-                <div className="flex flex-wrap items-center gap-2 pt-4 mt-4 border-t border-white/[0.03]">
-                  {!isSettled ? (
-                    <>
-                      <button
-                        onClick={() => { setSelectedLoan(loan); setPaymentAmount(""); setPaymentNotes(""); setPaymentOpen(true); }}
-                        className="h-9 px-3 flex-1 min-w-[70px] sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl bg-secondary hover:bg-accent/40 text-primary text-xs font-bold whitespace-nowrap transition-all duration-200 fx-pressable"
-                      >
-                        <Landmark className="h-3.5 w-3.5 shrink-0 text-primary" />
-                        <span>Pay</span>
-                      </button>
-                      <button
-                        onClick={() => handleCurrentStatement(loan)}
-                        disabled={generatingStatementId === loan.loanId}
-                        className="h-9 px-3.5 flex-1 min-w-[115px] sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl bg-secondary hover:bg-accent/40 text-primary text-xs font-bold whitespace-nowrap transition-all duration-200 fx-pressable disabled:opacity-50"
-                      >
-                        {generatingStatementId === loan.loanId ? (
-                          <>
-                            <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
-                            <span>Generating...</span>
-                          </>
-                        ) : (
-                          <>
-                            <FileText className="h-3.5 w-3.5 shrink-0 text-primary" />
-                            <span>Loan Status</span>
-                          </>
-                        )}
-                      </button>
-                    </>
-                  ) : null}
-
-                  <button
-                    onClick={() => handleViewDetails(loan)}
-                    className="h-9 px-3.5 flex-1 min-w-[100px] sm:flex-initial flex items-center justify-center gap-1 rounded-xl bg-accent/25 hover:bg-accent/50 text-foreground text-xs font-semibold whitespace-nowrap transition-all duration-200"
-                  >
-                    <span>View Details</span>
-                  </button>
-
-                  <div className="flex items-center gap-1 ml-auto shrink-0">
-                    <button
-                      onClick={(e) => handleEditOpen(loan, e)}
-                      className="h-9 w-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors"
-                      title="Edit Borrower Details"
-                    >
-                      <Edit className="h-4 w-4 shrink-0" />
-                    </button>
-
-                    <button
-                      onClick={(e) => handleDeleteLoan(loan.loanId, loan.borrower.name, e)}
-                      disabled={isPending}
-                      className="h-9 w-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-red-400 hover:bg-red-550/10 transition-all duration-200"
-                      title="Delete Loan"
-                    >
-                      <Trash2 className="h-4 w-4 shrink-0" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {paginatedLoans.map((loan) => (
+            <LoanCardItem
+              key={loan.loanId}
+              loan={loan}
+              onPay={handlePay}
+              onViewDetails={handleViewDetails}
+              onEditOpen={handleEditOpen}
+              onDeleteLoan={handleDeleteLoan}
+              onCurrentStatement={handleCurrentStatement}
+              onOpenReassign={handleOpenReassign}
+              onAllocateCapital={handleAllocateCapital}
+              generatingStatementId={generatingStatementId}
+              isPending={isPending}
+            />
+          ))}
         </div>
       )}
 
-      {/* ── Repayment Modal ─────────────────────────────────────────────────── */}
-      <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
-        <DialogContent className="rounded-2xl max-w-lg fx-glass-card border-border/50 bg-white dark:bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-black tracking-tight flex items-center justify-between">
-              <span>Record Repayment & Cycle Actions</span>
-              <span className="text-xs font-semibold text-muted-foreground">{selectedLoan?.borrower.name}</span>
-            </DialogTitle>
-            <DialogDescription>
-              Select payment action, verify cycle parameters, and confirm transaction for <strong>{selectedLoan?.borrower.name}</strong>.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handlePaymentSubmit} className="space-y-4">
-            {selectedLoan && (() => {
-              const principalNum = Number(selectedLoan.principal || 0);
-              const rateNum = Number(selectedLoan.interestRate || 0);
-              const monthlyInterest = calculateMonthlyInterest(principalNum, rateNum);
-              const currentDueDateObj = new Date(selectedLoan.dueDate);
-              const isLoanOverdue = currentDueDateObj < new Date() || selectedLoan.status === "overdue";
-              
-              const penaltyRes = calculateAccruedPenalty({
-                principal: principalNum,
-                dueDate: selectedLoan.dueDate,
-                status: selectedLoan.status,
-                penaltyRate: Number(selectedLoan.penaltyRate || 50),
-                manualPenaltyAmount: Number(selectedLoan.penaltyAmount || 0),
-              });
-              const penaltyAmt = Math.round(penaltyRes.totalPenalty);
-              const overdueTotal = monthlyInterest + penaltyAmt;
-
-              const currentCycleMonth = currentDueDateObj.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-              const nextDueDateObj = calculateDueDate(currentDueDateObj);
-              const nextCycleMonth = nextDueDateObj.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-              const clearanceDateObj = paymentDate ? new Date(paymentDate) : new Date();
-              const newCycleStartStr = clearanceDateObj.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-
-              return (
-                <div className="space-y-4">
-                  {/* Action Selection Tabs */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 rounded-xl bg-accent/20 border border-border/40 text-[11px] font-bold">
-                    <button
-                      type="button"
-                      onClick={() => { setPaymentActionMode("record"); setPaymentType("interest"); }}
-                      className={`py-2 px-1 rounded-lg text-center transition-all ${
-                        paymentActionMode === "record" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      💰 Record
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setPaymentActionMode("pay_extend"); }}
-                      className={`py-2 px-1 rounded-lg text-center transition-all ${
-                        paymentActionMode === "pay_extend" ? "bg-amber-600 text-white shadow" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      🔄 Pay & Extend
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setPaymentActionMode("overdue_penalty"); }}
-                      className={`py-2 px-1 rounded-lg text-center transition-all ${
-                        paymentActionMode === "overdue_penalty"
-                          ? "bg-red-600 text-white shadow"
-                          : isLoanOverdue
-                          ? "text-red-400 font-extrabold hover:text-red-300"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      ⚠️ Overdue
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setPaymentActionMode("partial"); setPaymentType("principal"); }}
-                      className={`py-2 px-1 rounded-lg text-center transition-all ${
-                        paymentActionMode === "partial" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      💳 Partial
-                    </button>
-                  </div>
-
-                  {/* MODE SPECIFIC FORMS */}
-                  {paymentActionMode === "pay_extend" ? (
-                    /* PAY & EXTEND CONFIRMATION BOX */
-                    <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-3 text-xs">
-                      <div className="flex items-center justify-between font-bold border-b border-amber-500/20 pb-2">
-                        <span className="text-amber-400 font-extrabold flex items-center gap-1.5">
-                          <RefreshCw className="h-4 w-4 animate-spin" /> PAY & EXTEND CONFIRMATION
-                        </span>
-                        <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full uppercase">1 Cycle Extension</span>
-                      </div>
-                      <div className="space-y-1.5 text-foreground">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Current Interest:</span>
-                          <span className="font-bold text-amber-300">₹{monthlyInterest.toLocaleString("en-IN")}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Principal Outstanding:</span>
-                          <span className="font-bold text-foreground">₹{principalNum.toLocaleString("en-IN")} (Remains 100%)</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Payment Amount:</span>
-                          <span className="font-extrabold text-emerald-400 text-sm">₹{monthlyInterest.toLocaleString("en-IN")}</span>
-                        </div>
-                        <div className="flex justify-between border-t border-amber-500/20 pt-1.5 text-[11px]">
-                          <span className="text-muted-foreground">Current Cycle:</span>
-                          <span className="font-semibold text-foreground">{currentCycleMonth}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px]">
-                          <span className="text-muted-foreground">Next Cycle:</span>
-                          <span className="font-extrabold text-primary">{nextCycleMonth}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : paymentActionMode === "overdue_penalty" ? (
-                    /* OVERDUE & PENALTY CONFIRMATION BOX */
-                    <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 space-y-3 text-xs">
-                      <div className="flex items-center justify-between font-bold border-b border-red-500/20 pb-2">
-                        <span className="text-red-400 font-extrabold flex items-center gap-1.5">
-                          <AlertTriangle className="h-4 w-4" /> OVERDUE & PENALTY SETTLEMENT
-                        </span>
-                        <span className="text-[10px] bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full uppercase">{penaltyRes.daysOverdue} Days Overdue</span>
-                      </div>
-                      <div className="space-y-1.5 text-foreground">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Original Due Date:</span>
-                          <span className="font-semibold text-foreground">{selectedLoan.dueDate}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Payment Date:</span>
-                          <span className="font-semibold text-foreground">{paymentDate}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Interest Amount:</span>
-                          <span className="font-semibold text-foreground">₹{monthlyInterest.toLocaleString("en-IN")}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Accrued Penalty:</span>
-                          <span className="font-bold text-red-400">₹{penaltyAmt.toLocaleString("en-IN")}</span>
-                        </div>
-                        <div className="flex justify-between border-t border-red-500/20 pt-1.5 font-bold">
-                          <span className="text-foreground">Total Required Payment:</span>
-                          <span className="text-sm font-black text-red-400">₹{overdueTotal.toLocaleString("en-IN")}</span>
-                        </div>
-                        <div className="flex justify-between text-[11px] border-t border-red-500/20 pt-1 text-emerald-400 font-semibold">
-                          <span>New Cycle Start Date:</span>
-                          <span>{newCycleStartStr}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    /* REGULAR / PARTIAL PAYMENT INPUTS */
-                    <>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Amount (₹)*</Label>
-                        <Input
-                          type="number"
-                          placeholder={paymentActionMode === "partial" ? "e.g. 2000 (Partial)" : "₹1000"}
-                          value={paymentAmount}
-                          onChange={(e) => setPaymentAmount(e.target.value)}
-                          required={paymentActionMode === "record" || paymentActionMode === "partial"}
-                          className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Payment Type / Allocation*</Label>
-                        <Select value={paymentType} onValueChange={(val: any) => setPaymentType(val)}>
-                          <SelectTrigger className="h-11 rounded-xl bg-transparent border-border">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="rounded-xl border-border bg-white dark:bg-card">
-                            <SelectItem value="interest">Interest Payment</SelectItem>
-                            <SelectItem value="principal">Principal Reduction</SelectItem>
-                            <SelectItem value="penalty">Late Penalty Settlement</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Common Payment Date Input */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Actual Payment Date*</Label>
-                    <Input
-                      type="date"
-                      value={paymentDate}
-                      onChange={(e) => setPaymentDate(e.target.value)}
-                      required
-                      className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
-                    />
-                  </div>
-
-                  {/* Common Notes Input */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Notes / Transaction Reference</Label>
-                    <Textarea
-                      placeholder="e.g. UPI Ref Number, Cash receipt, GPay..."
-                      value={paymentNotes}
-                      onChange={(e) => setPaymentNotes(e.target.value)}
-                      className="rounded-xl bg-transparent border-border"
-                    />
-                  </div>
-
-                  <DialogFooter className="gap-2 pt-2">
-                    <Button type="button" variant="outline" onClick={() => setPaymentOpen(false)} className="rounded-xl border-border">
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={isPending}
-                      className={`rounded-xl border-0 text-white fx-pressable font-bold ${
-                        paymentActionMode === "overdue_penalty"
-                          ? "bg-red-600 hover:bg-red-500 shadow-lg shadow-red-600/30"
-                          : paymentActionMode === "pay_extend"
-                          ? "bg-amber-600 hover:bg-amber-500 shadow-lg shadow-amber-600/30"
-                          : "fx-brand-gradient fx-cta-glow"
-                      }`}
-                    >
-                      {isPending
-                        ? "Processing..."
-                        : paymentActionMode === "pay_extend"
-                        ? "Confirm Pay & Extend"
-                        : paymentActionMode === "overdue_penalty"
-                        ? "Confirm Overdue & Penalty Payment"
-                        : "Record Payment"}
-                    </Button>
-                  </DialogFooter>
-                </div>
-              );
-            })()}
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Send Reminder Modal ─────────────────────────────────────────────── */}
-      <Dialog open={reminderOpen} onOpenChange={setReminderOpen}>
-        <DialogContent className="rounded-2xl max-w-md fx-glass-card border-border/50 bg-white dark:bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-black tracking-tight">Send Repayment Reminder</DialogTitle>
-            <DialogDescription>
-              Dispatches an automated payment reminder alert to <strong>{selectedLoan?.borrower.name}</strong>.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleReminderSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Late Penalty Charge (₹, optional)</Label>
-              <Input
-                type="number"
-                value={penaltyAmount}
-                onChange={(e) => setPenaltyAmount(e.target.value)}
-                className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
-              />
-              <p className="text-[10px] text-muted-foreground">This amount will be applied to the loan penalty ledger balance.</p>
-            </div>
-            <div className="bg-accent/40 rounded-xl p-4 space-y-1.5 text-xs text-muted-foreground border border-border/30">
-              <p className="font-bold text-foreground mb-1">Delivered via:</p>
-              <p>📧 Email: {selectedLoan?.borrower.email || "N/A"}</p>
-              <p>💬 SMS Mobile: {selectedLoan?.borrower.mobile}</p>
-            </div>
-            <DialogFooter className="gap-2">
-              <Button type="button" variant="outline" onClick={() => setReminderOpen(false)} className="rounded-xl border-border">
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isPending} className="rounded-xl fx-brand-gradient border-0 text-white gap-2 fx-cta-glow fx-pressable font-bold">
-                <Send className="h-4 w-4" /> Send Now
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Extend Loan Period Modal ────────────────────────────────────────── */}
-      <Dialog open={extendOpen} onOpenChange={setExtendOpen}>
-        <DialogContent className="rounded-2xl max-w-md fx-glass-card border-border/50 bg-white dark:bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-black tracking-tight">Extend Due Period?</DialogTitle>
-            <DialogDescription>
-              Postpone this loan due date for another month.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="bg-secondary/40 border border-border rounded-xl p-4 space-y-2 text-sm text-foreground">
-            <p><span className="text-muted-foreground">Current Due Date:</span> <strong>{selectedLoan?.dueDate}</strong></p>
-            <p>
-              <span className="text-muted-foreground">Interest for Extension:</span>{" "}
-              <strong className="text-primary">
-                ₹{selectedLoan && calculateMonthlyInterest(Number(selectedLoan.principal), Number(selectedLoan.interestRate)).toLocaleString("en-IN")}
-              </strong>
-            </p>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setExtendOpen(false)} className="rounded-xl border-border">
-              Cancel
-            </Button>
-            <Button onClick={handleExtendConfirm} disabled={isPending} className="rounded-xl fx-brand-gradient border-0 text-white fx-cta-glow fx-pressable font-bold">
-              Confirm Extension
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Edit Borrower Modal ─────────────────────────────────────────────── */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="rounded-2xl max-w-md fx-glass-card border-border/50 bg-white dark:bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-black tracking-tight">Edit Borrower Details</DialogTitle>
-            <DialogDescription>
-              Update KYC registration details for <strong>{selectedLoan?.borrower.name}</strong>.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleEditSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Full Name*</Label>
-              <Input
-                type="text"
-                value={borrowerName}
-                onChange={(e) => setBorrowerName(e.target.value)}
-                required
-                className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mobile Number*</Label>
-              <Input
-                type="tel"
-                value={borrowerMobile}
-                onChange={(e) => setBorrowerMobile(e.target.value)}
-                required
-                className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Email Address*</Label>
-              <Input
-                type="email"
-                value={borrowerEmail}
-                onChange={(e) => setBorrowerEmail(e.target.value)}
-                required
-                className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">PAN Card Number*</Label>
-              <Input
-                type="text"
-                value={borrowerPan}
-                onChange={(e) => setBorrowerPan(e.target.value.toUpperCase())}
-                required
-                className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Aadhaar Card Number*</Label>
-              <Input
-                type="text"
-                value={borrowerAadhaar}
-                onChange={(e) => setBorrowerAadhaar(e.target.value)}
-                required
-                className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Location URL (optional)</Label>
-              <Input
-                type="text"
-                placeholder="Google Maps link"
-                value={borrowerLocation}
-                onChange={(e) => setBorrowerLocation(e.target.value)}
-                className="h-11 rounded-xl bg-transparent border-border fx-input-glass"
-              />
-            </div>
-            <DialogFooter className="gap-2">
-              <Button type="button" variant="outline" onClick={() => setEditOpen(false)} className="rounded-xl border-border">
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isPending} className="rounded-xl fx-brand-gradient border-0 text-white fx-cta-glow fx-pressable font-bold">
-                {isPending ? "Saving..." : "Save Changes"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── View Details Modal (Master On-Demand Details) ───────────────────── */}
-      <Dialog open={detailsOpen} onOpenChange={(open) => { if (!open) handleDetailsClose(); else setDetailsOpen(true); }}>
-        <DialogContent
-          className="p-0 border-0 bg-transparent shadow-none max-w-5xl w-full"
-          style={{ maxWidth: "64rem" }}
-          showCloseButton={false}
-        >
-          <div className="flex flex-col max-h-[85vh] bg-[#18181b] border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl text-zinc-100">
-            {/* STICKY HEADER */}
-            <div className="shrink-0 px-6 py-4 border-b border-zinc-800/80 bg-[#18181b] flex items-center justify-between gap-4">
-              <div>
-                <DialogTitle className="text-xl font-black tracking-tight text-white flex items-center gap-3">
-                  <span>Detailed Audit File</span>
-                  {selectedLoan && (
-                    <StatusBadge
-                      status={selectedLoan.status}
-                      outstanding={selectedLoan.outstandingBalance}
-                      dueDate={selectedLoan.dueDate}
-                    />
-                  )}
-                </DialogTitle>
-                <DialogDescription className="text-xs text-zinc-400 mt-1">
-                  Verify KYC, loan limits, payment logs, and reminder dispatch audit trail.
-                </DialogDescription>
-              </div>
-              <button
-                type="button"
-                onClick={handleDetailsClose}
-                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
-                title="Close"
+      {/* ── Pagination Controls (Requirement 3: Clean Pagination Bar) ───────── */}
+      {filteredLoans.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-xs">
+          <div className="flex items-center gap-2 text-zinc-400">
+            <span>
+              Showing <strong className="text-zinc-200">{(currentPage - 1) * pageSize + 1}</strong> – <strong className="text-zinc-200">{Math.min(currentPage * pageSize, filteredLoans.length)}</strong> of <strong className="text-zinc-200">{filteredLoans.length}</strong> loans
+            </span>
+            <span className="text-zinc-600">|</span>
+            <div className="flex items-center gap-1.5">
+              <span>Per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => handlePageSizeChange(e.target.value)}
+                className="bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-2 py-1 text-xs font-semibold focus:outline-none focus:border-amber-500"
               >
-                <X className="h-5 w-5" />
-              </button>
+                <option value={6}>6</option>
+                <option value={12}>12</option>
+                <option value={24}>24</option>
+                <option value={48}>48</option>
+              </select>
             </div>
+          </div>
 
-            {/* SCROLLABLE BODY */}
-            {selectedLoan && (
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {/* ── Two-Column Split Dashboard (Top Section) ─────────────── */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Left Column: Borrower Information */}
-                  <div className="bg-[#27272a] p-5 rounded-xl border border-zinc-800/80 space-y-4">
-                    <div className="flex items-center justify-between border-b border-zinc-700/60 pb-3">
-                      <h3 className="font-bold text-xs tracking-wider uppercase text-amber-400 flex items-center gap-2">
-                        <Users className="h-4 w-4" /> 👤 BORROWER INFORMATION
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowSensitive(!showSensitive)}
-                          className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-zinc-700 bg-zinc-800 text-xs font-semibold text-zinc-300 hover:text-white transition-colors"
-                        >
-                          {showSensitive ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                          <span>{showSensitive ? "Hide IDs" : "Reveal IDs"}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            setDetailsOpen(false);
-                            handleEditOpen(selectedLoan, e);
-                          }}
-                          className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold hover:bg-amber-500/20 transition-colors"
-                        >
-                          <Edit className="h-3.5 w-3.5" />
-                          <span>Edit KYC</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 text-left">
-                      <div>
-                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Full Name</span>
-                        <p className="text-sm font-semibold text-zinc-100 mt-1">{selectedLoan.borrower.name}</p>
-                      </div>
-                      <div>
-                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Father&apos;s Name</span>
-                        <p className="text-sm font-semibold text-zinc-100 mt-1">{selectedLoan.borrower.fatherName || "N/A"}</p>
-                      </div>
-                      <div>
-                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Mobile Number</span>
-                        <p className="text-sm font-semibold text-zinc-100 mt-1">{selectedLoan.borrower.mobile}</p>
-                      </div>
-                      <div>
-                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Father&apos;s Mobile</span>
-                        <p className="text-sm font-semibold text-zinc-100 mt-1">{selectedLoan.borrower.fatherMobile || "N/A"}</p>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Email Address</span>
-                        <p className="text-sm font-semibold text-zinc-100 mt-1 break-all">{selectedLoan.borrower.email || "N/A"}</p>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Address</span>
-                        <p className="text-sm font-semibold text-zinc-100 mt-1 break-words leading-relaxed">{selectedLoan.borrower.address || "N/A"}</p>
-                      </div>
-                      <div>
-                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">PAN Number</span>
-                        <p className="text-sm font-mono font-semibold text-zinc-100 mt-1">
-                          {showSensitive ? selectedLoan.borrower.panDecrypted : (selectedLoan.borrower.panDecrypted ? `•••••${selectedLoan.borrower.panDecrypted.slice(-5)}` : "N/A")}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Aadhaar Number</span>
-                        <p className="text-sm font-mono font-semibold text-zinc-100 mt-1">
-                          {showSensitive ? selectedLoan.borrower.aadhaarDecrypted : (selectedLoan.borrower.aadhaarDecrypted ? `••••••••${selectedLoan.borrower.aadhaarDecrypted.slice(-4)}` : "N/A")}
-                        </p>
-                      </div>
-                      {selectedLoan.borrower.locationUrl && (
-                        <div className="col-span-2 pt-1 border-t border-zinc-700/50">
-                          <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
-                            <MapPin className="h-3.5 w-3.5 text-amber-400" /> Location Coordinates
-                          </span>
-                          <a
-                            href={selectedLoan.borrower.locationUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-amber-400 hover:text-amber-300 hover:underline font-semibold text-xs inline-block mt-1"
-                          >
-                            Open Maps Geolocation Coordinates ↗
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Right Column: Loan Portfolio & Payment History */}
-                  <div className="bg-[#27272a] p-5 rounded-xl border border-zinc-800/80 space-y-5 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between border-b border-zinc-700/60 pb-3 mb-4">
-                        <h3 className="font-bold text-xs tracking-wider uppercase text-amber-400 flex items-center gap-2">
-                          <CreditCard className="h-4 w-4" /> 📊 LOAN PORTFOLIO DETAILS
-                        </h3>
-                      </div>
-
-                      {/* Section A: Loan Metrics grid */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 text-left">
-                        <div>
-                          <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Principal</span>
-                          <p className="text-sm font-extrabold text-white mt-1">₹{Number(selectedLoan.principal).toLocaleString("en-IN")}</p>
-                        </div>
-                        <div>
-                          <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Interest</span>
-                          <p className="text-sm font-semibold text-zinc-100 mt-1">₹{getInterestAmount(selectedLoan).toLocaleString("en-IN")}</p>
-                        </div>
-                        <div>
-                          <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Type</span>
-                          <p className="text-sm font-semibold text-zinc-100 mt-1 capitalize">{selectedLoan.interestType}</p>
-                        </div>
-                        <div>
-                          <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Duration</span>
-                          <p className="text-sm font-semibold text-zinc-100 mt-1">
-                            {getDuration(selectedLoan.dateGiven, selectedLoan.dueDate, selectedLoan.interestType)}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Start Date</span>
-                          <p className="text-sm font-semibold text-zinc-100 mt-1">{selectedLoan.dateGiven}</p>
-                        </div>
-                        <div>
-                          <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Due Date</span>
-                          <p className="text-sm font-semibold text-zinc-100 mt-1">{selectedLoan.dueDate}</p>
-                        </div>
-                        <div>
-                          <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Amount Paid</span>
-                          <p className="text-sm font-bold text-emerald-400 mt-1">
-                            ₹{(Number(selectedLoan.principal) + getInterestAmount(selectedLoan) + Number(selectedLoan.penaltyAmount || 0) - selectedLoan.outstandingBalance).toLocaleString("en-IN")}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Remaining</span>
-                          <p className="text-sm font-black text-amber-400 mt-1">
-                            ₹{selectedLoan.outstandingBalance.toLocaleString("en-IN")}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Section B: Recent Transaction & Audit Logs */}
-                    <div className="border-t border-zinc-700/60 pt-4 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
-                          <History className="h-3.5 w-3.5 text-amber-400" /> Recent Repayment & Audit Logs
-                        </h4>
-                        <span className="text-[10px] text-zinc-400 font-medium">
-                          {extraDetails?.payments.length || 0} recorded
-                        </span>
-                      </div>
-
-                      {detailsLoading ? (
-                        <p className="text-xs text-zinc-400 py-3 flex items-center gap-1.5">
-                          <RefreshCw className="h-3 w-3 animate-spin text-amber-400" /> Loading payment records...
-                        </p>
-                      ) : !extraDetails || extraDetails.payments.length === 0 ? (
-                        <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800/80 text-xs text-zinc-400 text-center">
-                          No payment records found for this loan file.
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                          {extraDetails.payments.map((p) => (
-                            <div key={p.paymentId} className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-900/80 border border-zinc-800/80 hover:border-zinc-700 transition-colors">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">{p.paymentType}</span>
-                                  <span className="text-[11px] text-zinc-400">{p.paymentDate}</span>
-                                </div>
-                                {p.notes && <p className="text-[11px] text-zinc-400 truncate mt-0.5">{p.notes}</p>}
-                              </div>
-                              <div className="flex items-center gap-2 ml-3">
-                                <span className="font-bold text-xs text-emerald-400">+₹{Number(p.amount).toLocaleString("en-IN")}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeletePayment(p.paymentId)}
-                                  className="text-red-400/60 hover:text-red-400 hover:bg-red-500/10 p-1 rounded transition-colors"
-                                  title="Delete Payment Record"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── Section 2A: Capital & Funding Allocation ───────────────── */}
-                {(() => {
-                  const currentFunding = extraDetails?.funding || selectedLoan.funding;
-                  const sources = currentFunding?.sources || [];
-                  const totalFunded = currentFunding?.totalFunded || 0;
-                  const principal = Number(selectedLoan.principal);
-                  const remaining = Math.max(0, principal - totalFunded);
-
-                  return (
-                    <div className="bg-[#27272a] p-5 rounded-xl border border-zinc-800/80 space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-700/60 pb-3">
-                        <h3 className="font-bold text-xs tracking-wider uppercase text-amber-400 flex items-center gap-2">
-                          <Landmark className="h-4 w-4" /> 🏦 CAPITAL & FUNDING SOURCES
-                        </h3>
-                        <div className="flex items-center gap-2">
-                          {currentFunding?.isFullyFunded ? (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                              Fully Funded
-                            </span>
-                          ) : currentFunding?.isPartiallyFunded ? (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                              Partially Funded (₹{remaining.toLocaleString("en-IN")} left)
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
-                              Not Assigned
-                            </span>
-                          )}
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => {
-                              setLoanToAllocate(selectedLoan);
-                              setAllocateOpen(true);
-                            }}
-                            className="h-8 px-3 rounded-lg text-xs font-bold bg-amber-500 text-zinc-900 hover:bg-amber-400 border-0 flex items-center gap-1.5 transition-colors"
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                            <span>Add Capital Person</span>
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Summary row */}
-                      <div className="grid grid-cols-3 gap-3 bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-800/80 text-xs text-center">
-                        <div>
-                          <span className="text-[10px] uppercase font-bold text-zinc-400">Loan Principal</span>
-                          <p className="font-extrabold text-white text-sm mt-0.5">₹{principal.toLocaleString("en-IN")}</p>
-                        </div>
-                        <div>
-                          <span className="text-[10px] uppercase font-bold text-zinc-400">Total Funded</span>
-                          <p className="font-extrabold text-emerald-400 text-sm mt-0.5">₹{totalFunded.toLocaleString("en-IN")}</p>
-                        </div>
-                        <div>
-                          <span className="text-[10px] uppercase font-bold text-zinc-400">Unfunded Balance</span>
-                          <p className={`font-extrabold text-sm mt-0.5 ${remaining > 0 ? "text-amber-400 font-black" : "text-zinc-400"}`}>
-                            ₹{remaining.toLocaleString("en-IN")}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Sources Table */}
-                      {sources.length === 0 ? (
-                        <div className="p-4 text-center rounded-xl bg-zinc-900/50 border border-zinc-800/70 text-xs text-zinc-400 space-y-1">
-                          <p className="font-semibold text-zinc-300">No capital person assigned yet</p>
-                          <p className="text-[11px]">Click &quot;+ Add Capital Person&quot; above to connect an investor/funder to this loan.</p>
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto border border-zinc-800/80 rounded-xl bg-zinc-900/60">
-                          <table className="w-full text-left border-collapse text-xs">
-                            <thead>
-                              <tr className="border-b border-zinc-800 bg-white/[0.02]">
-                                <th className="p-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Capital Person</th>
-                                <th className="p-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Amount</th>
-                                <th className="p-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Share %</th>
-                                <th className="p-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Funding Date</th>
-                                <th className="p-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider">Notes</th>
-                                <th className="p-3 font-bold text-zinc-400 uppercase text-[10px] tracking-wider text-right">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-zinc-800/60">
-                              {sources.map((src) => (
-                                <tr key={src.allocationId} className="hover:bg-white/[0.02] transition-colors">
-                                  <td className="p-3">
-                                    <p className="font-bold text-zinc-100">{src.funderName}</p>
-                                    <p className="text-[10px] text-zinc-400">{src.funderMobile}</p>
-                                  </td>
-                                  <td className="p-3 font-extrabold text-amber-400 text-sm">
-                                    ₹{src.amount.toLocaleString("en-IN")}
-                                  </td>
-                                  <td className="p-3 font-semibold text-zinc-200">
-                                    {src.funderSharePercentage}%
-                                  </td>
-                                  <td className="p-3 text-zinc-400 text-[11px]">
-                                    {src.allocationDate}
-                                  </td>
-                                  <td className="p-3 text-zinc-400 text-[11px] truncate max-w-[140px]" title={src.notes || ""}>
-                                    {src.notes || "—"}
-                                  </td>
-                                  <td className="p-3 text-right">
-                                    <div className="flex items-center justify-end gap-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setDetailsOpen(false);
-                                          router.push(`/capital-management/${src.funderId}`);
-                                        }}
-                                        className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] font-bold text-amber-400 flex items-center gap-1 transition-colors border border-zinc-700"
-                                        title="View in Capital Management"
-                                      >
-                                        <span>Capital Details</span>
-                                        <ExternalLink className="h-2.5 w-2.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveAllocation(src.allocationId)}
-                                        className="p-1.5 rounded-lg text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                        title="Remove Allocation"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* ── Section 2B: Penalty Details & Settings ───────────────── */}
-                {(() => {
-                  const currentRate = Number(penaltyRateInput);
-                  const penaltyInfo = calculateAccruedPenalty({
-                    principal: Number(selectedLoan.principal),
-                    dueDate: selectedLoan.dueDate,
-                    status: selectedLoan.status,
-                    penaltyRate: isNaN(currentRate) || currentRate < 0 ? Number((selectedLoan as any).penaltyRate || 20) : currentRate,
-                    manualPenaltyAmount: Number(selectedLoan.penaltyAmount || 0),
-                  });
-                  const totalInterest = getInterestAmount(selectedLoan);
-                  const totalPayable = Number(selectedLoan.principal) + totalInterest + penaltyInfo.totalPenalty;
-
-                  const penaltyColorClass = 
-                    penaltyInfo.totalPenalty === 0
-                      ? "text-emerald-400 font-bold text-sm"
-                      : penaltyInfo.totalPenalty < 1000
-                      ? "text-amber-400 font-extrabold text-sm"
-                      : "text-red-400 font-black text-base";
-
-                  return (
-                    <div className="bg-[#27272a] p-5 rounded-xl border border-zinc-800/80 space-y-4">
-                      <h3 className="font-bold text-xs tracking-wider uppercase text-amber-400 flex items-center gap-2 border-b border-zinc-700/60 pb-3">
-                        <ShieldAlert className="h-4 w-4 text-red-400" /> ⚠️ PENALTY DETAILS & SETTINGS
-                      </h3>
-
-                      {/* Penalty Details Card */}
-                      <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/80 shadow-lg space-y-3.5 text-left">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                          <div>
-                            <p className="text-[10px] uppercase font-bold text-zinc-400">Principal Amount</p>
-                            <p className="font-extrabold text-white text-sm mt-0.5">
-                              ₹{Number(selectedLoan.principal).toLocaleString("en-IN")}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase font-bold text-zinc-400">Penalty Rate</p>
-                            <p className="font-semibold text-amber-400 text-xs mt-0.5">
-                              ₹{penaltyInfo.penaltyRatePerThousand} / ₹1,000 / Day
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase font-bold text-zinc-400">Overdue Days</p>
-                            <p className={`font-bold text-xs mt-0.5 ${penaltyInfo.daysOverdue > 0 ? "text-red-400" : "text-zinc-200"}`}>
-                              {penaltyInfo.daysOverdue > 0 ? `${penaltyInfo.daysOverdue} Days` : "No Penalty (0 Days)"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase font-bold text-zinc-400">Daily Penalty</p>
-                            <p className="font-semibold text-zinc-200 text-xs mt-0.5">
-                              ₹{penaltyInfo.dailyPenalty.toLocaleString("en-IN")}/day
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="border-t border-zinc-800 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          <div>
-                            <p className="text-[10px] uppercase font-bold text-zinc-400">Total Accrued Penalty</p>
-                            <p className={`mt-0.5 ${penaltyColorClass}`}>
-                              ₹{penaltyInfo.totalPenalty.toLocaleString("en-IN")}
-                            </p>
-                          </div>
-                          <div className="sm:text-right">
-                            <p className="text-[10px] uppercase font-bold text-zinc-400">Total Amount Payable</p>
-                            <p className="font-black text-amber-400 text-base mt-0.5">
-                              ₹{totalPayable.toLocaleString("en-IN")}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Penalty Rate Real-time Admin Configurator */}
-                      <form onSubmit={handleUpdatePenaltySettings} className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800/80 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-200 flex items-center gap-1.5">
-                            <Settings className="h-3.5 w-3.5 text-amber-400" /> Edit Penalty Rate (₹ per ₹1,000 / Day)
-                          </h4>
-                          <span className="text-[10px] text-zinc-400">Real-time Calculation</span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                          <div className="sm:col-span-2 space-y-1">
-                            <Label className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider">
-                              Penalty Rate (₹ per ₹1,000 / Day)
-                            </Label>
-                            <Input
-                              type="number"
-                              step="0.1"
-                              min="0"
-                              value={penaltyRateInput}
-                              onChange={(e) => setPenaltyRateInput(e.target.value)}
-                              placeholder="e.g. 5, 10, 15, 20, 50"
-                              className="h-10 rounded-xl text-xs bg-zinc-800 border-zinc-700 text-white font-bold placeholder:text-zinc-500 focus:ring-amber-500 focus:border-amber-500"
-                              required
-                            />
-                          </div>
-
-                          <Button
-                            type="submit"
-                            disabled={isUpdatingPenalty}
-                            className="h-10 rounded-xl text-xs font-bold bg-amber-500 text-zinc-900 hover:bg-amber-400 border-0 transition-colors"
-                          >
-                            {isUpdatingPenalty ? "Saving..." : "Save Penalty Rate"}
-                          </Button>
-                        </div>
-                        <p className="text-[10px] text-zinc-400">
-                          Formula: Penalty = (Principal ÷ 1,000) × Penalty Rate × Overdue Days
-                        </p>
-                      </form>
-
-                      {/* Penalty Ledger Audit Log */}
-                      <div className="space-y-2.5">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
-                          <History className="h-3.5 w-3.5 text-amber-400" /> Penalty Audit Ledger
-                        </h4>
-                        {penaltyLedger.length === 0 ? (
-                          <p className="text-xs text-zinc-400 py-1">No historical penalty changes logged yet.</p>
-                        ) : (
-                          <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
-                            {penaltyLedger.map((row) => (
-                              <div key={row.ledgerId} className="p-2.5 rounded-lg bg-zinc-900/80 border border-zinc-800/80 text-xs flex justify-between items-center">
-                                <div>
-                                  <p className="font-semibold text-zinc-100">{row.remarks || "Penalty Updated"}</p>
-                                  <p className="text-[10px] text-zinc-400">
-                                    {row.calculationDate} • {row.adminName || "Admin"} • {row.daysOverdue} Days Overdue
-                                  </p>
-                                </div>
-                                <div className="text-right">
-                                  <span className="font-bold text-red-400 text-xs">₹{Number(row.penaltyAdded).toLocaleString("en-IN")}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* ── Sub-Grid: Notifications Dispatch Log & Permanent Loan Cycle History ── */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Notifications Dispatch */}
-                  <div className="bg-[#27272a] p-5 rounded-xl border border-zinc-800/80 space-y-3.5">
-                    <h4 className="font-bold text-xs uppercase tracking-wider text-amber-400 border-b border-zinc-700/60 pb-2.5 flex items-center gap-1.5">
-                      <Send className="h-3.5 w-3.5 text-amber-400" /> Notifications Dispatch Log
-                    </h4>
-                    {detailsLoading ? (
-                      <p className="text-xs text-zinc-400 py-4 flex items-center gap-1.5"><RefreshCw className="h-3 w-3 animate-spin text-amber-400" /> Loading alert logs...</p>
-                    ) : !extraDetails || extraDetails.notifications.length === 0 ? (
-                      <p className="text-xs text-zinc-400 py-4">No alert logs recorded for this loan file.</p>
-                    ) : (
-                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                        {extraDetails.notifications.map((n) => (
-                          <div key={n.notificationId} className="flex items-start justify-between p-2.5 rounded-lg bg-zinc-900/80 border border-zinc-800/80">
-                            <div className="min-w-0 flex-1 text-xs">
-                              <p className="font-semibold capitalize text-zinc-100">{n.type} <span className="text-[10px] text-zinc-400">via {n.channel}</span></p>
-                              <p className="text-[10px] text-zinc-400 mt-0.5">{new Date(n.sentAt).toLocaleString()}</p>
-                              {n.errorMessage && <p className="text-[10px] text-red-400 mt-0.5">{n.errorMessage}</p>}
-                            </div>
-                            <div className="ml-2 shrink-0">
-                              {n.status === "sent" ? (
-                                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                              ) : (
-                                <XCircle className="h-4 w-4 text-red-400" />
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Permanent Loan Cycle History */}
-                  <div className="bg-[#27272a] p-5 rounded-xl border border-zinc-800/80 space-y-3.5">
-                    <h4 className="font-bold text-xs uppercase tracking-wider text-amber-400 border-b border-zinc-700/60 pb-2.5 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <RefreshCw className="h-3.5 w-3.5 text-amber-400" /> Loan Cycle History
-                      </span>
-                      <span className="text-[10px] text-zinc-400 font-normal lowercase">Recorded cycles</span>
-                    </h4>
-                    {detailsLoading ? (
-                      <p className="text-xs text-zinc-400 py-4 flex items-center gap-1.5"><RefreshCw className="h-3 w-3 animate-spin text-amber-400" /> Loading cycle history...</p>
-                    ) : !extraDetails || !extraDetails.cycles || extraDetails.cycles.length === 0 ? (
-                      <p className="text-xs text-zinc-400 py-3">No historical cycle extensions logged yet for this loan file.</p>
-                    ) : (
-                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                        {extraDetails.cycles.map((c) => (
-                          <div key={c.cycleId} className="p-3 rounded-lg bg-zinc-900/80 border border-zinc-800/80 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-zinc-100">Cycle #{c.cycleNumber}</span>
-                                <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                                  c.cycleStatus === "paid" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
-                                  c.cycleStatus === "overdue_closed" ? "bg-blue-500/10 text-blue-400 border border-blue-500/20" :
-                                  c.cycleStatus === "extended" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
-                                  "bg-zinc-800 text-amber-400 border border-zinc-700"
-                                }`}>
-                                  {c.cycleStatus.replace("_", " ")}
-                                </span>
-                              </div>
-                              <p className="text-[10px] text-zinc-400 mt-1">
-                                Due: {c.originalDueDate} {c.actualPaymentDate ? "· Cleared: " + c.actualPaymentDate : ""} · Principal: ₹{Number(c.remainingPrincipal).toLocaleString("en-IN")}
-                              </p>
-                              {c.notes && <p className="text-[10px] text-zinc-400 mt-0.5 italic">{c.notes}</p>}
-                            </div>
-                            <div className="text-right sm:shrink-0">
-                              <p className="font-bold text-xs text-amber-400">Interest Paid: ₹{Number(c.interestPaid).toLocaleString("en-IN")}</p>
-                              {Number(c.penaltyPaid) > 0 && (
-                                <p className="font-bold text-[10px] text-red-400">Penalty Paid: ₹{Number(c.penaltyPaid).toLocaleString("en-IN")}</p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── Section 4: Internal Notes ─────────────────────────────────── */}
-                <div className="bg-[#27272a] p-5 rounded-xl border border-zinc-800/80 space-y-3.5">
-                  <h3 className="font-bold text-xs tracking-wider uppercase text-amber-400 flex items-center gap-2 border-b border-zinc-700/60 pb-2.5">
-                    <FileText className="h-4 w-4" /> 📝 PRIVATE INTERNAL NOTES
-                  </h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Private notes visible only to the administrator. Record discussions, payment promises, reminders, observations, and audit logs.
-                  </p>
-                  <div className="space-y-3">
-                    <textarea
-                      rows={6}
-                      maxLength={5500}
-                      placeholder={`Example:\nCustomer requested 5 more days.\nInterest paid on 20 July 2026.\nPromised to clear principal next month.\nVisited customer's home.\nReminder sent via WhatsApp.`}
-                      value={notesText}
-                      onChange={(e) => setNotesText(e.target.value)}
-                      onBlur={() => handleSaveNotes(selectedLoan.loanId, notesText)}
-                      className="w-full rounded-xl bg-zinc-900 border border-zinc-700/80 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500/60 focus:border-amber-500/60 p-4 text-sm font-medium transition-all"
-                    />
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="text-[10px] text-zinc-400 flex flex-wrap gap-x-3 gap-y-1">
-                        {((selectedLoan as any).internalNotesUpdatedAt || (selectedLoan.borrower as any).internalNotesUpdatedAt) ? (
-                          <>
-                            <span><strong>Last Updated:</strong> {new Date((selectedLoan as any).internalNotesUpdatedAt || (selectedLoan.borrower as any).internalNotesUpdatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} at {new Date((selectedLoan as any).internalNotesUpdatedAt || (selectedLoan.borrower as any).internalNotesUpdatedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
-                            <span><strong>Updated By:</strong> Admin</span>
-                          </>
-                        ) : (
-                          <span><strong>Last Updated:</strong> Never</span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          onClick={() => handleSaveNotes(selectedLoan.loanId, notesText)}
-                          className="h-9 px-4 rounded-xl text-xs font-bold bg-amber-500 text-zinc-900 hover:bg-amber-400 border-0 transition-colors"
-                        >
-                          Save Notes
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={async () => {
-                            setNotesText("");
-                            await handleSaveNotes(selectedLoan.loanId, "");
-                          }}
-                          className="h-9 px-4 rounded-xl text-xs font-bold border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-white"
-                        >
-                          Clear Notes
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── Section 5: Audit / Destructive actions ───────────────────── */}
-                <div className="p-4 rounded-xl bg-red-950/20 border border-red-900/40 flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs">
-                  <div className="text-zinc-400">
-                    <span>Borrower Record: <strong className="text-zinc-200">{selectedLoan.borrower.name}</strong></span>
-                    <span className="mx-2 text-zinc-600">|</span>
-                    <span>Database ID: <code className="font-mono text-[10px] text-zinc-300">{selectedLoan.borrowerId}</code></span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => handleDeleteBorrower(selectedLoan.borrowerId, selectedLoan.borrower.name)}
-                    className="flex items-center justify-center gap-1.5 px-3.5 py-2 border border-red-500/30 text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-xs"
-                  >
-                    {isPending ? (
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-3.5 w-3.5" />
-                    )}
-                    <span>{isPending ? "Deleting borrower profile..." : "Delete Borrower Profile Entirely"}</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STICKY FOOTER */}
-            <div className="shrink-0 px-6 py-3.5 border-t border-zinc-800/80 bg-[#18181b] flex items-center justify-between gap-4">
-              <span className="text-xs text-zinc-400">
-                Loan File ID: <code className="font-mono text-[11px] text-zinc-300 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">{selectedLoan?.loanId}</code>
-              </span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
               <Button
                 variant="outline"
-                onClick={handleDetailsClose}
-                className="rounded-xl border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-white font-bold text-xs h-9 px-5"
+                size="sm"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="h-8 px-3 rounded-lg text-xs font-bold border-zinc-700 bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 disabled:opacity-40"
               >
-                Close Audit File
+                Previous
+              </Button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .map((page, idx, arr) => {
+                    const prev = arr[idx - 1];
+                    return (
+                      <React.Fragment key={page}>
+                        {prev && page - prev > 1 && <span className="px-1 text-zinc-500">...</span>}
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage(page)}
+                          className={`h-8 w-8 rounded-lg font-bold text-xs transition-colors ${
+                            currentPage === page
+                              ? "bg-amber-500 text-zinc-900 shadow-sm"
+                              : "bg-zinc-800/80 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-zinc-700/60"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      </React.Fragment>
+                    );
+                  })}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="h-8 px-3 rounded-lg text-xs font-bold border-zinc-700 bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 disabled:opacity-40"
+              >
+                Next
               </Button>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          )}
+        </div>
+      )}
 
-      {/* ── Modal: Allocate Capital Dialog ──────────────────────────────────── */}
-      <AllocateCapitalDialog
-        open={allocateOpen}
-        onOpenChange={setAllocateOpen}
-        loan={loanToAllocate}
-        onSuccess={async () => {
-          await queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
-          if (selectedLoan) {
-            const extraRes = await getExtraLoanDetailsAction(selectedLoan.loanId);
-            if (extraRes.success && extraRes.data) {
-              setExtraDetails(extraRes.data);
-            }
-          }
-        }}
-      />
+      {/* ── Dynamically Loaded Lazy Modals (Code Splitting) ──────────────────── */}
+      {paymentOpen && (
+        <RecordPaymentModal
+          open={paymentOpen}
+          onOpenChange={setPaymentOpen}
+          loan={selectedLoan}
+          paymentActionMode={paymentActionMode}
+          setPaymentActionMode={setPaymentActionMode}
+          paymentAmount={paymentAmount}
+          setPaymentAmount={setPaymentAmount}
+          paymentType={paymentType}
+          setPaymentType={setPaymentType}
+          paymentDate={paymentDate}
+          setPaymentDate={setPaymentDate}
+          paymentNotes={paymentNotes}
+          setPaymentNotes={setPaymentNotes}
+          onSubmit={handlePaymentSubmit}
+          isPending={isPending}
+        />
+      )}
 
-      {/* ── Modal: Capital Source Switcher ───────────────────────────────────── */}
-      <Dialog open={reassignOpen} onOpenChange={(o) => { if (!reassignSubmitting) setReassignOpen(o); }}>
-        <DialogContent className="rounded-2xl max-w-md fx-glass-card border-border/50 bg-white dark:bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-base font-black tracking-tight flex items-center gap-2">
-              <ArrowLeftRight className="h-4 w-4 text-primary" />
-              Reassign Capital Source
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Switching capital source for{" "}
-              <strong>{reassignLoan?.borrower.name}</strong> — ₹{reassignAmount.toLocaleString("en-IN")}
-            </DialogDescription>
-          </DialogHeader>
+      {reminderOpen && (
+        <SendReminderModal
+          open={reminderOpen}
+          onOpenChange={setReminderOpen}
+          loan={selectedLoan}
+          penaltyAmount={penaltyAmount}
+          setPenaltyAmount={setPenaltyAmount}
+          onSubmit={handleReminderSubmit}
+          isPending={isPending}
+        />
+      )}
 
-          <div className="space-y-4 py-1">
-            {/* Current source */}
-            <div className="p-3 rounded-xl bg-red-500/5 border border-red-500/20 text-xs">
-              <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">Current Source</p>
-              <p className="font-semibold text-foreground">{reassignOldFunderName}</p>
-              <p className="text-muted-foreground mt-0.5">₹{reassignAmount.toLocaleString("en-IN")} — will be released</p>
-            </div>
+      {extendOpen && (
+        <ExtendLoanModal
+          open={extendOpen}
+          onOpenChange={setExtendOpen}
+          loan={selectedLoan}
+          onConfirm={handleExtendConfirm}
+          isPending={isPending}
+        />
+      )}
 
-            {/* New source selector */}
-            <div className="space-y-2">
-              <label className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Select New Capital Person</label>
-              {reassignLoading ? (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground py-3">
-                  <RefreshCw className="h-4 w-4 animate-spin" /> Loading funders...
-                </div>
-              ) : reassignFunders.length === 0 ? (
-                <div className="text-xs text-muted-foreground py-2 text-center">
-                  No other capital persons available.
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {reassignFunders.map((f) => (
-                    <button
-                      key={f.funderId}
-                      type="button"
-                      onClick={() => setReassignSelectedFunderId(f.funderId)}
-                      className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-semibold transition-all duration-150 ${
-                        reassignSelectedFunderId === f.funderId
-                          ? "border-primary bg-primary/10 text-foreground shadow-sm"
-                          : "border-border/50 bg-black/10 dark:bg-black/20 text-muted-foreground hover:border-primary/40 hover:bg-primary/5"
-                      }`}
-                    >
-                      <div className="text-left">
-                        <p className="font-bold text-foreground">{f.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{f.mobile}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-primary font-bold">₹{f.unallocatedReceived.toLocaleString("en-IN")} available</p>
-                        <p className="text-[10px] text-muted-foreground">{f.unallocatedReceived >= reassignAmount ? "✓ Sufficient" : "On-demand"}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+      {editOpen && (
+        <EditBorrowerModal
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          loan={selectedLoan}
+          borrowerName={borrowerName}
+          setBorrowerName={setBorrowerName}
+          borrowerMobile={borrowerMobile}
+          setBorrowerMobile={setBorrowerMobile}
+          borrowerEmail={borrowerEmail}
+          setBorrowerEmail={setBorrowerEmail}
+          borrowerPan={borrowerPan}
+          setBorrowerPan={setBorrowerPan}
+          borrowerAadhaar={borrowerAadhaar}
+          setBorrowerAadhaar={setBorrowerAadhaar}
+          borrowerLocation={borrowerLocation}
+          setBorrowerLocation={setBorrowerLocation}
+          onSubmit={handleEditSubmit}
+          isPending={isPending}
+        />
+      )}
 
-            {/* Summary of what will happen */}
-            {reassignSelectedFunderId && reassignFunders.length > 0 && (() => {
-              const sel = reassignFunders.find(f => f.funderId === reassignSelectedFunderId);
-              return sel ? (
-                <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-xs space-y-1">
-                  <p className="text-[10px] text-emerald-400 uppercase font-bold tracking-wider">New Assignment</p>
-                  <p className="font-semibold text-foreground">{sel.name} → ₹{reassignAmount.toLocaleString("en-IN")}</p>
-                  {sel.unallocatedReceived >= reassignAmount ? (
-                    <p className="text-muted-foreground">Will use {sel.name}'s existing unallocated capital.</p>
-                  ) : (
-                    <p className="text-amber-400">On-demand: a new funding record will be created for {sel.name}.</p>
-                  )}
-                </div>
-              ) : null;
-            })()}
-          </div>
+      {detailsOpen && (
+        <DetailedAuditModal
+          open={detailsOpen}
+          onOpenChange={setDetailsOpen}
+          loan={selectedLoan}
+          onEditKyc={(loan) => handleEditOpen(loan)}
+          onAllocateCapital={(loan) => handleAllocateCapital(loan)}
+          onDeleteBorrower={handleDeleteBorrower}
+          isDeletingBorrower={isPending}
+        />
+      )}
 
-          <DialogFooter className="gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setReassignOpen(false)}
-              disabled={reassignSubmitting}
-              className="rounded-xl border-border"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handleConfirmReassign}
-              disabled={reassignSubmitting || !reassignSelectedFunderId || reassignLoading}
-              className="rounded-xl fx-brand-gradient border-0 text-white fx-cta-glow font-bold"
-            >
-              {reassignSubmitting ? (
-                <><RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> Reassigning...</>
-              ) : (
-                <><ArrowLeftRight className="h-3.5 w-3.5 mr-1.5" /> Confirm Switch</>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {allocateOpen && (
+        <AllocateCapitalDialog
+          open={allocateOpen}
+          onOpenChange={setAllocateOpen}
+          loan={loanToAllocate}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+          }}
+        />
+      )}
+
+      {reassignOpen && (
+        <ReassignCapitalModal
+          open={reassignOpen}
+          onOpenChange={setReassignOpen}
+          loan={reassignLoan}
+          reassignAmount={reassignAmount}
+          reassignOldFunderName={reassignOldFunderName}
+          reassignFunders={reassignFunders}
+          reassignSelectedFunderId={reassignSelectedFunderId}
+          setReassignSelectedFunderId={setReassignSelectedFunderId}
+          reassignLoading={reassignLoading}
+          reassignSubmitting={reassignSubmitting}
+          onConfirm={handleConfirmReassign}
+        />
+      )}
     </div>
   );
 }

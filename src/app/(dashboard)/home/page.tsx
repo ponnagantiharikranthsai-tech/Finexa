@@ -9,6 +9,7 @@ import {
   ArrowUpRight
 } from "lucide-react";
 import { FinexaCard3D, FinexaStaggerContainer, FinexaStaggerItem } from "@/components/motion/finexa-motion";
+import { HomeOverview } from "@/features/dashboard/components/home-overview";
 
 export default function HomePage() {
   const logoRef = React.useRef<HTMLDivElement | null>(null);
@@ -55,10 +56,14 @@ export default function HomePage() {
 
   return (
     <div 
-      className="min-h-[85vh] flex flex-col justify-center items-center py-10 relative overflow-hidden bg-background animate-in fade-in duration-300"
+      className="min-h-[85vh] flex flex-col justify-start items-center py-4 relative overflow-hidden bg-background animate-in fade-in duration-300 w-full space-y-6"
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
+      {/* Top Action Bar with Lazy-Loaded Quick Modals */}
+      <div className="w-full max-w-5xl px-6 relative z-20">
+        <HomeOverview />
+      </div>
       <style>{`
         .floating-logo-img-large {
           animation: logo-float-large 8s ease-in-out infinite;

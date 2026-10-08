@@ -30,11 +30,13 @@ import { differenceInDays, format } from "date-fns";
 import { FinexaCard3D, FinexaStaggerContainer, FinexaStaggerItem } from "@/components/motion/finexa-motion";
 import { FinexaMoneyEffect, FinexaCycleEffect, FinexaDocumentEffect } from "@/components/motion/finexa-effects";
 import { LoanCardItem } from "./loan-card-item";
+import { VirtualizedLoanList } from "./virtualized-loan-list";
 import {
   Search, Plus, Send, Landmark, Calendar, RefreshCw, CreditCard, ChevronRight,
   Trash2, Users, Mail, FileText, MapPin, User, Eye, EyeOff, Edit, Clock,
   AlertTriangle, Check, CheckCircle2, XCircle, ChevronDown, ListFilter, X,
-  ShieldAlert, Settings, Percent, DollarSign, History, ExternalLink, Coins, ArrowLeftRight
+  ShieldAlert, Settings, Percent, DollarSign, History, ExternalLink, Coins, ArrowLeftRight,
+  LayoutGrid, List
 } from "lucide-react";
 
 // ── Lazy-Loaded Heavy Modals (Code Splitting / Frontend Optimization) ───────────
@@ -103,6 +105,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   // Pagination State (Requirement 3: Paginate large lists to prevent DOM explosion)
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
+  const [viewMode, setViewMode] = useState<"virtualized" | "grid">("virtualized");
 
   // Motion effects
   const [showMoneyEffect, setShowMoneyEffect] = useState(false);
@@ -793,115 +796,153 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         </div>
       </div>
 
-      {/* ── Status Bar / Stats ─────────────────────────────────────────────── */}
-      <div className="text-xs text-muted-foreground flex items-center justify-between">
+      {/* ── Status Bar / Stats & View Mode Toggle ─────────────────────────── */}
+      <div className="text-xs text-muted-foreground flex items-center justify-between flex-wrap gap-2">
         {isPending ? (
           <span className="inline-flex items-center gap-1.5"><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Synchronizing changes...</span>
         ) : (
           <span>Showing {filteredLoans.length} of {loans.length} loan portfolio{loans.length !== 1 ? "s" : ""}</span>
         )}
+
+        <div className="flex items-center gap-1 p-0.5 rounded-xl bg-[#18181b] border border-zinc-800">
+          <button
+            type="button"
+            onClick={() => setViewMode("virtualized")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${
+              viewMode === "virtualized"
+                ? "bg-[#eab308] text-black shadow-sm"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+            title="60 FPS Virtualized List View"
+          >
+            <List className="h-3.5 w-3.5" />
+            <span>Virtual List (60 FPS)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("grid")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${
+              viewMode === "grid"
+                ? "bg-[#eab308] text-black shadow-sm"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+            title="Grid View"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+            <span>Grid</span>
+          </button>
+        </div>
       </div>
 
-      {/* ── Cards Grid (Render only paginated slice) ────────────────────────── */}
-      {filteredLoans.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center fx-glass-card rounded-[22px] border border-border">
-          <div className="h-14 w-14 bg-secondary rounded-2xl flex items-center justify-center mb-4 border border-border">
-            <CreditCard className="h-7 w-7 text-primary" />
-          </div>
-          <p className="font-bold text-foreground">No records matched</p>
-          <p className="text-xs text-muted-foreground mt-1 mb-5">Try checking your search inputs or filter toggles.</p>
-        </div>
+      {/* ── Virtualized List or Cards Grid ─────────────────────────────────── */}
+      {viewMode === "virtualized" ? (
+        <VirtualizedLoanList
+          loans={filteredLoans}
+          onSelectLoan={handleViewDetails}
+        />
       ) : (
-        <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {paginatedLoans.map((loan) => (
-            <LoanCardItem
-              key={loan.loanId}
-              loan={loan}
-              onPay={handlePay}
-              onViewDetails={handleViewDetails}
-              onEditOpen={handleEditOpen}
-              onDeleteLoan={handleDeleteLoan}
-              onCurrentStatement={handleCurrentStatement}
-              onOpenReassign={handleOpenReassign}
-              onAllocateCapital={handleAllocateCapital}
-              generatingStatementId={generatingStatementId}
-              isPending={isPending}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* ── Pagination Controls (Requirement 3: Clean Pagination Bar) ───────── */}
-      {filteredLoans.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-xs">
-          <div className="flex items-center gap-2 text-zinc-400">
-            <span>
-              Showing <strong className="text-zinc-200">{(currentPage - 1) * pageSize + 1}</strong> – <strong className="text-zinc-200">{Math.min(currentPage * pageSize, filteredLoans.length)}</strong> of <strong className="text-zinc-200">{filteredLoans.length}</strong> loans
-            </span>
-            <span className="text-zinc-600">|</span>
-            <div className="flex items-center gap-1.5">
-              <span>Per page:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => handlePageSizeChange(e.target.value)}
-                className="bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-2 py-1 text-xs font-semibold focus:outline-none focus:border-amber-500"
-              >
-                <option value={6}>6</option>
-                <option value={12}>12</option>
-                <option value={24}>24</option>
-                <option value={48}>48</option>
-              </select>
-            </div>
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="h-8 px-3 rounded-lg text-xs font-bold border-zinc-700 bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 disabled:opacity-40"
-              >
-                Previous
-              </Button>
-
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-                  .map((page, idx, arr) => {
-                    const prev = arr[idx - 1];
-                    return (
-                      <React.Fragment key={page}>
-                        {prev && page - prev > 1 && <span className="px-1 text-zinc-500">...</span>}
-                        <button
-                          type="button"
-                          onClick={() => setCurrentPage(page)}
-                          className={`h-8 w-8 rounded-lg font-bold text-xs transition-colors ${
-                            currentPage === page
-                              ? "bg-amber-500 text-zinc-900 shadow-sm"
-                              : "bg-zinc-800/80 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-zinc-700/60"
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      </React.Fragment>
-                    );
-                  })}
+        <>
+          {filteredLoans.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center fx-glass-card rounded-[22px] border border-border">
+              <div className="h-14 w-14 bg-secondary rounded-2xl flex items-center justify-center mb-4 border border-border">
+                <CreditCard className="h-7 w-7 text-primary" />
               </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="h-8 px-3 rounded-lg text-xs font-bold border-zinc-700 bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 disabled:opacity-40"
-              >
-                Next
-              </Button>
+              <p className="font-bold text-foreground">No records matched</p>
+              <p className="text-xs text-muted-foreground mt-1 mb-5">Try checking your search inputs or filter toggles.</p>
+            </div>
+          ) : (
+            <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {paginatedLoans.map((loan) => (
+                <LoanCardItem
+                  key={loan.loanId}
+                  loan={loan}
+                  onPay={handlePay}
+                  onViewDetails={handleViewDetails}
+                  onEditOpen={handleEditOpen}
+                  onDeleteLoan={handleDeleteLoan}
+                  onCurrentStatement={handleCurrentStatement}
+                  onOpenReassign={handleOpenReassign}
+                  onAllocateCapital={handleAllocateCapital}
+                  generatingStatementId={generatingStatementId}
+                  isPending={isPending}
+                />
+              ))}
             </div>
           )}
-        </div>
+
+          {/* ── Pagination Controls (Grid View) ───────────────────────────── */}
+          {filteredLoans.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-xs">
+              <div className="flex items-center gap-2 text-zinc-400">
+                <span>
+                  Showing <strong className="text-zinc-200">{(currentPage - 1) * pageSize + 1}</strong> – <strong className="text-zinc-200">{Math.min(currentPage * pageSize, filteredLoans.length)}</strong> of <strong className="text-zinc-200">{filteredLoans.length}</strong> loans
+                </span>
+                <span className="text-zinc-600">|</span>
+                <div className="flex items-center gap-1.5">
+                  <span>Per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => handlePageSizeChange(e.target.value)}
+                    className="bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-2 py-1 text-xs font-semibold focus:outline-none focus:border-amber-500"
+                  >
+                    <option value={6}>6</option>
+                    <option value={12}>12</option>
+                    <option value={24}>24</option>
+                    <option value={48}>48</option>
+                  </select>
+                </div>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    className="h-8 px-3 rounded-lg text-xs font-bold border-zinc-700 bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 disabled:opacity-40"
+                  >
+                    Previous
+                  </Button>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                      .map((page, idx, arr) => {
+                        const prev = arr[idx - 1];
+                        return (
+                          <React.Fragment key={page}>
+                            {prev && page - prev > 1 && <span className="px-1 text-zinc-500">...</span>}
+                            <button
+                              type="button"
+                              onClick={() => setCurrentPage(page)}
+                              className={`h-8 w-8 rounded-lg font-bold text-xs transition-colors ${
+                                currentPage === page
+                                  ? "bg-amber-500 text-zinc-900 shadow-sm"
+                                  : "bg-zinc-800/80 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-zinc-700/60"
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          </React.Fragment>
+                        );
+                      })}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    className="h-8 px-3 rounded-lg text-xs font-bold border-zinc-700 bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 disabled:opacity-40"
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {/* ── Dynamically Loaded Lazy Modals (Code Splitting) ──────────────────── */}

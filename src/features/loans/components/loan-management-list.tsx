@@ -662,104 +662,134 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       <FinexaCycleEffect active={showCycleEffect} />
       <FinexaDocumentEffect active={showDocEffect} />
 
-      {/* ── Search, Filters & Action Controls ─────────────────────────────────── */}
-      <div className="flex flex-col gap-4">
-        {/* Top Controls Bar */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Search Input */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
+      {/* ── Search, Filters & Action Controls (Architecture 3: Segmented Tab Group + Dedicated Search Bar) ── */}
+      <div className="flex flex-col gap-3">
+        {/* 1. Top Action Row (Search & Sort + Action Buttons) */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
+          {/* Search Input Field */}
+          <div className="relative flex-1 w-full max-w-xl">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 pointer-events-none" />
+            <input
               type="text"
               placeholder="Search by borrower name, mobile, PAN, Aadhaar, capital person..."
               value={searchQuery}
               onChange={handleSearchChange}
-              className="pl-10 h-11 rounded-xl bg-transparent border-border fx-input-glass text-sm"
+              className="w-full bg-[#27272a] border border-zinc-700/60 text-zinc-100 placeholder-zinc-500 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-[#eab308] transition-colors"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setCurrentPage(1);
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200 p-0.5 rounded-md"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
-          {/* Status Tabs */}
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-accent/20 border border-border/40 text-xs font-bold overflow-x-auto">
+          {/* Right Action Group (Sort Dropdown & Buttons) */}
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap">
+            {/* Sort Dropdown */}
+            <Select value={sortBy} onValueChange={(val) => handleSortChange(val || "newest")}>
+              <SelectTrigger className="w-full sm:w-auto min-w-[140px] bg-[#27272a] border border-zinc-700/60 text-zinc-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold h-auto focus:ring-0 focus:border-[#eab308] focus:ring-offset-0 outline-none">
+                <SelectValue placeholder="Sort Options" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border border-zinc-800 bg-[#18181b] text-zinc-200 z-50">
+                <SelectItem value="newest" className="text-xs text-zinc-300 focus:bg-[#27272a] focus:text-zinc-100 cursor-pointer">Newest First</SelectItem>
+                <SelectItem value="oldest" className="text-xs text-zinc-300 focus:bg-[#27272a] focus:text-zinc-100 cursor-pointer">Oldest First</SelectItem>
+                <SelectItem value="highest_amount" className="text-xs text-zinc-300 focus:bg-[#27272a] focus:text-zinc-100 cursor-pointer">Highest Amount</SelectItem>
+                <SelectItem value="lowest_amount" className="text-xs text-zinc-300 focus:bg-[#27272a] focus:text-zinc-100 cursor-pointer">Lowest Amount</SelectItem>
+                <SelectItem value="due_date" className="text-xs text-zinc-300 focus:bg-[#27272a] focus:text-zinc-100 cursor-pointer">Due Date</SelectItem>
+                <SelectItem value="borrower_name" className="text-xs text-zinc-300 focus:bg-[#27272a] focus:text-zinc-100 cursor-pointer">Borrower (A-Z)</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Download Active Loans PDF Button */}
+            <Button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={isGeneratingPdf}
+              className="h-10 px-3.5 rounded-xl gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              {isGeneratingPdf ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-amber-400" />
+                  <span className="hidden sm:inline">Generating PDF...</span>
+                </>
+              ) : (
+                <>
+                  <FileText className="h-3.5 w-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">Download Active Loans PDF</span>
+                  <span className="sm:hidden">PDF</span>
+                </>
+              )}
+            </Button>
+
+            {/* New Loan */}
+            <Link href="/loans/new" className="shrink-0">
+              <Button className="h-10 px-4 rounded-xl gap-1.5 fx-brand-gradient border-0 text-white fx-cta-glow fx-pressable text-xs font-bold whitespace-nowrap">
+                <Plus className="h-3.5 w-3.5" />
+                <span>New Loan</span>
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        {/* 2. Bottom Row (Segmented Filter Tab Group) */}
+        <div className="w-full overflow-x-auto py-2 scrollbar-none">
+          <div className="inline-flex items-center gap-1.5 p-1.5 bg-[#18181b] border border-zinc-800 rounded-xl min-w-full sm:min-w-0">
             {[
-              { id: "all", label: "All Loans", count: loans.length },
+              { id: "all", label: "ALL LOANS", count: loans.length },
               {
                 id: "active",
-                label: "Active",
+                label: "ACTIVE",
                 count: loans.filter((l) => l.outstandingBalance > 0 && l.status !== "closed" && l.dueDate !== todayStr && !(new Date(l.dueDate) < today)).length,
               },
               {
                 id: "due_today",
-                label: "Due Today",
+                label: "DUE TODAY",
                 count: loans.filter((l) => l.dueDate === todayStr && l.outstandingBalance > 0 && l.status !== "closed").length,
               },
               {
                 id: "overdue",
-                label: "Overdue",
+                label: "OVERDUE",
                 count: loans.filter((l) => (l.status === "overdue" || new Date(l.dueDate) < today) && l.outstandingBalance > 0 && l.status !== "closed").length,
               },
               {
                 id: "paid",
-                label: "Settled",
+                label: "SETTLED",
                 count: loans.filter((l) => l.outstandingBalance <= 0 || l.status === "closed").length,
               },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => handleStatusFilterChange(tab.id)}
-                className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-all duration-150 flex items-center gap-1.5 ${
-                  statusFilter === tab.id
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/40"
-                }`}
-              >
-                <span>{tab.label}</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/20 dark:bg-white/10">{tab.count}</span>
-              </button>
-            ))}
+            ].map((tab) => {
+              const isActive = statusFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleStatusFilterChange(tab.id)}
+                  className={
+                    isActive
+                      ? "bg-[#eab308] text-black shadow-md font-extrabold px-4 py-2 rounded-lg text-xs uppercase tracking-wider whitespace-nowrap"
+                      : "text-zinc-400 hover:text-zinc-200 bg-transparent px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors"
+                  }
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={
+                      isActive
+                        ? "ml-2 px-2 py-0.5 rounded-md text-[10px] font-mono bg-black/20 text-black font-black"
+                        : "ml-2 px-2 py-0.5 rounded-md text-[10px] font-mono bg-[#27272a] text-zinc-300 border border-zinc-700/50"
+                    }
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-
-          {/* Sort dropdown */}
-          <Select value={sortBy} onValueChange={(val) => handleSortChange(val || "newest")}>
-            <SelectTrigger className="h-11 w-44 rounded-xl border-border bg-transparent text-sm font-semibold">
-              <SelectValue placeholder="Sort Options" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl border-border bg-white dark:bg-card z-50">
-              <SelectItem value="newest">Newest First</SelectItem>
-              <SelectItem value="oldest">Oldest First</SelectItem>
-              <SelectItem value="highest_amount">Highest Amount</SelectItem>
-              <SelectItem value="lowest_amount">Lowest Amount</SelectItem>
-              <SelectItem value="due_date">Due Date</SelectItem>
-              <SelectItem value="borrower_name">Borrower (A-Z)</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Download Active Loans PDF Button */}
-          <Button
-            type="button"
-            onClick={handleDownloadPdf}
-            disabled={isGeneratingPdf}
-            className="h-11 px-4 rounded-xl gap-2 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-500/15 hover:from-amber-500/25 hover:to-amber-500/25 text-amber-400 border border-amber-500/40 text-sm font-bold shadow-[0_0_15px_-3px_rgba(212,175,55,0.15)] hover:shadow-[0_0_20px_0_rgba(212,175,55,0.25)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed fx-pressable"
-          >
-            {isGeneratingPdf ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin text-amber-400" />
-                <span>Generating PDF...</span>
-              </>
-            ) : (
-              <>
-                <FileText className="h-4 w-4 text-amber-400" />
-                <span>Download Active Loans PDF</span>
-              </>
-            )}
-          </Button>
-
-          {/* New Loan */}
-          <Link href="/loans/new">
-            <Button className="h-11 px-4 rounded-xl gap-2 fx-brand-gradient border-0 text-white fx-cta-glow fx-pressable text-sm font-bold">
-              <Plus className="h-4 w-4" /> New Loan
-            </Button>
-          </Link>
         </div>
       </div>
 

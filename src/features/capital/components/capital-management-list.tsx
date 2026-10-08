@@ -224,7 +224,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
     });
   };
 
-  // Handle Record Received Capital
+  // Handle Record Received Capital (Optimistic Mutation)
   const handleRecordReceivedSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!receivedFunderId || !receivedAmount || Number(receivedAmount) <= 0) {
@@ -232,22 +232,47 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
       return;
     }
 
+    const numAmt = Number(receivedAmount);
+    const targetFunderId = receivedFunderId;
+
+    await queryClient.cancelQueries({ queryKey: ["capital-management-data-v2"] });
+    const previousCapital = queryClient.getQueryData<any>(["capital-management-data-v2"]);
+
+    // Instant optimistic update in TanStack Query cache
+    queryClient.setQueryData<any>(["capital-management-data-v2"], (old: any) => {
+      if (!old || !old.funders) return old;
+      return {
+        ...old,
+        funders: old.funders.map((f: any) => {
+          if (f.funderId !== targetFunderId) return f;
+          return {
+            ...f,
+            totalProvided: (Number(f.totalProvided) || 0) + numAmt,
+            unallocatedReceived: (Number(f.unallocatedReceived) || 0) + numAmt,
+          };
+        }),
+      };
+    });
+
+    setRecordReceivedOpen(false);
+    setReceivedAmount("");
+    setReceivedNotes("");
+
     startTransition(async () => {
       const res = await recordReceivedCapitalAction({
-        funderId: receivedFunderId,
-        amount: Number(receivedAmount),
+        funderId: targetFunderId,
+        amount: numAmt,
         fundingDate: receivedDate,
         notes: receivedNotes.trim() || undefined,
       });
 
       if (res.success) {
         toast.success(`Capital received transaction ${res.data?.transactionCode} recorded!`);
-        setRecordReceivedOpen(false);
-        setReceivedAmount("");
-        setReceivedNotes("");
-        // Background sync — no full page reload
         queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
       } else {
+        if (previousCapital) {
+          queryClient.setQueryData(["capital-management-data-v2"], previousCapital);
+        }
         toast.error(typeof res.error === "string" ? res.error : "Failed to record received capital.");
       }
     });

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -138,17 +138,79 @@ export function AllocateCapitalDialog({
   };
 
   const handleConfirmAllocation = async () => {
-    if (!loan || !selectedFunderId || !isValidAmount) { toast.error("Please select a capital person and enter a valid funding amount."); return; }
+    if (!loan || !selectedFunderId || !isValidAmount) {
+      toast.error("Please select a capital person and enter a valid funding amount.");
+      return;
+    }
+
+    const targetLoanId = loan.loanId;
+    await queryClient.cancelQueries({ queryKey: LOANS_QUERY_KEY });
+    const previousLoans = queryClient.getQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY);
+
+    // Optimistically update loan funding in TanStack Query cache
+    queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+      if (!old) return [];
+      return old.map((l) => {
+        if (l.loanId !== targetLoanId) return l;
+        const currentSources = l.funding?.sources || [];
+        const newTotalFunded = (l.funding?.totalFunded || 0) + numAmount;
+        const newRemaining = Math.max(0, Number(l.principal) - newTotalFunded);
+        const newSource = {
+          allocationId: `temp-${Date.now()}`,
+          funderId: selectedFunderId,
+          funderName: selectedFunder?.name || "Capital Partner",
+          funderMobile: selectedFunder?.mobile || "",
+          amount: numAmount,
+          funderSharePercentage: (numAmount / Number(l.principal)) * 100,
+          allocationDate,
+          notes: notes.trim() || null,
+        };
+
+        return {
+          ...l,
+          funding: {
+            ...l.funding,
+            totalFunded: newTotalFunded,
+            remainingRequired: newRemaining,
+            isFullyFunded: newRemaining <= 0,
+            isPartiallyFunded: newTotalFunded > 0 && newRemaining > 0,
+            isUnfunded: newTotalFunded === 0,
+            sources: [...currentSources, newSource],
+          },
+        };
+      });
+    });
+
+    toast.success(`Successfully linked ₹${numAmount.toLocaleString("en-IN")} from ${selectedFunder?.name} to ${loan.borrower.name}!`);
+    if (onSuccess) onSuccess();
+    onOpenChange(false);
+
     setIsSubmitting(true);
-    const res = await allocateCapitalAction({ loanId: loan.loanId, funderId: selectedFunderId, amount: numAmount, allocationDate, status: fundingStatus, notes: notes.trim() || undefined });
-    setIsSubmitting(false);
-    if (res.success) {
-      toast.success(`Successfully linked Rs.${numAmount.toLocaleString("en-IN")} from ${selectedFunder?.name} to ${loan.borrower.name}!`);
-      queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
-      if (onSuccess) onSuccess();
-      onOpenChange(false);
-    } else {
-      toast.error(typeof res.error === "string" ? res.error : "Failed to record capital funding.");
+    try {
+      const res = await allocateCapitalAction({
+        loanId: loan.loanId,
+        funderId: selectedFunderId,
+        amount: numAmount,
+        allocationDate,
+        status: fundingStatus,
+        notes: notes.trim() || undefined,
+      });
+
+      if (res.success) {
+        queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+      } else {
+        if (previousLoans) {
+          queryClient.setQueryData(LOANS_QUERY_KEY, previousLoans);
+        }
+        toast.error(typeof res.error === "string" ? res.error : "Failed to record capital funding.");
+      }
+    } catch {
+      if (previousLoans) {
+        queryClient.setQueryData(LOANS_QUERY_KEY, previousLoans);
+      }
+      toast.error("Failed to record capital funding.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

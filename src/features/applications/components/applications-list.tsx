@@ -282,25 +282,33 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
     toast.success("Bot message copied to clipboard!");
   };
 
-  // Verify / Approve or Reject Application
+  // Verify / Approve or Reject Application (Optimistic Mutation)
   const handleVerifyApplication = async (appId: string, actionType: "approve" | "reject") => {
+    const targetStatus = actionType === "approve" ? "approved" : "rejected";
+    const previousApps = apps;
+    const currentApp = selectedApp;
+
+    // 1. Instant optimistic UI update
+    setApps((prev) =>
+      prev.map((a) => (a.applicationId === appId ? { ...a, status: targetStatus } : a))
+    );
+    setDetailsOpen(false);
+
+    if (actionType === "approve" && currentApp) {
+      const approvalMsg = getAppBotMessage(currentApp);
+      copyToClipboard(approvalMsg);
+      handleOpenWhatsApp(currentApp);
+      toast.success("Application approved! Bot message copied & redirected to WhatsApp.");
+    } else {
+      toast.success("Application successfully rejected.");
+    }
+
+    // 2. Execute server action in background non-blocking transition
     startTransition(async () => {
       const res = await verifyApplicationAction(appId, actionType);
-      if (res.success) {
-        const targetStatus = actionType === "approve" ? "approved" : "rejected";
-        setApps((prev) =>
-          prev.map((a) => (a.applicationId === appId ? { ...a, status: targetStatus } : a))
-        );
-        if (actionType === "approve" && selectedApp) {
-          const approvalMsg = getAppBotMessage(selectedApp);
-          copyToClipboard(approvalMsg);
-          handleOpenWhatsApp(selectedApp);
-          toast.success("Application approved! Bot message copied & redirected to WhatsApp.");
-        } else {
-          toast.success("Application successfully rejected.");
-        }
-        setDetailsOpen(false);
-      } else {
+      if (!res.success) {
+        // Rollback on failure
+        setApps(previousApps);
         toast.error(typeof res.error === "string" ? res.error : `${actionType} action failed`);
       }
     });

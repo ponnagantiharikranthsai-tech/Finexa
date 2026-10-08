@@ -553,6 +553,11 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       const newBal = Math.max(0, previousOutstanding - paidAmt);
       const newStatus = newBal === 0 ? "closed" : previousStatus;
 
+      // 1. Cancel in-flight queries & snapshot previous data for rollback
+      await queryClient.cancelQueries({ queryKey: LOANS_QUERY_KEY });
+      const previousLoans = queryClient.getQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY);
+
+      // 2. Instant optimistic update in local state and TanStack Query cache
       setLoans((prev) =>
         prev.map((l) => (l.loanId === targetLoanId ? { ...l, outstandingBalance: newBal, status: newStatus } : l))
       );
@@ -573,8 +578,12 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
           toast.success("Payment recorded successfully!");
           queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
         } else {
+          // Rollback on failure
+          if (previousLoans) {
+            queryClient.setQueryData(LOANS_QUERY_KEY, previousLoans);
+            setLoans(previousLoans);
+          }
           toast.error(typeof res.error === "string" ? res.error : "Failed to record payment.");
-          queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
         }
       });
     },
@@ -583,6 +592,25 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
   const handlePayAndExtendConfirm = async () => {
     if (!selectedLoan) return;
+    const targetLoanId = selectedLoan.loanId;
+
+    await queryClient.cancelQueries({ queryKey: LOANS_QUERY_KEY });
+    const previousLoans = queryClient.getQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY);
+
+    // Compute optimistic new due date (+1 month)
+    const currentDue = new Date(selectedLoan.dueDate);
+    const optimisticDueDate = new Date(currentDue.setMonth(currentDue.getMonth() + 1)).toISOString().split("T")[0]!;
+
+    // 1. Instant optimistic update
+    setLoans((prev) =>
+      prev.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: optimisticDueDate, status: "active" } : l))
+    );
+    setSelectedLoan((prev) => (prev ? { ...prev, dueDate: optimisticDueDate, status: "active" } : prev));
+    queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+      if (!old) return [];
+      return old.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: optimisticDueDate, status: "active" } : l));
+    });
+
     setPaymentOpen(false);
     setShowCycleEffect(true);
     setTimeout(() => setShowCycleEffect(false), 2000);
@@ -598,14 +626,35 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         toast.success(`Success! Interest of ₹${res.data.amountPaid.toLocaleString("en-IN")} recorded.`);
         queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
       } else {
+        if (previousLoans) {
+          queryClient.setQueryData(LOANS_QUERY_KEY, previousLoans);
+          setLoans(previousLoans);
+        }
         toast.error(typeof res.error === "string" ? res.error : "Pay & Extend operation failed.");
-        queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
       }
     });
   };
 
   const handleOverduePenaltyConfirm = async () => {
     if (!selectedLoan) return;
+    const targetLoanId = selectedLoan.loanId;
+
+    await queryClient.cancelQueries({ queryKey: LOANS_QUERY_KEY });
+    const previousLoans = queryClient.getQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY);
+
+    const now = new Date();
+    const optimisticDueDate = new Date(now.setMonth(now.getMonth() + 1)).toISOString().split("T")[0]!;
+
+    // 1. Instant optimistic update
+    setLoans((prev) =>
+      prev.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: optimisticDueDate, status: "active", penaltyAmount: "0" } : l))
+    );
+    setSelectedLoan((prev) => (prev ? { ...prev, dueDate: optimisticDueDate, status: "active", penaltyAmount: "0" } : prev));
+    queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+      if (!old) return [];
+      return old.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: optimisticDueDate, status: "active", penaltyAmount: "0" } : l));
+    });
+
     setPaymentOpen(false);
     setShowCycleEffect(true);
     setTimeout(() => setShowCycleEffect(false), 2000);
@@ -621,14 +670,35 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         toast.success(`Overdue Cleared! Interest: ₹${res.data.interestPaid}, Penalty: ₹${res.data.penaltyPaid}.`);
         queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
       } else {
+        if (previousLoans) {
+          queryClient.setQueryData(LOANS_QUERY_KEY, previousLoans);
+          setLoans(previousLoans);
+        }
         toast.error(typeof res.error === "string" ? res.error : "Overdue settlement failed.");
-        queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
       }
     });
   };
 
   const handleExtendConfirm = async () => {
     if (!selectedLoan) return;
+    const targetLoanId = selectedLoan.loanId;
+
+    await queryClient.cancelQueries({ queryKey: LOANS_QUERY_KEY });
+    const previousLoans = queryClient.getQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY);
+
+    const currentDue = new Date(selectedLoan.dueDate);
+    const optimisticDueDate = new Date(currentDue.setMonth(currentDue.getMonth() + 1)).toISOString().split("T")[0]!;
+
+    // 1. Instant optimistic update
+    setLoans((prev) =>
+      prev.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: optimisticDueDate } : l))
+    );
+    setSelectedLoan((prev) => (prev ? { ...prev, dueDate: optimisticDueDate } : prev));
+    queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
+      if (!old) return [];
+      return old.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: optimisticDueDate } : l));
+    });
+
     setExtendOpen(false);
 
     startTransition(async () => {
@@ -637,6 +707,10 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         toast.success(`Loan extended! New Due Date: ${res.data.newDueDate}`);
         queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
       } else {
+        if (previousLoans) {
+          queryClient.setQueryData(LOANS_QUERY_KEY, previousLoans);
+          setLoans(previousLoans);
+        }
         toast.error(typeof res.error === "string" ? res.error : "Failed to extend loan.");
       }
     });

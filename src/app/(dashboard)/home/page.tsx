@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { FinexaCard3D, FinexaStaggerContainer, FinexaStaggerItem } from "@/components/motion/finexa-motion";
 import { HomeOverview } from "@/features/dashboard/components/home-overview";
+import { HomeVirtualizedFeed } from "@/features/dashboard/components/home-virtualized-feed";
 
 export default function HomePage() {
   const logoRef = React.useRef<HTMLDivElement | null>(null);
@@ -158,6 +159,9 @@ export default function HomePage() {
           })}
         </div>
       </FinexaStaggerContainer>
+
+      {/* ─── 3. VIRTUALIZED ACTIVE PORTFOLIO FEED (60 FPS) ─── */}
+      <HomeVirtualizedFeed />
 
     </div>
   );

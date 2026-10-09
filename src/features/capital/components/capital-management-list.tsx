@@ -15,7 +15,8 @@ import {
   Check, CheckCircle2, XCircle, ListFilter,
   DollarSign, Wallet, Users, ArrowUpLeft, ArrowDownRight, Coins, Info,
   CreditCard, ExternalLink, ShieldCheck, UserPlus, History,
-  RotateCcw, BadgeCheck
+  RotateCcw, BadgeCheck,
+  List, LayoutGrid
 } from "lucide-react";
 import { createFunderAction } from "../actions/create-funder.action";
 import { updateFunderAction } from "../actions/update-funder.action";
@@ -23,6 +24,7 @@ import { deleteFunderAction } from "../actions/delete-funder.action";
 import { recordCapitalReturnAction } from "../actions/record-capital-return.action";
 import { recordReceivedCapitalAction } from "../actions/record-received-capital.action";
 import type { FunderWithReturns, FundingTransactionHistoryItem } from "../actions/get-capital-data.action";
+import { VirtualizedFundersQueue } from "./virtualized-funders-queue";
 
 interface CapitalManagementListProps {
   initialData: {
@@ -91,6 +93,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
   // Filter & Search states
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"queue" | "grid">("queue");
 
   const [isPending, startTransition] = useTransition();
 
@@ -573,11 +576,46 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
+
+              {/* View Toggle */}
+              <div className="flex items-center gap-1 bg-[#18181b] p-1 rounded-xl border border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("queue")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                    viewMode === "queue"
+                      ? "bg-zinc-800/90 text-yellow-400 border border-yellow-500/30 shadow-sm shadow-yellow-500/10 font-bold"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 border border-transparent"
+                  }`}
+                  title="60 FPS Virtualized Queue"
+                >
+                  <List className="h-3.5 w-3.5" />
+                  <span>Queue (60 FPS)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("grid")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                    viewMode === "grid"
+                      ? "bg-zinc-800/90 text-yellow-400 border border-yellow-500/30 shadow-sm shadow-yellow-500/10 font-bold"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 border border-transparent"
+                  }`}
+                  title="Grid View"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span>Grid</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Cards Grid */}
-          {filteredFunders.length === 0 ? (
+          {/* Virtualized Queue or Cards Grid */}
+          {viewMode === "queue" ? (
+            <VirtualizedFundersQueue
+              funders={filteredFunders}
+              onSelectFunder={handleViewDetails}
+            />
+          ) : filteredFunders.length === 0 ? (
             <div className="py-12 text-center bg-card/40 rounded-2xl border border-border/40 text-xs text-muted-foreground space-y-2">
               <Users className="h-8 w-8 mx-auto text-muted-foreground opacity-50" />
               <p className="font-semibold text-foreground text-sm">No capital persons found.</p>

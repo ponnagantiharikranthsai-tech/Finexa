@@ -43,8 +43,11 @@ import {
   Landmark,
   BadgeCheck,
   CreditCard,
+  List,
+  TableProperties,
 } from "lucide-react";
 import { toast } from "sonner";
+import { VirtualizedCapitalLedger } from "./virtualized-capital-ledger";
 
 interface CapitalFundingLedgerViewProps {
   funderId: string;
@@ -113,6 +116,7 @@ export function CapitalFundingLedgerView({
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+  const [viewMode, setViewMode] = useState<"virtualized" | "table">("virtualized");
 
   // Active view tab (Funding Transactions vs Payments To Funder vs Borrower Repayments)
   const [activeLedgerTab, setActiveLedgerTab] = useState<"funding" | "payments_to_funder" | "borrower_repayments">("funding");
@@ -773,12 +777,48 @@ export function CapitalFundingLedgerView({
                     <RotateCcw className="h-3 w-3 mr-1" /> Reset
                   </Button>
                 )}
+
+                {/* View Toggle */}
+                <div className="flex items-center gap-1 bg-[#18181b] p-1 rounded-xl border border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("virtualized")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                      viewMode === "virtualized"
+                        ? "bg-zinc-800/90 text-yellow-400 border border-yellow-500/30 shadow-sm shadow-yellow-500/10 font-bold"
+                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 border border-transparent"
+                    }`}
+                    title="60 FPS Virtualized Ledger"
+                  >
+                    <List className="h-3.5 w-3.5" />
+                    <span>Ledger (60 FPS)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("table")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                      viewMode === "table"
+                        ? "bg-zinc-800/90 text-yellow-400 border border-yellow-500/30 shadow-sm shadow-yellow-500/10 font-bold"
+                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 border border-transparent"
+                    }`}
+                    title="Table View"
+                  >
+                    <TableProperties className="h-3.5 w-3.5" />
+                    <span>Table</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Desktop Table */}
-          {filteredTransactions.length === 0 ? (
+          {/* Virtualized Feed or Desktop Table / Mobile Cards */}
+          {viewMode === "virtualized" ? (
+            <VirtualizedCapitalLedger
+              transactions={filteredTransactions}
+              onSelectTransaction={handleViewTx}
+              funderName={funderDisplayName}
+            />
+          ) : filteredTransactions.length === 0 ? (
             <div className="py-16 text-center rounded-2xl bg-card/40 border border-border/50 p-6 space-y-3">
               <Coins className="h-8 w-8 mx-auto text-muted-foreground opacity-50" />
               <h3 className="font-bold text-sm text-foreground">No funding transactions found</h3>

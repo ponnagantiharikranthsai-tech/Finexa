@@ -847,19 +847,19 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
                   key={tab.id}
                   type="button"
                   onClick={() => handleStatusFilterChange(tab.id)}
-                  className={
+                  className={`px-4 py-1.5 rounded-full text-xs font-semibold tracking-wider transition-all duration-200 flex items-center gap-2 whitespace-nowrap ${
                     isActive
-                      ? "bg-[#eab308] text-black shadow-md font-extrabold px-4 py-2 rounded-lg text-xs uppercase tracking-wider whitespace-nowrap"
-                      : "text-zinc-400 hover:text-zinc-200 bg-transparent px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors"
-                  }
+                      ? "bg-zinc-800/90 text-yellow-400 border border-yellow-500/30 shadow-sm shadow-yellow-500/10"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 border border-transparent"
+                  }`}
                 >
                   <span>{tab.label}</span>
                   <span
-                    className={
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
                       isActive
-                        ? "ml-2 px-2 py-0.5 rounded-md text-[10px] font-mono bg-black/20 text-black font-black"
-                        : "ml-2 px-2 py-0.5 rounded-md text-[10px] font-mono bg-[#27272a] text-zinc-300 border border-zinc-700/50"
-                    }
+                        ? "bg-yellow-500/20 text-yellow-300 border border-yellow-500/30"
+                        : "bg-zinc-800 text-zinc-400"
+                    }`}
                   >
                     {tab.count}
                   </span>
@@ -882,10 +882,10 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
           <button
             type="button"
             onClick={() => setViewMode("virtualized")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 ${
               viewMode === "virtualized"
-                ? "bg-[#eab308] text-black shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200"
+                ? "bg-zinc-800/90 text-yellow-400 border border-yellow-500/30 shadow-sm shadow-yellow-500/10"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 border border-transparent"
             }`}
             title="60 FPS Virtualized List View"
           >
@@ -895,10 +895,10 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
           <button
             type="button"
             onClick={() => setViewMode("grid")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 ${
               viewMode === "grid"
-                ? "bg-[#eab308] text-black shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200"
+                ? "bg-zinc-800/90 text-yellow-400 border border-yellow-500/30 shadow-sm shadow-yellow-500/10"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 border border-transparent"
             }`}
             title="Grid View"
           >

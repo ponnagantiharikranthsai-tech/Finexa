@@ -444,10 +444,10 @@ Thank you for choosing **FINEXA – Smart Loan Management.**`;
             <button
               type="button"
               onClick={() => setViewMode("queue")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
                 viewMode === "queue"
-                  ? "bg-[#eab308] text-black shadow-sm font-bold"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "bg-zinc-800/90 text-yellow-400 border border-yellow-500/30 shadow-sm shadow-yellow-500/10"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 border border-transparent"
               }`}
               title="Virtual Queue"
             >
@@ -457,10 +457,10 @@ Thank you for choosing **FINEXA – Smart Loan Management.**`;
             <button
               type="button"
               onClick={() => setViewMode("table")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
                 viewMode === "table"
-                  ? "bg-[#eab308] text-black shadow-sm font-bold"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "bg-zinc-800/90 text-yellow-400 border border-yellow-500/30 shadow-sm shadow-yellow-500/10"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 border border-transparent"
               }`}
               title="Table View"
             >

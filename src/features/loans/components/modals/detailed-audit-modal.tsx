@@ -53,31 +53,31 @@ function StatusBadge({ status, outstanding, dueDate }: { status: string; outstan
 
   const config = {
     active: {
-      badge: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
-      label: "Active",
-      icon: <Clock className="h-3 w-3" />,
+      badge: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 shadow-sm shadow-yellow-500/5",
+      label: "ACTIVE",
+      icon: <Clock size={10} />,
     },
     due_today: {
-      badge: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
-      label: "Due Today",
-      icon: <Clock className="h-3 w-3 animate-[pulse_1.5s_infinite]" />,
+      badge: "bg-blue-500/10 text-blue-400 border border-blue-500/30",
+      label: "DUE TODAY",
+      icon: <Clock size={10} className="animate-pulse" />,
     },
     overdue: {
-      badge: "bg-red-500/10 text-red-400 border border-red-500/20",
-      label: "Overdue",
-      icon: <AlertTriangle className="h-3 w-3" />,
+      badge: "bg-rose-500/10 text-rose-400 border border-rose-500/30",
+      label: "OVERDUE",
+      icon: <AlertTriangle size={10} />,
     },
     paid: {
-      badge: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
-      label: "Paid",
-      icon: <Check className="h-3 w-3" />,
+      badge: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30",
+      label: "SETTLED",
+      icon: <Check size={10} />,
     },
   }[dynamicStatus];
 
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${config.badge}`}>
+    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wider flex items-center gap-1 ${config.badge}`}>
       {config.icon}
-      {config.label}
+      <span>{config.label}</span>
     </span>
   );
 }
@@ -237,9 +237,9 @@ export function DetailedAuditModal({
         style={{ maxWidth: "64rem" }}
         showCloseButton={false}
       >
-        <div className="flex flex-col max-h-[85vh] bg-[#18181b] border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl text-zinc-100">
+        <div className="flex flex-col max-h-[85vh] bg-[#121215]/95 backdrop-blur-xl border border-zinc-800/80 rounded-2xl overflow-hidden shadow-2xl text-zinc-100">
           {/* STICKY HEADER */}
-          <div className="shrink-0 px-6 py-4 border-b border-zinc-800/80 bg-[#18181b] flex items-center justify-between gap-4">
+          <div className="shrink-0 px-6 py-4 border-b border-zinc-800/80 bg-[#121215] flex items-center justify-between gap-4">
             <div>
               <DialogTitle className="text-xl font-black tracking-tight text-white flex items-center gap-3">
                 <span>Detailed Audit File</span>
@@ -268,7 +268,7 @@ export function DetailedAuditModal({
             {/* ── Two-Column Split Dashboard (Top Section) ─────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Left Column: Borrower Information */}
-              <div className="bg-[#27272a] p-5 rounded-xl border border-zinc-800/80 space-y-4">
+              <div className="bg-[#18181b] p-5 rounded-xl border border-zinc-800/80 space-y-4">
                 <div className="flex items-center justify-between border-b border-zinc-700/60 pb-3">
                   <h3 className="font-bold text-xs tracking-wider uppercase text-amber-400 flex items-center gap-2">
                     <Users className="h-4 w-4" /> 👤 BORROWER INFORMATION
@@ -288,7 +288,7 @@ export function DetailedAuditModal({
                         onOpenChange(false);
                         onEditKyc(loan);
                       }}
-                      className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold hover:bg-amber-500/20 transition-colors"
+                      className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-bold hover:bg-yellow-500/20 transition-colors"
                     >
                       <Edit className="h-3.5 w-3.5" />
                       <span>Edit KYC</span>
@@ -340,13 +340,13 @@ export function DetailedAuditModal({
                   {loan.borrower.locationUrl && (
                     <div className="col-span-2 pt-1 border-t border-zinc-700/50">
                       <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
-                        <MapPin className="h-3.5 w-3.5 text-amber-400" /> Location Coordinates
+                        <MapPin className="h-3.5 w-3.5 text-yellow-400" /> Location Coordinates
                       </span>
                       <a
                         href={loan.borrower.locationUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-amber-400 hover:text-amber-300 hover:underline font-semibold text-xs inline-block mt-1"
+                        className="text-yellow-400 hover:text-yellow-300 hover:underline font-semibold text-xs inline-block mt-1"
                       >
                         Open Maps Geolocation Coordinates ↗
                       </a>
@@ -356,7 +356,7 @@ export function DetailedAuditModal({
               </div>
 
               {/* Right Column: Loan Portfolio & Payment History */}
-              <div className="bg-[#27272a] p-5 rounded-xl border border-zinc-800/80 space-y-5 flex flex-col justify-between">
+              <div className="bg-[#18181b] p-5 rounded-xl border border-zinc-800/80 space-y-5 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between border-b border-zinc-700/60 pb-3 mb-4">
                     <h3 className="font-bold text-xs tracking-wider uppercase text-amber-400 flex items-center gap-2">
@@ -368,11 +368,11 @@ export function DetailedAuditModal({
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 text-left">
                     <div>
                       <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Principal</span>
-                      <p className="text-sm font-extrabold text-white mt-1">₹{Number(loan.principal).toLocaleString("en-IN")}</p>
+                      <p className="text-sm font-mono font-bold text-yellow-500 mt-1">₹{Number(loan.principal).toLocaleString("en-IN")}</p>
                     </div>
                     <div>
                       <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Interest</span>
-                      <p className="text-sm font-semibold text-zinc-100 mt-1">₹{totalInterest.toLocaleString("en-IN")}</p>
+                      <p className="text-sm font-mono font-bold text-yellow-500 mt-1">₹{totalInterest.toLocaleString("en-IN")}</p>
                     </div>
                     <div>
                       <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Type</span>
@@ -394,13 +394,13 @@ export function DetailedAuditModal({
                     </div>
                     <div>
                       <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Amount Paid</span>
-                      <p className="text-sm font-bold text-emerald-400 mt-1">
+                      <p className="text-sm font-mono font-bold text-emerald-400 mt-1">
                         ₹{(Number(loan.principal) + totalInterest + Number(loan.penaltyAmount || 0) - loan.outstandingBalance).toLocaleString("en-IN")}
                       </p>
                     </div>
                     <div>
                       <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Remaining</span>
-                      <p className="text-sm font-black text-amber-400 mt-1">
+                      <p className="text-sm font-mono font-bold text-yellow-500 mt-1">
                         ₹{loan.outstandingBalance.toLocaleString("en-IN")}
                       </p>
                     </div>
@@ -457,7 +457,7 @@ export function DetailedAuditModal({
             </div>
 
             {/* ── Section 2A: Capital & Funding Allocation ───────────────── */}
-            <div className="bg-[#27272a] p-5 rounded-xl border border-zinc-800/80 space-y-4">
+            <div className="bg-[#18181b] p-5 rounded-xl border border-zinc-800/80 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-700/60 pb-3">
                 <h3 className="font-bold text-xs tracking-wider uppercase text-amber-400 flex items-center gap-2">
                   <Landmark className="h-4 w-4" /> 🏦 CAPITAL & FUNDING SOURCES
@@ -476,36 +476,32 @@ export function DetailedAuditModal({
                       Not Assigned
                     </span>
                   )}
-                  <Button
+                  <button
                     type="button"
-                    size="sm"
                     onClick={() => {
                       onOpenChange(false);
                       onAllocateCapital(loan);
                     }}
-                    className="h-8 px-3 rounded-lg text-xs font-bold bg-amber-500 text-zinc-900 hover:bg-amber-400 border-0 flex items-center gap-1.5 transition-colors"
+                    className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500/20 transition-all flex items-center gap-1.5 shadow-sm shadow-yellow-500/5"
                   >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Add Capital Person</span>
-                  </Button>
+                    <Plus size={14} /> Add Capital Person
+                  </button>
                 </div>
               </div>
 
-              {/* Summary row */}
-              <div className="grid grid-cols-3 gap-3 bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-800/80 text-xs text-center">
+              {/* 2. Unified Financial Metric Cards (Principal, Funded, Balance) */}
+              <div className="grid grid-cols-3 gap-4 bg-[#141418] p-4 rounded-xl border border-zinc-800/80">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-zinc-400">Loan Principal</span>
-                  <p className="font-extrabold text-white text-sm mt-0.5">₹{principal.toLocaleString("en-IN")}</p>
+                  <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Loan Principal</span>
+                  <div className="text-base font-mono font-bold text-yellow-500 mt-0.5">₹{principal.toLocaleString("en-IN")}</div>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-zinc-400">Total Funded</span>
-                  <p className="font-extrabold text-emerald-400 text-sm mt-0.5">₹{totalFunded.toLocaleString("en-IN")}</p>
+                  <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Total Funded</span>
+                  <div className="text-base font-mono font-bold text-yellow-500 mt-0.5">₹{totalFunded.toLocaleString("en-IN")}</div>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-zinc-400">Unfunded Balance</span>
-                  <p className={`font-extrabold text-sm mt-0.5 ${remainingFunded > 0 ? "text-amber-400 font-black" : "text-zinc-400"}`}>
-                    ₹{remainingFunded.toLocaleString("en-IN")}
-                  </p>
+                  <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Unfunded Balance</span>
+                  <div className="text-base font-mono font-bold text-zinc-400 mt-0.5">₹{remainingFunded.toLocaleString("en-IN")}</div>
                 </div>
               </div>
 
@@ -535,7 +531,7 @@ export function DetailedAuditModal({
                             <p className="font-bold text-zinc-100">{src.funderName}</p>
                             <p className="text-[10px] text-zinc-400">{src.funderMobile}</p>
                           </td>
-                          <td className="p-3 font-extrabold text-amber-400 text-sm">
+                          <td className="p-3 font-bold font-mono text-yellow-500 text-sm">
                             ₹{src.amount.toLocaleString("en-IN")}
                           </td>
                           <td className="p-3 font-semibold text-zinc-200">
@@ -555,11 +551,10 @@ export function DetailedAuditModal({
                                   onOpenChange(false);
                                   router.push(`/capital-management/${src.funderId}`);
                                 }}
-                                className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[10px] font-bold text-amber-400 flex items-center gap-1 transition-colors border border-zinc-700"
+                                className="px-3 py-1 rounded-lg text-xs text-zinc-300 bg-zinc-800/60 border border-zinc-700/60 hover:border-yellow-500/40 hover:text-yellow-400 transition flex items-center gap-1"
                                 title="View in Capital Management"
                               >
-                                <span>Capital Details</span>
-                                <ExternalLink className="h-2.5 w-2.5" />
+                                Capital Details <ExternalLink size={12} />
                               </button>
                               <button
                                 type="button"
@@ -580,7 +575,7 @@ export function DetailedAuditModal({
             </div>
 
             {/* ── Section 2B: Penalty Details & Settings ───────────────── */}
-            <div className="bg-[#27272a] p-5 rounded-xl border border-zinc-800/80 space-y-4">
+            <div className="bg-[#18181b] p-5 rounded-xl border border-zinc-800/80 space-y-4">
               <h3 className="font-bold text-xs tracking-wider uppercase text-amber-400 flex items-center gap-2 border-b border-zinc-700/60 pb-3">
                 <ShieldAlert className="h-4 w-4 text-red-400" /> ⚠️ PENALTY DETAILS & SETTINGS
               </h3>
@@ -590,7 +585,7 @@ export function DetailedAuditModal({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div>
                     <p className="text-[10px] uppercase font-bold text-zinc-400">Principal Amount</p>
-                    <p className="font-extrabold text-white text-sm mt-0.5">
+                    <p className="font-bold font-mono text-yellow-500 text-sm mt-0.5">
                       ₹{Number(loan.principal).toLocaleString("en-IN")}
                     </p>
                   </div>
@@ -617,13 +612,13 @@ export function DetailedAuditModal({
                 <div className="border-t border-zinc-800 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <p className="text-[10px] uppercase font-bold text-zinc-400">Total Accrued Penalty</p>
-                    <p className={`mt-0.5 ${penaltyColorClass}`}>
+                    <p className={`mt-0.5 font-mono ${penaltyColorClass}`}>
                       ₹{penaltyInfo.totalPenalty.toLocaleString("en-IN")}
                     </p>
                   </div>
                   <div className="sm:text-right">
                     <p className="text-[10px] uppercase font-bold text-zinc-400">Total Amount Payable</p>
-                    <p className="font-black text-amber-400 text-base mt-0.5">
+                    <p className="font-bold font-mono text-yellow-500 text-base mt-0.5">
                       ₹{totalPayable.toLocaleString("en-IN")}
                     </p>
                   </div>
@@ -656,13 +651,13 @@ export function DetailedAuditModal({
                     />
                   </div>
 
-                  <Button
+                  <button
                     type="submit"
                     disabled={isUpdatingPenalty}
-                    className="h-10 rounded-xl text-xs font-bold bg-amber-500 text-zinc-900 hover:bg-amber-400 border-0 transition-colors"
+                    className="h-10 px-4 rounded-xl text-xs font-medium text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500/20 transition-all shadow-sm shadow-yellow-500/5 disabled:opacity-50"
                   >
                     {isUpdatingPenalty ? "Saving..." : "Save Penalty Rate"}
-                  </Button>
+                  </button>
                 </div>
                 <p className="text-[10px] text-zinc-400">
                   Formula: Penalty = (Principal ÷ 1,000) × Penalty Rate × Overdue Days
@@ -730,7 +725,7 @@ export function DetailedAuditModal({
               </div>
 
               {/* Permanent Loan Cycle History */}
-              <div className="bg-[#27272a] p-5 rounded-xl border border-zinc-800/80 space-y-3.5">
+              <div className="bg-[#18181b] p-5 rounded-xl border border-zinc-800/80 space-y-3.5">
                 <h4 className="font-bold text-xs uppercase tracking-wider text-amber-400 border-b border-zinc-700/60 pb-2.5 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
                     <RefreshCw className="h-3.5 w-3.5 text-amber-400" /> Loan Cycle History
@@ -763,9 +758,9 @@ export function DetailedAuditModal({
                           {c.notes && <p className="text-[10px] text-zinc-400 mt-0.5 italic">{c.notes}</p>}
                         </div>
                         <div className="text-right sm:shrink-0">
-                          <p className="font-bold text-xs text-amber-400">Interest Paid: ₹{Number(c.interestPaid).toLocaleString("en-IN")}</p>
+                          <p className="font-bold font-mono text-xs text-yellow-500">Interest Paid: ₹{Number(c.interestPaid).toLocaleString("en-IN")}</p>
                           {Number(c.penaltyPaid) > 0 && (
-                            <p className="font-bold text-[10px] text-red-400">Penalty Paid: ₹{Number(c.penaltyPaid).toLocaleString("en-IN")}</p>
+                            <p className="font-bold font-mono text-[10px] text-red-400">Penalty Paid: ₹{Number(c.penaltyPaid).toLocaleString("en-IN")}</p>
                           )}
                         </div>
                       </div>
@@ -776,7 +771,7 @@ export function DetailedAuditModal({
             </div>
 
             {/* ── Section 4: Internal Notes ─────────────────────────────────── */}
-            <div className="bg-[#27272a] p-5 rounded-xl border border-zinc-800/80 space-y-3.5">
+            <div className="bg-[#18181b] p-5 rounded-xl border border-zinc-800/80 space-y-3.5">
               <h3 className="font-bold text-xs tracking-wider uppercase text-amber-400 flex items-center gap-2 border-b border-zinc-700/60 pb-2.5">
                 <FileText className="h-4 w-4" /> 📝 PRIVATE INTERNAL NOTES
               </h3>
@@ -806,24 +801,23 @@ export function DetailedAuditModal({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Button
+                    <button
                       type="button"
                       onClick={() => handleSaveNotes(notesText)}
-                      className="h-9 px-4 rounded-xl text-xs font-bold bg-amber-500 text-zinc-900 hover:bg-amber-400 border-0 transition-colors"
+                      className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500/20 transition-all shadow-sm shadow-yellow-500/5"
                     >
                       Save Notes
-                    </Button>
-                    <Button
+                    </button>
+                    <button
                       type="button"
-                      variant="outline"
                       onClick={async () => {
                         setNotesText("");
                         await handleSaveNotes("");
                       }}
-                      className="h-9 px-4 rounded-xl text-xs font-bold border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-white"
+                      className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-zinc-300 bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/80 transition"
                     >
                       Clear Notes
-                    </Button>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -853,17 +847,17 @@ export function DetailedAuditModal({
           </div>
 
           {/* STICKY FOOTER */}
-          <div className="shrink-0 px-6 py-3.5 border-t border-zinc-800/80 bg-[#18181b] flex items-center justify-between gap-4">
+          <div className="shrink-0 px-6 py-3.5 border-t border-zinc-800/80 bg-[#121215] flex items-center justify-between gap-4">
             <span className="text-xs text-zinc-400">
               Loan File ID: <code className="font-mono text-[11px] text-zinc-300 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">{loan.loanId}</code>
             </span>
-            <Button
-              variant="outline"
+            <button
+              type="button"
               onClick={() => onOpenChange(false)}
-              className="rounded-xl border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-white font-bold text-xs h-9 px-5"
+              className="px-4 py-2 text-xs font-medium text-zinc-300 bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/80 rounded-lg transition"
             >
               Close Audit File
-            </Button>
+            </button>
           </div>
         </div>
       </DialogContent>

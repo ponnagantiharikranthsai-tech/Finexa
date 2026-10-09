@@ -29,12 +29,15 @@ import {
   Mail,
   FileSignature,
   FileDown,
-  MessageSquare
+  MessageSquare,
+  List,
+  TableProperties
 } from "lucide-react";
 import type { ApplicationWithBorrower } from "../repository/application.repository";
 import { calculateDueDate } from "@/domain/due-date-calculator";
 import { calculateMonthlyInterest } from "@/domain/interest-calculator";
 import { formatLoanApprovalMessage } from "../utils/format-approval-message";
+import { VirtualizedApplicationsQueue } from "./virtualized-applications-queue";
 
 interface ApplicationsListProps {
   initialApps: ApplicationWithBorrower[];
@@ -122,6 +125,7 @@ export function ApplicationsList({ initialApps, total: initialTotal, totalPages:
   const [status, setStatus] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [isPending, startTransition] = useTransition();
+  const [viewMode, setViewMode] = useState<"queue" | "table">("queue");
 
   // Dialog States
   const [generateOpen, setGenerateOpen] = useState(false);
@@ -434,100 +438,142 @@ Thank you for choosing **FINEXA – Smart Loan Management.**`;
           </Select>
         </div>
 
-        <Button
-          onClick={() => setGenerateOpen(true)}
-          className="h-10 rounded-xl fx-brand-gradient text-white font-semibold flex items-center gap-1.5 px-4 fx-pressable shadow-md"
-        >
-          <Plus className="h-4 w-4" />
-          Generate Customer Link
-        </Button>
+        <div className="flex items-center gap-2.5">
+          {/* View Toggle */}
+          <div className="flex items-center gap-1 bg-[#18181b] p-1 rounded-xl border border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setViewMode("queue")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                viewMode === "queue"
+                  ? "bg-[#eab308] text-black shadow-sm font-bold"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              title="Virtual Queue"
+            >
+              <List className="h-3.5 w-3.5" />
+              <span>Queue</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                viewMode === "table"
+                  ? "bg-[#eab308] text-black shadow-sm font-bold"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              title="Table View"
+            >
+              <TableProperties className="h-3.5 w-3.5" />
+              <span>Table</span>
+            </button>
+          </div>
+
+          <Button
+            onClick={() => setGenerateOpen(true)}
+            className="h-10 rounded-xl fx-brand-gradient text-white font-semibold flex items-center gap-1.5 px-4 fx-pressable shadow-md"
+          >
+            <Plus className="h-4 w-4" />
+            Generate Customer Link
+          </Button>
+        </div>
       </div>
 
-      {/* ─── Table ─── */}
-      <div className="bg-white dark:bg-card border border-border shadow-sm rounded-2xl overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent bg-secondary/50 dark:bg-secondary/40">
-              <TableHead className="font-bold text-xs uppercase tracking-wider">Application Code</TableHead>
-              <TableHead className="font-bold text-xs uppercase tracking-wider">Borrower</TableHead>
-              <TableHead className="font-bold text-xs uppercase tracking-wider">Loan Amount</TableHead>
-              <TableHead className="font-bold text-xs uppercase tracking-wider">Generated Date</TableHead>
-              <TableHead className="font-bold text-xs uppercase tracking-wider">Expiry</TableHead>
-              <TableHead className="font-bold text-xs uppercase tracking-wider">Status</TableHead>
-              <TableHead className="w-[100px]" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {apps.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-sm">
-                  No applications found. Click "Generate Loan Link" to create one.
-                </TableCell>
+      {/* ─── Virtualized Queue or Classic Table ─── */}
+      {viewMode === "queue" ? (
+        <VirtualizedApplicationsQueue
+          applications={apps}
+          onSelectApplication={(app) => {
+            setSelectedApp(app);
+            setDetailsOpen(true);
+          }}
+        />
+      ) : (
+        <div className="bg-white dark:bg-card border border-border shadow-sm rounded-2xl overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent bg-secondary/50 dark:bg-secondary/40">
+                <TableHead className="font-bold text-xs uppercase tracking-wider">Application Code</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wider">Borrower</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wider">Loan Amount</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wider">Generated Date</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wider">Expiry</TableHead>
+                <TableHead className="font-bold text-xs uppercase tracking-wider">Status</TableHead>
+                <TableHead className="w-[100px]" />
               </TableRow>
-            ) : (
-              apps.map((app) => (
-                <TableRow
-                  key={app.applicationId}
-                  className="hover:bg-secondary/30 transition-colors cursor-pointer"
-                  onClick={() => {
-                    setSelectedApp(app);
-                    setDetailsOpen(true);
-                  }}
-                >
-                  <TableCell className="font-semibold">{app.applicationCode}</TableCell>
-                  <TableCell>
-                    {app.borrower || app.customerName ? (
-                      <div>
-                        <p className="font-semibold text-sm">{app.borrower?.name || app.customerName}</p>
-                        <p className="text-xs text-muted-foreground">{app.borrower?.mobile || app.customerMobile}</p>
-                      </div>
-                    ) : (
-                      <span className="text-xs italic text-muted-foreground">Link Shared / Unsubmitted</span>
-                    )}
+            </TableHeader>
+            <TableBody>
+              {apps.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-sm">
+                    No applications found. Click "Generate Loan Link" to create one.
                   </TableCell>
-                  <TableCell className="font-semibold">
-                    ₹{Number(app.principal).toLocaleString("en-IN")}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {new Date(app.createdAt).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {app.expiryDate ? (
-                      new Date(app.expiryDate).toLocaleDateString("en-IN", {
+                </TableRow>
+              ) : (
+                apps.map((app) => (
+                  <TableRow
+                    key={app.applicationId}
+                    className="hover:bg-secondary/30 transition-colors cursor-pointer"
+                    onClick={() => {
+                      setSelectedApp(app);
+                      setDetailsOpen(true);
+                    }}
+                  >
+                    <TableCell className="font-semibold">{app.applicationCode}</TableCell>
+                    <TableCell>
+                      {app.borrower || app.customerName ? (
+                        <div>
+                          <p className="font-semibold text-sm">{app.borrower?.name || app.customerName}</p>
+                          <p className="text-xs text-muted-foreground">{app.borrower?.mobile || app.customerMobile}</p>
+                        </div>
+                      ) : (
+                        <span className="text-xs italic text-muted-foreground">Link Shared / Unsubmitted</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-semibold">
+                      ₹{Number(app.principal).toLocaleString("en-IN")}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {new Date(app.createdAt).toLocaleDateString("en-IN", {
                         day: "numeric",
                         month: "short",
                         year: "numeric",
-                      })
-                    ) : (
-                      <span className="text-muted-foreground/60">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={app.status} />
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-primary hover:text-primary/80 font-bold text-xs"
-                      onClick={() => {
-                        setSelectedApp(app);
-                        setDetailsOpen(true);
-                      }}
-                    >
-                      Details →
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                      })}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {app.expiryDate ? (
+                        new Date(app.expiryDate).toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      ) : (
+                        <span className="text-muted-foreground/60">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={app.status} />
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-primary hover:text-primary/80 font-bold text-xs"
+                        onClick={() => {
+                          setSelectedApp(app);
+                          setDetailsOpen(true);
+                        }}
+                      >
+                        Details →
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {/* ─── Modal 1: Generate Link Form ─── */}
       <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>

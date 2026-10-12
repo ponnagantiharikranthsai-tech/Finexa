@@ -67,15 +67,13 @@ export default async function BorrowerPortalPage({
       {/* Header */}
       <header className="flex justify-between items-center py-4 border-b border-slate-800/80 mb-6">
         <div className="flex items-center gap-3">
-          {/* High-End Gold/Amber Badge Container */}
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 p-[1.5px] shadow-lg shadow-amber-500/10 shrink-0">
-            <div className="w-full h-full bg-[#141418] rounded-[10px] p-1.5 flex items-center justify-center">
-              <img
-                src="/logo.png"
-                alt="FINEXA Logo"
-                className="w-full h-full object-contain filter brightness-200 contrast-200"
-              />
-            </div>
+          {/* Natural Gold Logo - No CSS Filters */}
+          <div className="w-10 h-10 rounded-xl overflow-hidden border border-amber-500/30 bg-[#0d0d11] shrink-0 flex items-center justify-center shadow-md">
+            <img
+              src="/icon-512-maskable.png"
+              alt="FINEXA Logo"
+              className="w-full h-full object-cover"
+            />
           </div>
 
           <div>
@@ -83,6 +81,7 @@ export default async function BorrowerPortalPage({
             <p className="text-[10px] text-slate-400 font-medium tracking-tight mt-0.5">BORROWER DIGITAL PASSBOOK</p>
           </div>
         </div>
+
         <span className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-md text-[11px] font-bold uppercase tracking-wider">
           {loan.status || 'ACTIVE'}
         </span>

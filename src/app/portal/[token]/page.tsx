@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 import { getBorrowerPortalDataAction } from '@/actions/borrower-portal';
 import { calculatePeriods, calculateMonthlyInterest } from '@/domain/interest-calculator';
 import type { Metadata } from 'next';
@@ -65,9 +66,17 @@ export default async function BorrowerPortalPage({
     <main className="min-h-screen bg-[#0d0d11] text-slate-100 p-4 max-w-md mx-auto pb-12 font-sans">
       {/* Header */}
       <header className="flex justify-between items-center py-4 border-b border-slate-800/80 mb-6">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-xs">
-            🛡️
+        <div className="flex items-center gap-2.5">
+          {/* Official FINEXA Logo Image replacing the placeholder shield */}
+          <div className="relative w-8 h-8 flex items-center justify-center shrink-0">
+            <Image
+              src="/logo.png"
+              alt="FINEXA Logo"
+              width={32}
+              height={32}
+              className="object-contain rounded-md"
+              priority
+            />
           </div>
           <div>
             <h1 className="font-black text-lg text-amber-400 tracking-wider leading-none">FINEXA</h1>

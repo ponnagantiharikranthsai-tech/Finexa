@@ -43,6 +43,27 @@
       "when": 1788520000000,
       "tag": "0005_enable_rls_lockdown",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788521000000,
+      "tag": "0006_capital_allocations",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788522000000,
+      "tag": "0007_on_demand_capital_funding",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788523000000,
+      "tag": "0008_add_weekly_interest_type",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,7 @@ import { notificationLogRepository } from "../repository/notification-log.reposi
 import { calculatePeriods, calculateMonthlyInterest } from "@/domain/interest-calculator";
 import { auditLog } from "@/lib/audit-log";
 import { requireAuth } from "@/lib/auth";
+import { getOrCreateBorrowerTokenAction } from "@/actions/borrower-portal";
 import type { ActionResult } from "@/types/api.types";
 
 export async function sendReminderAction(
@@ -40,6 +41,18 @@ export async function sendReminderAction(
     const totalInterestAndPenalty = interestDue + updatedPenaltyAmount;
     const finalOutstandingBalance = Number(loan.principal) + totalInterestAndPenalty; // Note: simplified for display before full payment summation
 
+    // Get or create unique passbook magic portal token
+    let passbookUrl: string | undefined;
+    try {
+      const tokenResult = await getOrCreateBorrowerTokenAction(loan.loanId);
+      if (tokenResult.success && tokenResult.token) {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://finexa-tzxa.vercel.app";
+        passbookUrl = `${appUrl}/portal/${tokenResult.token}`;
+      }
+    } catch (tokenErr) {
+      console.warn("Could not retrieve passbook token for reminder:", tokenErr);
+    }
+
     if (loan.borrower.email) {
       try {
         await emailService.sendReminderEmail({
@@ -51,6 +64,7 @@ export async function sendReminderAction(
           interestDue,
           penaltyAmount: updatedPenaltyAmount,
           dueDate: loan.dueDate,
+          passbookUrl,
         });
 
         await notificationLogRepository.insert({
@@ -73,7 +87,9 @@ export async function sendReminderAction(
     }
 
     try {
-      const smsMessage = `Finexa Legal & Compliance: Clear pending account dues of Rs.${finalOutstandingBalance.toLocaleString("en-IN")} by ${loan.dueDate} to avoid legal recovery proceedings.`;
+      const smsMessage = passbookUrl
+        ? `Hello ${loan.borrower.name}, your FINEXA payment of Rs.${finalOutstandingBalance.toLocaleString("en-IN")} is due on ${loan.dueDate}. View your live passbook: ${passbookUrl}`
+        : `Finexa Legal & Compliance: Clear pending account dues of Rs.${finalOutstandingBalance.toLocaleString("en-IN")} by ${loan.dueDate} to avoid legal recovery proceedings.`;
       const smsRes = await smsService.sendSMS(loan.borrower.mobile, smsMessage);
 
       await notificationLogRepository.insert({

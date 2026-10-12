@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import { resend } from "./resend";
 import { LoanCreatedEmail } from "./templates/loan-created";
 import { LoanReminderEmail } from "./templates/loan-reminder";
 import * as React from "react";
@@ -6,7 +6,6 @@ import { db } from "@/db/client";
 import { loanApplicationsTable } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
 
 export type LoanCreatedEmailPayload = {
@@ -29,6 +28,7 @@ export type ReminderEmailPayload = {
   interestDue: number;
   penaltyAmount: number;
   dueDate: string;
+  passbookUrl?: string;
 };
 
 export class EmailService {
@@ -106,7 +106,7 @@ This is a reminder that your loan repayment of ₹${payload.outstandingBalance.t
 - Outstanding Balance: ₹${payload.outstandingBalance.toLocaleString("en-IN")}
 - Interest Due: ₹${payload.interestDue.toLocaleString("en-IN")}
 - Late Penalty: ₹${payload.penaltyAmount.toLocaleString("en-IN")}
-
+${payload.passbookUrl ? `\nView Live Passbook & Balance:\n${payload.passbookUrl}\n` : ""}
 Secure Application Link:
 ${appLink}
 
@@ -134,6 +134,7 @@ FINEXA – Smart Loan Management.`;
         penaltyAmount: payload.penaltyAmount,
         dueDate: payload.dueDate,
         applicationLink: appLink,
+        passbookUrl: payload.passbookUrl,
       }),
     });
 

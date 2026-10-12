@@ -49,3 +49,14 @@ export class Fast2SMSProvider implements SMSProvider {
     }
   }
 }
+
+export async function sendFast2SMS({
+  phone,
+  message,
+}: {
+  phone: string;
+  message: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const provider = new Fast2SMSProvider();
+  return provider.sendMessage(phone, message);
+}

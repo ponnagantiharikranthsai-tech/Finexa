@@ -9,3 +9,4 @@ export * from "./loan-cycles";
 export * from "./payment-reminders";
 export * from "./admin-notifications";
 export * from "./borrower-portal";
+export * from "./relations";

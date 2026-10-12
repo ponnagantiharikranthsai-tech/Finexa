@@ -8,6 +8,7 @@ interface LoanReminderEmailProps {
   penaltyAmount: number;
   dueDate: string;
   applicationLink?: string;
+  passbookUrl?: string;
 }
 
 export const LoanReminderEmail: React.FC<Readonly<LoanReminderEmailProps>> = ({
@@ -18,6 +19,7 @@ export const LoanReminderEmail: React.FC<Readonly<LoanReminderEmailProps>> = ({
   penaltyAmount,
   dueDate,
   applicationLink = "https://finexa-tzxa.vercel.app",
+  passbookUrl,
 }) => {
   return (
     <div style={{
@@ -130,22 +132,50 @@ export const LoanReminderEmail: React.FC<Readonly<LoanReminderEmailProps>> = ({
             <strong>Action Required:</strong> Please clear your dues using the secure application portal link below to avoid further penalty accruals and legal collection notifications.
           </div>
 
+          {/* Passbook Link Button */}
+          {passbookUrl && (
+            <div style={{ textAlign: "center", margin: "28px 0 16px" }}>
+              <a
+                href={passbookUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-block",
+                  backgroundColor: "#059669",
+                  color: "#ffffff",
+                  fontSize: "15px",
+                  fontWeight: "bold",
+                  textDecoration: "none",
+                  padding: "13px 32px",
+                  borderRadius: "8px",
+                  boxShadow: "0 4px 14px rgba(5, 150, 105, 0.4)",
+                }}
+              >
+                View Live Passbook & Balance
+              </a>
+              <p style={{ color: "#9ca3af", fontSize: "12px", margin: "10px 0 0" }}>
+                Or copy this link: {passbookUrl}
+              </p>
+            </div>
+          )}
+
           {/* Application Link Button */}
-          <div style={{ textAlign: "center", margin: "30px 0" }}>
+          <div style={{ textAlign: "center", margin: passbookUrl ? "12px 0 24px" : "30px 0" }}>
             <a
               href={applicationLink}
               target="_blank"
               rel="noopener noreferrer"
               style={{
                 display: "inline-block",
-                backgroundColor: "#D4AF37",
-                color: "#000000",
-                fontSize: "14px",
+                backgroundColor: passbookUrl ? "rgba(212, 175, 55, 0.15)" : "#D4AF37",
+                color: passbookUrl ? "#D4AF37" : "#000000",
+                fontSize: "13px",
                 fontWeight: "bold",
                 textDecoration: "none",
-                padding: "12px 30px",
+                padding: "10px 24px",
                 borderRadius: "8px",
-                boxShadow: "0 4px 12px rgba(212, 175, 55, 0.25)"
+                border: passbookUrl ? "1px solid rgba(212, 175, 55, 0.3)" : "none",
+                boxShadow: passbookUrl ? "none" : "0 4px 12px rgba(212, 175, 55, 0.25)"
               }}
             >
               Open Secure Application

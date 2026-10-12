@@ -23,6 +23,7 @@ import { updatePenaltySettingsAction } from "../../actions/update-penalty-settin
 import { removeCapitalAllocationAction } from "@/features/capital/actions/remove-capital-allocation.action";
 import type { LoanManagementDetailResult } from "../../actions/get-loan-management-data.action";
 import { differenceInDays } from "date-fns";
+import { SharePortalButton } from "../share-portal-button";
 
 export interface DetailedAuditModalProps {
   open: boolean;
@@ -457,6 +458,14 @@ export function DetailedAuditModal({
                 </div>
               </div>
             </div>
+
+            {/* ── Borrower Magic Link Digital Passbook Card ─────────── */}
+            <SharePortalButton
+              loanId={loan.loanId}
+              borrowerName={loan.borrower.name}
+              borrowerPhone={loan.borrower.mobile}
+              variant="card"
+            />
 
             {/* ── Section 2A: Capital & Funding Allocation ───────────────── */}
             <div className="bg-[#18181b] p-5 rounded-xl border border-zinc-800/80 space-y-4">

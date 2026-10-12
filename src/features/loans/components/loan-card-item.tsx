@@ -9,6 +9,7 @@ import {
 import { calculateAccruedPenalty } from "@/domain/penalty-calculator";
 import { differenceInDays } from "date-fns";
 import type { LoanManagementDetailResult } from "../actions/get-loan-management-data.action";
+import { SharePortalButton } from "./share-portal-button";
 
 export interface LoanCardItemProps {
   loan: LoanManagementDetailResult;
@@ -327,6 +328,12 @@ export const LoanCardItem = React.memo(function LoanCardItem({
             </button>
           </>
         ) : null}
+
+        <SharePortalButton
+          loanId={loan.loanId}
+          borrowerName={loan.borrower.name}
+          borrowerPhone={loan.borrower.mobile}
+        />
 
         <button
           onClick={() => onViewDetails(loan)}

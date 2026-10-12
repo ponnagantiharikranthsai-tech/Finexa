@@ -67,15 +67,12 @@ export default async function BorrowerPortalPage({
       {/* Header */}
       <header className="flex justify-between items-center py-4 border-b border-slate-800/80 mb-6">
         <div className="flex items-center gap-3">
-          {/* Natural aspect ratio logo container */}
-          <div className="relative h-9 w-auto max-w-[120px] flex items-center justify-center shrink-0">
-            <Image
+          {/* Solid White Badge: Guarantees dark logo visibility */}
+          <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center p-1.5 shrink-0 shadow-md">
+            <img
               src="/logo.png"
               alt="FINEXA Logo"
-              width={100}
-              height={36}
-              className="h-full w-auto object-contain invert brightness-200"
-              priority
+              className="w-full h-full object-contain"
             />
           </div>
           <div>

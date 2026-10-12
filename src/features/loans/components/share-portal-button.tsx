@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { getOrCreateBorrowerTokenAction } from "@/actions/borrower-portal";
 import { toast } from "sonner";
-import { MessageCircle, Copy, Check, ExternalLink, RefreshCw } from "lucide-react";
+import { Share2, MessageCircle, Copy, Check, ExternalLink, RefreshCw } from "lucide-react";
 
 interface SharePortalButtonProps {
   loanId: string;
@@ -53,6 +53,34 @@ export function SharePortalButton({
     }
   };
 
+  const handleShare = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const portalUrl = await getPortalUrl();
+    if (!portalUrl) return;
+
+    const shareData = {
+      title: "FINEXA Digital Passbook",
+      text: `Hello ${borrowerName}, view your FINEXA digital passbook and live balance here:`,
+      url: portalUrl,
+    };
+
+    // Use Native Web Share API if supported by device/browser
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err: any) {
+        // User cancelling the share sheet triggers AbortError, which should not error
+        if (err?.name !== "AbortError") {
+          console.error("Error sharing passbook:", err);
+          await handleCopyLink();
+        }
+      }
+    } else {
+      // Fallback: Copy link to clipboard
+      await handleCopyLink();
+    }
+  };
+
   const handleShareWhatsApp = async (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const portalUrl = await getPortalUrl();
@@ -60,7 +88,7 @@ export function SharePortalButton({
 
     const phone = cleanPhoneNumber(borrowerPhone);
     const message = encodeURIComponent(
-      `Hello ${borrowerName}, you can view your FINEXA digital passbook and live balance here: ${portalUrl}`
+      `Hello ${borrowerName}, view your FINEXA digital passbook and live balance here: ${portalUrl}`
     );
 
     const waUrl = phone
@@ -77,9 +105,11 @@ export function SharePortalButton({
     if (!portalUrl) return;
 
     try {
-      await navigator.clipboard.writeText(portalUrl);
+      await navigator.clipboard.writeText(
+        `Hello ${borrowerName}, view your FINEXA digital passbook and live balance here: ${portalUrl}`
+      );
       setCopied(true);
-      toast.success("Borrower magic link copied to clipboard!");
+      toast.success("Passbook link copied to clipboard!");
       setTimeout(() => setCopied(false), 2500);
     } catch {
       toast.error("Failed to copy link to clipboard.");
@@ -89,18 +119,18 @@ export function SharePortalButton({
   // Card Variant (For Detailed Audit Modal)
   if (variant === "card") {
     return (
-      <div className={`p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-3 ${className}`}>
+      <div className={`p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-3 ${className}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-              <MessageCircle className="h-4 w-4" />
+            <div className="h-7 w-7 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400">
+              <Share2 className="h-4 w-4" />
             </div>
             <div>
               <p className="text-xs font-bold text-zinc-100">Borrower Digital Passbook</p>
-              <p className="text-[10px] text-zinc-400">Magic link with live balance & repayment history</p>
+              <p className="text-[10px] text-zinc-400">Live magic link with balance & repayment history</p>
             </div>
           </div>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/20">
             Magic Link
           </span>
         </div>
@@ -112,7 +142,7 @@ export function SharePortalButton({
               href={generatedUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-emerald-400 hover:text-emerald-300 shrink-0 p-1"
+              className="text-amber-400 hover:text-amber-300 shrink-0 p-1"
               title="Open Portal in New Tab"
             >
               <ExternalLink className="h-3.5 w-3.5" />
@@ -120,19 +150,29 @@ export function SharePortalButton({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2 pt-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+          <button
+            type="button"
+            onClick={handleShare}
+            disabled={loading}
+            className="h-9 px-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+          >
+            {loading ? (
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Share2 className="h-3.5 w-3.5" />
+            )}
+            <span>Share Sheet</span>
+          </button>
+
           <button
             type="button"
             onClick={handleShareWhatsApp}
             disabled={loading}
             className="h-9 px-3 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
           >
-            {loading ? (
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <MessageCircle className="h-3.5 w-3.5" />
-            )}
-            <span>Send via WhatsApp</span>
+            <MessageCircle className="h-3.5 w-3.5" />
+            <span>WhatsApp</span>
           </button>
 
           <button
@@ -163,28 +203,28 @@ export function SharePortalButton({
     return (
       <button
         type="button"
-        onClick={handleShareWhatsApp}
+        onClick={handleShare}
         disabled={loading}
-        className={`h-9 w-9 flex items-center justify-center rounded-xl text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all ${className}`}
-        title="Send Passbook via WhatsApp"
+        className={`h-9 w-9 flex items-center justify-center rounded-xl text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 transition-all ${className}`}
+        title="Share Passbook"
       >
         {loading ? (
           <RefreshCw className="h-3.5 w-3.5 animate-spin" />
         ) : (
-          <MessageCircle className="h-4 w-4" />
+          <Share2 className="h-4 w-4" />
         )}
       </button>
     );
   }
 
-  // Button Variant (For Loan Cards)
+  // Button Variant (Default for Loan Cards)
   return (
     <button
       type="button"
-      onClick={handleShareWhatsApp}
+      onClick={handleShare}
       disabled={loading}
-      className={`h-9 px-3 flex-1 min-w-[95px] sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-emerald-400 text-xs font-bold whitespace-nowrap transition-all duration-200 fx-pressable disabled:opacity-50 ${className}`}
-      title="Send Passbook via WhatsApp"
+      className={`h-9 px-3 flex-1 min-w-[120px] sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-400 text-xs font-bold whitespace-nowrap transition-all duration-200 fx-pressable disabled:opacity-50 ${className}`}
+      title="Share Passbook via Any App"
     >
       {loading ? (
         <>
@@ -193,8 +233,8 @@ export function SharePortalButton({
         </>
       ) : (
         <>
-          <MessageCircle className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-          <span>Passbook</span>
+          <Share2 className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+          <span>Share Passbook</span>
         </>
       )}
     </button>

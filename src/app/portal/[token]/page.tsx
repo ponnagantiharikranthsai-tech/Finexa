@@ -67,12 +67,12 @@ export default async function BorrowerPortalPage({
       {/* Header */}
       <header className="flex justify-between items-center py-4 border-b border-slate-800/80 mb-6">
         <div className="flex items-center gap-3">
-          {/* Natural Gold Logo - No CSS Filters */}
-          <div className="w-10 h-10 rounded-xl overflow-hidden border border-amber-500/30 bg-[#0d0d11] shrink-0 flex items-center justify-center shadow-md">
+          {/* Maskable Gold Rupee Logo Container */}
+          <div className="w-10 h-10 rounded-xl overflow-hidden border border-amber-500/40 bg-[#0d0d11] shrink-0 flex items-center justify-center shadow-lg shadow-amber-500/10">
             <img
               src="/icon-512-maskable.png"
               alt="FINEXA Logo"
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover scale-125"
             />
           </div>
 

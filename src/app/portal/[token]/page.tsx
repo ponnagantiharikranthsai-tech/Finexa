@@ -1,10 +1,11 @@
 import React from 'react';
 import { getBorrowerPortalDataAction } from '@/actions/borrower-portal';
+import { calculatePeriods, calculateMonthlyInterest } from '@/domain/interest-calculator';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Borrower Digital Passbook | FINEXA',
-  description: 'Live real-time loan status, outstanding balance, and repayment passbook for FINEXA borrowers.',
+  description: 'Live real-time loan status, total payable balance, and repayment passbook for FINEXA borrowers.',
 };
 
 export default async function BorrowerPortalPage({
@@ -36,18 +37,26 @@ export default async function BorrowerPortalPage({
 
   // Calculate Loan Metrics
   const loanAmount = Number(loan.principal || 0);
-  const totalPrincipalRepaid = payments
-    .filter((p: any) => (p.paymentType || p.type || '').toLowerCase() === 'principal')
-    .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
 
-  const interestRateNum = Number(loan.interestRate || 0);
-  const estimatedInterest = Math.round((loanAmount * interestRateNum) / 100);
+  let calculatedInterest = 0;
+  if (loan.dateGiven && loan.dueDate && loan.interestRate) {
+    try {
+      const periods = calculatePeriods(loan.dateGiven, loan.dueDate, loan.interestType);
+      calculatedInterest = Math.round(periods * calculateMonthlyInterest(loanAmount, Number(loan.interestRate)));
+    } catch {
+      // Fallback standard rate estimation if dates error
+      calculatedInterest = Math.round((loanAmount * Number(loan.interestRate || 0)) / 100);
+    }
+  }
+
   const totalInterest = Number(
-    (loan as any).totalInterest || (loan as any).interestAmount || estimatedInterest
+    (loan as any).totalInterest || (loan as any).interestAmount || calculatedInterest
   );
   const totalPayable = Number((loan as any).totalPayable || (loanAmount + totalInterest));
-  const currentBalance = Number(
-    (loan as any).outstandingBalance || Math.max(0, loanAmount - totalPrincipalRepaid)
+  
+  const totalPaid = payments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+  const remainingPayable = Number(
+    (loan as any).outstandingBalance || Math.max(0, totalPayable - totalPaid)
   );
 
   const borrowerMobile = loan.borrower?.mobile || (loan.borrower as any)?.phone || '';
@@ -57,7 +66,7 @@ export default async function BorrowerPortalPage({
       {/* Header */}
       <header className="flex justify-between items-center py-4 border-b border-slate-800/80 mb-6">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-sm shadow-sm shadow-amber-500/10">
+          <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-xs">
             🛡️
           </div>
           <div>
@@ -70,7 +79,7 @@ export default async function BorrowerPortalPage({
         </span>
       </header>
 
-      {/* Borrower Card */}
+      {/* Borrower Profile Card */}
       <div className="bg-[#141418] border border-slate-800/80 rounded-2xl p-4 mb-4 flex justify-between items-center shadow-lg">
         <div>
           <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Borrower Name</div>
@@ -81,34 +90,38 @@ export default async function BorrowerPortalPage({
         </div>
       </div>
 
-      {/* Primary Balance Summary */}
-      <div className="bg-[#141418] border border-slate-800/80 rounded-2xl p-5 mb-4 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
+      {/* Hero Highlight: Total Payable Amount */}
+      <div className="bg-[#141418] border border-emerald-500/30 rounded-2xl p-5 mb-4 shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
+        
+        <div className="text-[11px] text-emerald-400 font-bold uppercase tracking-wider mb-1">
+          TOTAL PAYABLE AMOUNT
+        </div>
+        <div className="text-4xl font-black text-emerald-400 mb-5 font-mono">
+          ₹{remainingPayable.toLocaleString('en-IN')}
+        </div>
 
-        <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1">Current Principal Balance</div>
-        <div className="text-4xl font-black text-amber-400 mb-5 font-mono">₹{currentBalance.toLocaleString('en-IN')}</div>
-
-        {/* Financial Metrics Grid (2x2) */}
+        {/* Breakdown Grid */}
         <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-800/80 text-sm">
-          <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800/50">
-            <span className="text-[10px] text-slate-400 font-semibold uppercase block mb-0.5">Loan Amount</span>
+          <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800/60">
+            <span className="text-[10px] text-slate-400 font-semibold uppercase block mb-0.5">Original Loan</span>
             <span className="font-extrabold text-white text-base font-mono">₹{loanAmount.toLocaleString('en-IN')}</span>
           </div>
 
-          <div className="bg-emerald-950/20 p-3 rounded-xl border border-emerald-500/20">
-            <span className="text-[10px] text-emerald-400 font-semibold uppercase block mb-0.5">Total Payable</span>
-            <span className="font-extrabold text-emerald-400 text-base font-mono">₹{totalPayable.toLocaleString('en-IN')}</span>
+          <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800/60">
+            <span className="text-[10px] text-slate-400 font-semibold uppercase block mb-0.5">Total Interest</span>
+            <span className="font-extrabold text-amber-400 text-base font-mono">₹{totalInterest.toLocaleString('en-IN')}</span>
           </div>
 
-          <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800/50">
+          <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800/60">
             <span className="text-[10px] text-slate-400 font-semibold uppercase block mb-0.5">Date Given</span>
-            <span className="font-bold text-slate-200 text-xs">{(loan as any).startDate || loan.dateGiven || '2026-10-11'}</span>
+            <span className="font-bold text-slate-200 text-xs">{(loan as any).startDate || loan.dateGiven || '2026-10-10'}</span>
           </div>
 
           <div className="bg-amber-950/20 p-3 rounded-xl border border-amber-500/20">
             <span className="text-[10px] text-amber-400 font-semibold uppercase block mb-0.5">Due Date</span>
             <span className="font-bold text-amber-400 text-xs flex items-center gap-1">
-              📅 {loan.dueDate || '2026-11-11'}
+              📅 {loan.dueDate || '2026-10-13'}
             </span>
           </div>
         </div>

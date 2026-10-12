@@ -67,22 +67,34 @@ export default async function BorrowerPortalPage({
       {/* Header */}
       <header className="flex justify-between items-center py-4 border-b border-slate-800/80 mb-6">
         <div className="flex items-center gap-3">
-          {/* Maskable Gold Rupee Logo Container */}
-          <div className="w-10 h-10 rounded-xl overflow-hidden border border-amber-500/40 bg-[#0d0d11] shrink-0 flex items-center justify-center shadow-lg shadow-amber-500/10">
-            <img
-              src="/icon-512-maskable.png"
-              alt="FINEXA Logo"
-              className="w-full h-full object-cover scale-125"
-            />
+          {/* Premium Ambient Gold Badge */}
+          <div className="relative group shrink-0">
+            {/* Background Soft Glow */}
+            <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-amber-500/30 to-yellow-500/20 blur-md opacity-75" />
+
+            {/* Main Container Badge */}
+            <div className="relative w-11 h-11 rounded-xl bg-gradient-to-b from-amber-400/20 via-amber-500/10 to-transparent p-[1px] border border-amber-400/40 shadow-xl overflow-hidden flex items-center justify-center">
+              <div className="w-full h-full bg-[#16161c] rounded-[11px] p-1 flex items-center justify-center">
+                <img
+                  src="/icon-512-maskable.png"
+                  alt="FINEXA Logo"
+                  className="w-full h-full object-contain scale-125 filter drop-shadow-[0_2px_8px_rgba(245,158,11,0.4)]"
+                />
+              </div>
+            </div>
           </div>
 
           <div>
-            <h1 className="font-black text-lg text-amber-400 tracking-wider leading-none">FINEXA</h1>
-            <p className="text-[10px] text-slate-400 font-medium tracking-tight mt-0.5">BORROWER DIGITAL PASSBOOK</p>
+            <h1 className="font-black text-xl text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-yellow-500 tracking-wider leading-none">
+              FINEXA
+            </h1>
+            <p className="text-[10px] text-slate-400 font-semibold tracking-wider mt-1">
+              BORROWER DIGITAL PASSBOOK
+            </p>
           </div>
         </div>
 
-        <span className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-md text-[11px] font-bold uppercase tracking-wider">
+        <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-lg text-[11px] font-extrabold uppercase tracking-widest shadow-inner">
           {loan.status || 'ACTIVE'}
         </span>
       </header>

@@ -67,14 +67,17 @@ export default async function BorrowerPortalPage({
       {/* Header */}
       <header className="flex justify-between items-center py-4 border-b border-slate-800/80 mb-6">
         <div className="flex items-center gap-3">
-          {/* Solid White Badge: Guarantees dark logo visibility */}
-          <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center p-1.5 shrink-0 shadow-md">
-            <img
-              src="/logo.png"
-              alt="FINEXA Logo"
-              className="w-full h-full object-contain"
-            />
+          {/* High-End Gold/Amber Badge Container */}
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 p-[1.5px] shadow-lg shadow-amber-500/10 shrink-0">
+            <div className="w-full h-full bg-[#141418] rounded-[10px] p-1.5 flex items-center justify-center">
+              <img
+                src="/logo.png"
+                alt="FINEXA Logo"
+                className="w-full h-full object-contain filter brightness-200 contrast-200"
+              />
+            </div>
           </div>
+
           <div>
             <h1 className="font-black text-lg text-amber-400 tracking-wider leading-none">FINEXA</h1>
             <p className="text-[10px] text-slate-400 font-medium tracking-tight mt-0.5">BORROWER DIGITAL PASSBOOK</p>

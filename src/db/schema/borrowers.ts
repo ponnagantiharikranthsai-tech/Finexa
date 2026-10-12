@@ -49,3 +49,5 @@ export const borrowersTable = pgTable("borrowers", {
 
 export type Borrower = typeof borrowersTable.$inferSelect;
 export type InsertBorrower = typeof borrowersTable.$inferInsert;
+
+export const borrowers = borrowersTable;

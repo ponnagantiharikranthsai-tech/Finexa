@@ -52,7 +52,12 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const isPublicPath = pathname === "/" || pathname === "/login" || pathname.startsWith("/apply/");
+  const isPublicPath =
+    pathname === "/" ||
+    pathname === "/login" ||
+    pathname.startsWith("/apply/") ||
+    pathname.startsWith("/portal/") ||
+    pathname === "/portal";
 
   const hasFinexaSession = request.cookies.has("finexa_session") && request.cookies.get("finexa_session")?.value === "true";
   const hasSupabaseCookie = request.cookies.getAll().some(c => (c.name.startsWith("sb-") || c.name.includes("auth-token")) && c.value.length > 0);

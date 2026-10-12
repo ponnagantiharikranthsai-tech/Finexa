@@ -38,3 +38,5 @@ export const paymentsTable = pgTable("payments", {
 export type Payment = typeof paymentsTable.$inferSelect;
 export type InsertPayment = typeof paymentsTable.$inferInsert;
 export type PaymentType = "interest" | "principal" | "penalty";
+
+export const payments = paymentsTable;

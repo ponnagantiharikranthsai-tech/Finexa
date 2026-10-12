@@ -102,3 +102,5 @@ export type PenaltyType = "fixed" | "percentage";
 
 export type PenaltyLedger = typeof penaltyLedgerTable.$inferSelect;
 export type InsertPenaltyLedger = typeof penaltyLedgerTable.$inferInsert;
+
+export const loans = loansTable;

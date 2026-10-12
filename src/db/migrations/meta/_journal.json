@@ -71,6 +71,13 @@
       "when": 1788524000000,
       "tag": "0009_sync_capital_on_loan_or_allocation_change",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788525000000,
+      "tag": "0010_create_borrower_portal_tokens",
+      "breakpoints": true
     }
   ]
 }

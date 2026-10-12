@@ -340,6 +340,8 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         toast.success("Capital source reassigned successfully!");
         setReassignOpen(false);
         queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+        queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
+        queryClient.invalidateQueries({ queryKey: ["funder-ledger"] });
       } else {
         toast.error(typeof res.error === "string" ? res.error : "Failed to reassign capital source.");
       }
@@ -368,9 +370,12 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         if (res.success) {
           toast.success(`Loan file for "${borrowerName}" was deleted.`);
           queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+          queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
+          queryClient.invalidateQueries({ queryKey: ["funder-ledger"] });
         } else {
           toast.error(typeof res.error === "string" ? res.error : "Failed to delete loan.");
           queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+          queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
         }
       });
     },
@@ -395,9 +400,12 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         if (res.success) {
           toast.success(`Borrower "${borrowerName}" and all associated loans have been permanently deleted.`);
           queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+          queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
+          queryClient.invalidateQueries({ queryKey: ["funder-ledger"] });
         } else {
           toast.error(typeof res.error === "string" ? res.error : "Failed to delete borrower.");
           queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+          queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
         }
       });
     },

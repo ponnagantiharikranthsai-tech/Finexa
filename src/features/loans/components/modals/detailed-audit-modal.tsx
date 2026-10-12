@@ -197,6 +197,8 @@ export function DetailedAuditModal({
       if (res.success) {
         toast.success("Capital allocation removed successfully.");
         queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
+        queryClient.invalidateQueries({ queryKey: ["capital-management-data-v2"] });
+        queryClient.invalidateQueries({ queryKey: ["funder-ledger"] });
         invalidateDetails(loan.loanId);
       } else {
         toast.error("Failed to remove capital allocation.");

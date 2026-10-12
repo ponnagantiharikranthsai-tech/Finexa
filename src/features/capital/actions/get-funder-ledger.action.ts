@@ -208,7 +208,13 @@ export async function getFunderLedgerAction(
         const prevInfo = parsePreviousLoanFromNotes(item.tx.notes);
         const isReleased = item.tx.status === "released";
         const isDeletedLoan = !item.loan && Boolean(prevInfo.borrowerName || prevInfo.loanId);
-        const isUnallocated = !isReleased && (!item.loan || item.tx.status === "received" || item.tx.status === "unallocated");
+
+        // Check if an active allocation exists for this loan
+        const hasActiveAllocation = item.loan
+          ? rawAllocations.some((a) => a.allocation.loanId === item.loan?.loanId)
+          : false;
+        const isOrphanedLoanTx = Boolean(item.loan && !hasActiveAllocation);
+        const isUnallocated = !isReleased && (!item.loan || isOrphanedLoanTx || item.tx.status === "received" || item.tx.status === "unallocated");
         const isAdvance = item.tx.status === "received" && !item.loan && !isDeletedLoan;
 
         let txType: "FUNDING" | "ADVANCE" | "RETURN" | "UNALLOCATED";

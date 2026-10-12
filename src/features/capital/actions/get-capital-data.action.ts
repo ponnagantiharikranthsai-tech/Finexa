@@ -201,7 +201,13 @@ export async function getCapitalDataAction() {
       const prevInfo = parsePreviousLoanFromNotes(item.txNotes);
       const isReleased = item.txStatus === "released";
       const isDeletedLoan = !item.loanId && Boolean(prevInfo.borrowerName || prevInfo.loanId);
-      const isUnallocated = !isReleased && (!item.loanId || item.txStatus === "received" || item.txStatus === "unallocated");
+      
+      // Ensure funding transactions without active allocation records on the loan are treated as unallocated (prevents ghost allocations)
+      const hasActiveAllocation = item.loanId
+        ? rawAllocations.some((a) => a.loanId === item.loanId && a.funderId === item.txFunderId)
+        : false;
+      const isOrphanedLoanTx = Boolean(item.loanId && !hasActiveAllocation);
+      const isUnallocated = !isReleased && (!item.loanId || isOrphanedLoanTx || item.txStatus === "received" || item.txStatus === "unallocated");
 
       let returnedFromBorrower = 0;
       let currentlyAllocated = isUnallocated || isReleased ? 0 : origAmount;

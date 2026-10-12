@@ -504,6 +504,25 @@ export class LoanRepository {
           .where(eq(capitalFundingTransactionsTable.transactionId, fundingTx.transactionId));
       }
 
+      // Ensure any funding transaction referenced by allocations on this loan is returned to unallocated
+      const linkedAllocs = await tx
+        .select({ fundingTransactionId: capitalAllocationsTable.fundingTransactionId })
+        .from(capitalAllocationsTable)
+        .where(eq(capitalAllocationsTable.loanId, id));
+
+      for (const a of linkedAllocs) {
+        if (a.fundingTransactionId) {
+          await tx
+            .update(capitalFundingTransactionsTable)
+            .set({
+              loanId: null,
+              status: "received",
+              updatedAt: new Date(),
+            })
+            .where(eq(capitalFundingTransactionsTable.transactionId, a.fundingTransactionId));
+        }
+      }
+
       // Remove capital allocations linked to this loan
       await tx
         .delete(capitalAllocationsTable)

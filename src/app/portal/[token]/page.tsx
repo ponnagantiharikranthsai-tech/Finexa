@@ -2,6 +2,7 @@ import React from 'react';
 import Image from 'next/image';
 import { getBorrowerPortalDataAction } from '@/actions/borrower-portal';
 import { calculatePeriods, calculateMonthlyInterest } from '@/domain/interest-calculator';
+import { PortalReceiptButton } from '../components/portal-receipt-button';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -169,9 +170,12 @@ export default async function BorrowerPortalPage({
                     <div className="text-[10px] text-slate-500 italic mt-0.5">{p.notes}</div>
                   )}
                 </div>
-                <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-1 rounded-md font-medium uppercase">
-                  {p.paymentType || p.type || 'Principal'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-1 rounded-md font-medium uppercase">
+                    {p.paymentType || p.type || 'Principal'}
+                  </span>
+                  <PortalReceiptButton loan={loan} payment={p} allPayments={payments} />
+                </div>
               </div>
             ))}
           </div>

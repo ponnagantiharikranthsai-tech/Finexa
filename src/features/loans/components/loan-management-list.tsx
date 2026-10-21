@@ -14,7 +14,8 @@ import { recordPaymentAction } from "@/features/payments/actions/record-payment.
 import { extendLoanAction } from "@/features/loans/actions/extend-loan.action";
 import { payAndExtendAction } from "../actions/pay-and-extend.action";
 import { generateLoanExtensionPdf } from "../utils/generate-loan-extension-pdf";
-import { generatePaymentCompletedPdf } from "../utils/generate-payment-completed-pdf";
+import { downloadPaymentCompletedPdf, viewPaymentCompletedPdf, generatePaymentCompletedPdf } from "../utils/generate-payment-completed-pdf";
+import { downloadPartialPaymentPdf, viewPartialPaymentPdf } from "../utils/generate-partial-payment-pdf";
 import { overdueAndPenaltyAction } from "../actions/overdue-and-penalty.action";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { deleteLoanAction } from "@/features/loans/actions/delete-loan.action";
@@ -582,17 +583,42 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
 
       startTransition(async () => {
         const res = await recordPaymentAction(null, fd);
-        if (res.success) {
-          toast.success("Payment recorded successfully!");
-          queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
-        } else {
+        if (!res.success) {
           // Rollback on failure
           if (previousLoans) {
             queryClient.setQueryData(LOANS_QUERY_KEY, previousLoans);
             setLoans(previousLoans);
           }
           toast.error(typeof res.error === "string" ? res.error : "Failed to record payment.");
+          return;
         }
+
+        const payload = res.data;
+        try {
+          if (payload.isFullyCleared) {
+            await downloadPaymentCompletedPdf(payload as any);
+            toast.success("Payment recorded and full clearance receipt downloaded!", {
+              action: {
+                label: "📄 View PDF",
+                onClick: () => viewPaymentCompletedPdf(payload as any),
+              },
+              duration: 8000,
+            });
+          } else {
+            await downloadPartialPaymentPdf(payload as any);
+            toast.success("Payment recorded and receipt downloaded!", {
+              action: {
+                label: "📄 View Receipt",
+                onClick: () => viewPartialPaymentPdf(payload as any),
+              },
+              duration: 8000,
+            });
+          }
+        } catch (pdfErr) {
+          console.error("Auto PDF download error:", pdfErr);
+          toast.success("Payment recorded successfully!");
+        }
+        queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
       });
     },
     [selectedLoan, paymentActionMode, paymentAmount, paymentType, paymentDate, paymentNotes, queryClient]

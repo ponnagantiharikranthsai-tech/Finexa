@@ -181,24 +181,29 @@ export function LoanDetailView({ initialLoan, initialPayments, initialNotifs }: 
         setPaymentAmount("");
         setPaymentNotes("");
 
-        if (payload.isFullyCleared) {
-          downloadPaymentCompletedPdf(payload as any);
-          toast.success("FULL PAYMENT COMPLETED! PDF receipt generated.", {
-            action: {
-              label: "📄 View PDF",
-              onClick: () => viewPaymentCompletedPdf(payload as any),
-            },
-            duration: 8000,
-          });
-        } else {
-          downloadPartialPaymentPdf(payload as any);
-          toast.success(`PARTIAL PAYMENT RECORDED! Remaining: ₹${Number(payload.remainingBalance || 0).toLocaleString("en-IN")}`, {
-            action: {
-              label: "📄 View Receipt",
-              onClick: () => viewPartialPaymentPdf(payload as any),
-            },
-            duration: 8000,
-          });
+        try {
+          if (payload.isFullyCleared) {
+            await downloadPaymentCompletedPdf(payload as any);
+            toast.success("Payment recorded and full clearance receipt downloaded!", {
+              action: {
+                label: "📄 View PDF",
+                onClick: () => viewPaymentCompletedPdf(payload as any),
+              },
+              duration: 8000,
+            });
+          } else {
+            await downloadPartialPaymentPdf(payload as any);
+            toast.success("Payment recorded and receipt downloaded!", {
+              action: {
+                label: "📄 View Receipt",
+                onClick: () => viewPartialPaymentPdf(payload as any),
+              },
+              duration: 8000,
+            });
+          }
+        } catch (pdfErr) {
+          console.error("Auto PDF download error:", pdfErr);
+          toast.success("Payment recorded successfully!");
         }
         router.refresh();
       } else {

@@ -2,7 +2,7 @@
 
 import { loanRepository } from "../repository/loan.repository";
 import { loanCycleRepository } from "../repository/loan-cycle.repository";
-import { calculateDueDate } from "@/domain/due-date-calculator";
+import { calculateDueDate, calculateCustomDueDate } from "@/domain/due-date-calculator";
 import { calculateMonthlyInterest } from "@/domain/interest-calculator";
 import { auditLog } from "@/lib/audit-log";
 import { requireAuth } from "@/lib/auth";
@@ -10,8 +10,15 @@ import type { ActionResult } from "@/types/api.types";
 import type { PayAndExtendResultPayload } from "./pay-and-extend.action";
 import { paymentReminderRepository } from "@/features/notifications/repository/payment-reminder.repository";
 
+export type ExtendLoanOptions = {
+  months?: number;
+  days?: number;
+  notes?: string;
+};
+
 export async function extendLoanAction(
-  loanId: string
+  loanId: string,
+  optionsOrMonths?: number | ExtendLoanOptions
 ): Promise<ActionResult<PayAndExtendResultPayload>> {
   try {
     await requireAuth();
@@ -35,9 +42,28 @@ export async function extendLoanAction(
     const rateNum = Number(loan.interestRate || 0);
     const monthlyInterest = calculateMonthlyInterest(principalNum, rateNum);
 
+    const months = typeof optionsOrMonths === "number" ? optionsOrMonths : optionsOrMonths?.months;
+    const days = typeof optionsOrMonths === "object" ? optionsOrMonths?.days : undefined;
+    const customNotes = typeof optionsOrMonths === "object" ? optionsOrMonths?.notes : undefined;
+
     const currentDueDate = new Date(loan.dueDate);
-    const newDueDateDate = calculateDueDate(currentDueDate);
+    let newDueDateDate: Date;
+    let extensionLabel = "";
+    let interestMultiplier = 1;
+
+    if (days && days > 0) {
+      newDueDateDate = calculateCustomDueDate(currentDueDate, days);
+      extensionLabel = `${days} Days`;
+      interestMultiplier = Number((days / 30).toFixed(2));
+    } else {
+      const monthsMultiplier = Math.max(1, months || 1);
+      newDueDateDate = calculateDueDate(currentDueDate, loan.interestType as any, monthsMultiplier);
+      extensionLabel = `${monthsMultiplier} Month${monthsMultiplier > 1 ? "s" : ""}`;
+      interestMultiplier = monthsMultiplier;
+    }
+
     const newDueDateStr = newDueDateDate.toISOString().split("T")[0]!;
+    const calculatedAccruedInterest = Math.round(monthlyInterest * interestMultiplier);
 
     const dateFormatted = today.replace(/-/g, "");
     const randomSeq = Math.floor(1000 + Math.random() * 9000).toString();
@@ -57,7 +83,7 @@ export async function extendLoanAction(
       originalDueDate: loan.dueDate,
       actualPaymentDate: today,
       principalAmount: loan.principal,
-      interestAmount: monthlyInterest.toString(),
+      interestAmount: calculatedAccruedInterest.toString(),
       interestPaid: "0",
       penaltyAmount: "0",
       penaltyPaid: "0",
@@ -65,13 +91,15 @@ export async function extendLoanAction(
       remainingPrincipal: loan.principal,
       cycleStatus: "extended",
       paymentType: "extension",
-      notes: `[${documentId}] Loan term extended to ${newDueDateStr}.`,
+      notes: customNotes || `[${documentId}] Loan term extended by ${extensionLabel} to ${newDueDateStr}.`,
     });
 
     await auditLog("loan_extended", "loan", loanId, {
       documentId,
       previousDueDate: loan.dueDate,
       newDueDate: newDueDateStr,
+      extensionLabel,
+      interestAccrued: calculatedAccruedInterest,
     });
 
     const nextCycleMonth = newDueDateDate.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
@@ -95,7 +123,7 @@ export async function extendLoanAction(
         previousDueDate: loan.dueDate,
         principal: principalNum,
         interestRate: rateNum,
-        monthlyInterest: Math.round(monthlyInterest),
+        monthlyInterest: calculatedAccruedInterest,
         remainingPrincipal: principalNum,
         paymentDate: today,
         loanStatus: "ACTIVE / EXTENDED",

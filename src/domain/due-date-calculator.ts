@@ -2,18 +2,24 @@ import { addMonths, addDays, endOfMonth, getDate, setDate } from "date-fns";
 
 /**
  * Calculates due date for a loan term (BR-2).
- * For "weekly", adds 7 days.
- * For "monthly", adds 1 month handling month boundaries.
+ * For "weekly", adds 7 * multiplier days.
+ * For "daily", adds 30 * multiplier days.
+ * For "monthly", adds multiplier months handling month boundaries.
  */
-export function calculateDueDate(dateGiven: Date, interestType: "monthly" | "daily" | "weekly" = "monthly"): Date {
+export function calculateDueDate(
+  dateGiven: Date,
+  interestType: "monthly" | "daily" | "weekly" = "monthly",
+  multiplier: number = 1
+): Date {
+  const count = Math.max(1, multiplier);
   if (interestType === "weekly") {
-    return addDays(dateGiven, 7);
+    return addDays(dateGiven, 7 * count);
   }
   if (interestType === "daily") {
-    return addDays(dateGiven, 30);
+    return addDays(dateGiven, 30 * count);
   }
 
-  const targetMonth = addMonths(dateGiven, 1);
+  const targetMonth = addMonths(dateGiven, count);
   const givenDay = getDate(dateGiven);
   const endOfTargetMonth = endOfMonth(targetMonth);
   const maxDayInTargetMonth = getDate(endOfTargetMonth);
@@ -22,4 +28,8 @@ export function calculateDueDate(dateGiven: Date, interestType: "monthly" | "dai
     return endOfTargetMonth;
   }
   return setDate(targetMonth, givenDay);
+}
+
+export function calculateCustomDueDate(dateGiven: Date, days: number): Date {
+  return addDays(dateGiven, Math.max(1, days));
 }

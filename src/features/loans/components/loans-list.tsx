@@ -14,6 +14,7 @@ import { getLoansAction } from "../actions/get-loans.action";
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "../actions/extend-loan.action";
 import { payAndExtendAction } from "../actions/pay-and-extend.action";
+import { ExtendLoanModal, type ExtendLoanDurationParams } from "./modals/extend-loan-modal";
 import { generateLoanExtensionPdf } from "../utils/generate-loan-extension-pdf";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { deleteLoanAction } from "../actions/delete-loan.action";
@@ -229,10 +230,13 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
     });
   };
 
-  const handleExtendConfirm = async () => {
+  const handleExtendConfirm = async (duration?: ExtendLoanDurationParams) => {
     if (!selectedLoan) return;
     startTransition(async () => {
-      const res = await payAndExtendAction(selectedLoan.loanId);
+      const res = await payAndExtendAction(selectedLoan.loanId, {
+        months: duration?.months || 1,
+        days: duration?.days,
+      });
       if (!res.success) {
         const errText = typeof res.error === "string" ? res.error : "Failed to extend loan";
         toast.error(errText);
@@ -587,29 +591,13 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
       </Dialog>
 
       {/* ── Extend Period Dialog ─────────────────────────────────────────────── */}
-      <Dialog open={extendOpen} onOpenChange={setExtendOpen}>
-        <DialogContent className="rounded-2xl max-w-md fx-glass-card border-border/50">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-extrabold">Extend Period?</DialogTitle>
-            <DialogDescription>
-              Extends {selectedLoan?.borrower.name}&apos;s loan by 1 month.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="bg-secondary border border-border rounded-xl p-4 space-y-2 text-sm">
-            <p><span className="text-muted-foreground">Current Due Date:</span> <strong>{selectedLoan?.dueDate}</strong></p>
-            <p>
-              <span className="text-muted-foreground">Interest for Extension:</span>{" "}
-              <strong className="text-primary">
-                ₹{selectedLoan && calculateMonthlyInterest(Number(selectedLoan.principal), Number(selectedLoan.interestRate)).toLocaleString("en-IN")}
-              </strong>
-            </p>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setExtendOpen(false)} className="rounded-xl border-border">Cancel</Button>
-            <Button onClick={handleExtendConfirm} disabled={isPending} className="rounded-xl fx-brand-gradient border-0 text-white fx-cta-glow fx-pressable">Confirm Extension</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ExtendLoanModal
+        open={extendOpen}
+        onOpenChange={setExtendOpen}
+        loan={selectedLoan}
+        onConfirm={handleExtendConfirm}
+        isPending={isPending}
+      />
 
       {/* ── Send Reminder Dialog ─────────────────────────────────────────────── */}
       <Dialog open={reminderOpen} onOpenChange={setReminderOpen}>

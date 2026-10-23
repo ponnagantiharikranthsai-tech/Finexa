@@ -713,30 +713,34 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     });
   };
 
-  const handleExtendConfirm = async () => {
+  const handleExtendConfirm = async (duration?: { months: number; days?: number }) => {
     if (!selectedLoan) return;
     const targetLoanId = selectedLoan.loanId;
+    const months = duration?.months || 1;
+    const days = duration?.days;
 
     await queryClient.cancelQueries({ queryKey: LOANS_QUERY_KEY });
     const previousLoans = queryClient.getQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY);
 
-    const currentDue = new Date(selectedLoan.dueDate);
-    const optimisticDueDate = new Date(currentDue.setMonth(currentDue.getMonth() + 1)).toISOString().split("T")[0]!;
+    const baseDue = new Date(selectedLoan.dueDate);
+    const optimisticDueDate = days && days > 0
+      ? new Date(new Date(baseDue).setDate(baseDue.getDate() + days)).toISOString().split("T")[0]!
+      : new Date(new Date(baseDue).setMonth(baseDue.getMonth() + months)).toISOString().split("T")[0]!;
 
     // 1. Instant optimistic update
     setLoans((prev) =>
-      prev.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: optimisticDueDate } : l))
+      prev.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: optimisticDueDate, status: "extended" } : l))
     );
-    setSelectedLoan((prev) => (prev ? { ...prev, dueDate: optimisticDueDate } : prev));
+    setSelectedLoan((prev) => (prev ? { ...prev, dueDate: optimisticDueDate, status: "extended" } : prev));
     queryClient.setQueryData<LoanManagementDetailResult[]>(LOANS_QUERY_KEY, (old) => {
       if (!old) return [];
-      return old.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: optimisticDueDate } : l));
+      return old.map((l) => (l.loanId === targetLoanId ? { ...l, dueDate: optimisticDueDate, status: "extended" } : l));
     });
 
     setExtendOpen(false);
 
     startTransition(async () => {
-      const res = await extendLoanAction(selectedLoan.loanId);
+      const res = await extendLoanAction(selectedLoan.loanId, { months, days });
       if (res.success) {
         toast.success(`Loan extended! New Due Date: ${res.data.newDueDate}`);
         queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });

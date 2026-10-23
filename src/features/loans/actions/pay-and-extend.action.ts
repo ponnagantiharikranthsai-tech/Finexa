@@ -4,7 +4,7 @@ import { loanRepository } from "../repository/loan.repository";
 import { paymentRepository } from "@/features/payments/repository/payment.repository";
 import { loanCycleRepository } from "../repository/loan-cycle.repository";
 import { calculateMonthlyInterest } from "@/domain/interest-calculator";
-import { calculateDueDate } from "@/domain/due-date-calculator";
+import { calculateDueDate, calculateCustomDueDate } from "@/domain/due-date-calculator";
 import { auditLog } from "@/lib/audit-log";
 import { requireAuth } from "@/lib/auth";
 import type { ActionResult } from "@/types/api.types";
@@ -32,10 +32,18 @@ export type PayAndExtendResultPayload = {
   loanStatus: string;
 };
 
+export type PayAndExtendOptions = {
+  paymentDate?: string;
+  notes?: string;
+  months?: number;
+  days?: number;
+};
+
 export async function payAndExtendAction(
   loanId: string,
-  paymentDateInput?: string,
-  notesInput?: string
+  paymentDateOrOptions?: string | PayAndExtendOptions,
+  notesInput?: string,
+  extensionMonths: number = 1
 ): Promise<ActionResult<PayAndExtendResultPayload>> {
   try {
     await requireAuth();
@@ -50,22 +58,37 @@ export async function payAndExtendAction(
     }
 
     const todayStr = new Date().toISOString().split("T")[0]!;
-    const actualPaymentDate = paymentDateInput || todayStr;
 
-    // Idempotency & Anti-duplication Check:
-    // Verify if loan was already extended on the same payment date
-    const updatedDateStr = new Date(loan.updatedAt).toISOString().split("T")[0]!;
-    if (loan.status === "extended" && updatedDateStr === actualPaymentDate) {
-      return { success: false, error: "This loan cycle has already been extended for today." };
-    }
+    const isOptions = typeof paymentDateOrOptions === "object" && paymentDateOrOptions !== null;
+    const actualPaymentDate = (isOptions ? paymentDateOrOptions.paymentDate : paymentDateOrOptions) || todayStr;
+    const actualNotes = isOptions ? paymentDateOrOptions.notes : notesInput;
+    const months = isOptions ? paymentDateOrOptions.months : (typeof extensionMonths === "number" ? extensionMonths : 1);
+    const days = isOptions ? paymentDateOrOptions.days : undefined;
 
     const principalNum = Number(loan.principal || 0);
     const rateNum = Number(loan.interestRate || 0);
     const monthlyInterest = calculateMonthlyInterest(principalNum, rateNum);
-    const interestAmountPaid = Math.max(0, Math.round(monthlyInterest));
+
+    const currentDueDate = new Date(loan.dueDate);
+    let newDueDateObj: Date;
+    let durationLabel = "";
+    let interestMultiplier = 1;
+
+    if (days && days > 0) {
+      newDueDateObj = calculateCustomDueDate(currentDueDate, days);
+      durationLabel = `${days} Days`;
+      interestMultiplier = Number((days / 30).toFixed(2));
+    } else {
+      const monthsMultiplier = Math.max(1, months || 1);
+      newDueDateObj = calculateDueDate(currentDueDate, loan.interestType, monthsMultiplier);
+      durationLabel = `${monthsMultiplier} Month${monthsMultiplier > 1 ? "s" : ""}`;
+      interestMultiplier = monthsMultiplier;
+    }
+
+    const interestAmountPaid = Math.max(0, Math.round(monthlyInterest * interestMultiplier));
 
     if (interestAmountPaid <= 0) {
-      return { success: false, error: "Monthly interest amount must be greater than 0 to extend." };
+      return { success: false, error: "Interest amount must be greater than 0 to extend." };
     }
 
     // Generate Unique Document ID: FIN-REC-YYYYMMDD-XXXX
@@ -79,14 +102,12 @@ export async function payAndExtendAction(
       amount: interestAmountPaid.toString(),
       paymentType: "interest",
       paymentDate: actualPaymentDate,
-      notes: notesInput
-        ? `[Pay & Extend | ${documentId}] ${notesInput}`
-        : `[Pay & Extend | ${documentId}] Monthly interest payment of ₹${interestAmountPaid.toLocaleString("en-IN")}`,
+      notes: actualNotes
+        ? `[Pay & Extend | ${documentId} | +${durationLabel}] ${actualNotes}`
+        : `[Pay & Extend | ${documentId}] ${durationLabel} interest payment of ₹${interestAmountPaid.toLocaleString("en-IN")}`,
     });
 
-    // 2. Extend Due Date by period (7 days for weekly, 1 month for monthly)
-    const currentDueDate = new Date(loan.dueDate);
-    const newDueDateObj = calculateDueDate(currentDueDate, loan.interestType);
+    // 2. Extend Due Date by period
     const newDueDateStr = newDueDateObj.toISOString().split("T")[0]!;
 
     await loanRepository.updateDueDate(loanId, newDueDateObj);
@@ -112,7 +133,7 @@ export async function payAndExtendAction(
       remainingPrincipal: loan.principal, // Principal remains 100% outstanding!
       cycleStatus: "extended",
       paymentType: "pay_and_extend",
-      notes: notesInput ? `[${documentId}] ${notesInput}` : `[${documentId}] Monthly interest cleared; loan principal extended to next cycle.`,
+      notes: actualNotes ? `[${documentId}] ${actualNotes}` : `[${documentId}] Monthly interest cleared; loan principal extended by ${durationLabel} to next cycle.`,
     });
 
     await auditLog("loan_pay_and_extend", "loan", loanId, {
@@ -120,6 +141,7 @@ export async function payAndExtendAction(
       interestPaid: interestAmountPaid,
       previousDueDate: loan.dueDate,
       newDueDate: newDueDateStr,
+      durationLabel,
       principalOutstanding: loan.principal,
     });
 

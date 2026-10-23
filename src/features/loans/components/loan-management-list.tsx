@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "@/features/loans/actions/extend-loan.action";
 import { payAndExtendAction } from "../actions/pay-and-extend.action";
-import { generateLoanExtensionPdf } from "../utils/generate-loan-extension-pdf";
+import { generateLoanExtensionPdf, downloadExtensionPdf, viewExtensionPdf, triggerExtensionReceiptSuccess } from "../utils/generate-loan-extension-pdf";
 import { downloadPaymentCompletedPdf, viewPaymentCompletedPdf, generatePaymentCompletedPdf } from "../utils/generate-payment-completed-pdf";
 import { downloadPartialPaymentPdf, viewPartialPaymentPdf } from "../utils/generate-partial-payment-pdf";
 import { overdueAndPenaltyAction } from "../actions/overdue-and-penalty.action";
@@ -657,7 +657,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
       );
 
       if (res.success) {
-        toast.success(`Success! Interest of ₹${res.data.amountPaid.toLocaleString("en-IN")} recorded.`);
+        await triggerExtensionReceiptSuccess(res.data);
         queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
       } else {
         if (previousLoans) {
@@ -742,7 +742,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
     startTransition(async () => {
       const res = await extendLoanAction(selectedLoan.loanId, { months, days });
       if (res.success) {
-        toast.success(`Loan extended! New Due Date: ${res.data.newDueDate}`);
+        await triggerExtensionReceiptSuccess(res.data);
         queryClient.invalidateQueries({ queryKey: LOANS_QUERY_KEY });
       } else {
         if (previousLoans) {

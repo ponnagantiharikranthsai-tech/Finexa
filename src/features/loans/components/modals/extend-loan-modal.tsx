@@ -22,6 +22,13 @@ import { calculateMonthlyInterest } from "@/domain/interest-calculator";
 import { calculateDueDate, calculateCustomDueDate } from "@/domain/due-date-calculator";
 import { Calendar, ArrowRight, Clock, Sparkles } from "lucide-react";
 import { format } from "date-fns";
+import {
+  triggerExtensionReceiptSuccess,
+  downloadExtensionPdf,
+  viewExtensionPdf,
+} from "../../utils/generate-loan-extension-pdf";
+
+export { triggerExtensionReceiptSuccess, downloadExtensionPdf, viewExtensionPdf };
 
 export interface ExtendLoanDurationParams {
   months: number;
@@ -40,7 +47,7 @@ export interface ExtendLoanModalProps {
     borrower?: { name: string; mobile?: string };
     monthlyInterestAmount?: number;
   } | null;
-  onConfirm: (duration: ExtendLoanDurationParams) => void | Promise<void>;
+  onConfirm: (duration: ExtendLoanDurationParams) => void | Promise<any>;
   isPending: boolean;
 }
 
@@ -104,11 +111,17 @@ export function ExtendLoanModal({
 
   if (!loan || !calculations) return null;
 
-  const handleConfirm = () => {
-    onConfirm({
+  const handleConfirm = async () => {
+    const res = await onConfirm({
       months: calculations.finalMonths,
       days: calculations.finalDays,
     });
+    if (res && typeof res === "object") {
+      const data = "data" in res && res.data ? res.data : "newDueDate" in res ? res : null;
+      if (data) {
+        await triggerExtensionReceiptSuccess(data);
+      }
+    }
   };
 
   return (

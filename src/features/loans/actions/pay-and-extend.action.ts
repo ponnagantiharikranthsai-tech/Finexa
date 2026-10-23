@@ -30,6 +30,10 @@ export type PayAndExtendResultPayload = {
   remainingPrincipal: number;
   paymentDate: string;
   loanStatus: string;
+  extensionDuration?: string;
+  interestPaid?: number;
+  accruedInterest?: number;
+  remainingBalance?: number;
 };
 
 export type PayAndExtendOptions = {
@@ -170,6 +174,10 @@ export async function payAndExtendAction(
         remainingPrincipal: principalNum,
         paymentDate: actualPaymentDate,
         loanStatus: "ACTIVE / EXTENDED",
+        extensionDuration: durationLabel,
+        interestPaid: interestAmountPaid,
+        accruedInterest: interestAmountPaid,
+        remainingBalance: principalNum,
       },
     };
   } catch (err: any) {

@@ -127,6 +127,10 @@ export async function extendLoanAction(
         remainingPrincipal: principalNum,
         paymentDate: today,
         loanStatus: "ACTIVE / EXTENDED",
+        extensionDuration: extensionLabel,
+        interestPaid: 0,
+        accruedInterest: calculatedAccruedInterest,
+        remainingBalance: principalNum,
       },
     };
   } catch (err: any) {

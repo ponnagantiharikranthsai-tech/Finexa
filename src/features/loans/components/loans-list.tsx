@@ -14,7 +14,7 @@ import { getLoansAction } from "../actions/get-loans.action";
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "../actions/extend-loan.action";
 import { payAndExtendAction } from "../actions/pay-and-extend.action";
-import { ExtendLoanModal, type ExtendLoanDurationParams } from "./modals/extend-loan-modal";
+import { ExtendLoanModal, type ExtendLoanDurationParams, triggerExtensionReceiptSuccess } from "./modals/extend-loan-modal";
 import { generateLoanExtensionPdf } from "../utils/generate-loan-extension-pdf";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { deleteLoanAction } from "../actions/delete-loan.action";
@@ -242,26 +242,7 @@ export function LoansList({ initialLoans, total, totalPages }: LoansListProps) {
         toast.error(errText);
         return;
       }
-      const data = res.data;
-      try {
-        await generateLoanExtensionPdf(data);
-        toast.success(`Pay & Extend processed! Next cycle due: ${data.newDueDate}`, {
-          action: {
-            label: "📄 Download PDF",
-            onClick: () => generateLoanExtensionPdf(data),
-          },
-          duration: 8000,
-        });
-      } catch (pdfErr) {
-        console.error("PDF generation error:", pdfErr);
-        toast.error("Loan extension completed, but the PDF could not be generated.", {
-          action: {
-            label: "🔄 Retry PDF",
-            onClick: () => generateLoanExtensionPdf(data),
-          },
-          duration: 10000,
-        });
-      }
+      await triggerExtensionReceiptSuccess(res.data);
       setExtendOpen(false); refreshLoans();
     });
   };

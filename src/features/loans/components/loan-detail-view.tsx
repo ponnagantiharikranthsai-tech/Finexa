@@ -15,7 +15,7 @@ import { deletePaymentAction } from "@/features/payments/actions/delete-payment.
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "../actions/extend-loan.action";
 import { payAndExtendAction } from "../actions/pay-and-extend.action";
-import { ExtendLoanModal, type ExtendLoanDurationParams } from "./modals/extend-loan-modal";
+import { ExtendLoanModal, type ExtendLoanDurationParams, triggerExtensionReceiptSuccess } from "./modals/extend-loan-modal";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { getExtraLoanDetailsAction } from "@/features/loans/actions/get-extra-loan-details.action";
 import { getReminderHistoryAction } from "@/features/notifications/actions/payment-reminders.action";
@@ -225,33 +225,7 @@ export function LoanDetailView({ initialLoan, initialPayments, initialNotifs }: 
         toast.error(errText);
         return;
       }
-      const data = res.data;
-      try {
-        const { generateLoanExtensionPdf } = await import("../utils/generate-loan-extension-pdf");
-        generateLoanExtensionPdf(data);
-        toast.success(`Pay & Extend processed! Next cycle due: ${data.newDueDate}`, {
-          action: {
-            label: "📄 Download PDF",
-            onClick: async () => {
-              const { generateLoanExtensionPdf: genPdf } = await import("../utils/generate-loan-extension-pdf");
-              genPdf(data);
-            },
-          },
-          duration: 8000,
-        });
-      } catch (pdfErr) {
-        console.error("PDF generation error:", pdfErr);
-        toast.error("Loan extension completed, but the PDF could not be generated.", {
-          action: {
-            label: "🔄 Retry PDF",
-            onClick: async () => {
-              const { generateLoanExtensionPdf: genPdf } = await import("../utils/generate-loan-extension-pdf");
-              genPdf(data);
-            },
-          },
-          duration: 10000,
-        });
-      }
+      await triggerExtensionReceiptSuccess(res.data);
       setExtendOpen(false);
       router.refresh();
     });

@@ -1,7 +1,8 @@
 import { format } from "date-fns";
+import { toast } from "sonner";
 import type { PayAndExtendResultPayload } from "../actions/pay-and-extend.action";
 
-export async function generateLoanExtensionPdf(data: PayAndExtendResultPayload): Promise<void> {
+export async function buildLoanExtensionJsPdfDoc(data: PayAndExtendResultPayload): Promise<any> {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({
     orientation: "portrait",
@@ -131,12 +132,13 @@ export async function generateLoanExtensionPdf(data: PayAndExtendResultPayload):
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10.5);
   doc.setTextColor(COLOR_GREEN_TEXT[0], COLOR_GREEN_TEXT[1], COLOR_GREEN_TEXT[2]);
-  doc.text("CONFIRMED  —  LOAN EXTENSION APPROVED", margin + 7, y + 6.5);
+  const durationBanner = data.extensionDuration ? ` (${data.extensionDuration.startsWith("+") ? data.extensionDuration : "+" + data.extensionDuration})` : "";
+  doc.text(`CONFIRMED  —  LOAN EXTENSION APPROVED${durationBanner}`, margin + 7, y + 6.5);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2]);
-  doc.text("Interest payment received successfully  •  Loan remains active  •  Next cycle created", margin + 7, y + 11.5);
+  doc.text("Interest processed successfully  •  Loan remains active  •  Next cycle created", margin + 7, y + 11.5);
 
   y += 24;
 
@@ -224,10 +226,10 @@ export async function generateLoanExtensionPdf(data: PayAndExtendResultPayload):
   const miniCards = [
     { label: "LOAN PRINCIPAL", val: formatMoney(data.principal, false), isBold: true },
     { label: "INTEREST RATE BASIS", val: `Rs. ${data.interestRate} / Rs. 1,000 / mo`, isBold: false },
-    { label: "LOAN ISSUED DATE", val: data.dateGiven || "N/A", isBold: false },
-    { label: "BILLING START DATE", val: data.billingStartDate || data.dateGiven || "N/A", isBold: false },
+    { label: "EXTENSION DURATION", val: data.extensionDuration || "+1 Month", isGold: true },
     { label: "PREVIOUS DUE DATE", val: data.previousDueDate || "N/A", isBold: false },
     { label: "NEW CYCLE DUE DATE", val: data.newDueDate || "N/A", isGold: true },
+    { label: "REMAINING BALANCE", val: formatMoney(data.remainingBalance ?? data.remainingPrincipal, false), isBold: true },
   ];
 
   miniCards.forEach((card, idx) => {
@@ -282,16 +284,19 @@ export async function generateLoanExtensionPdf(data: PayAndExtendResultPayload):
   doc.setFontSize(7.5);
   doc.setTextColor(COLOR_TEXT[0], COLOR_TEXT[1], COLOR_TEXT[2]);
 
-  doc.text("INTEREST DUE:", margin + 6, y + 16);
+  const interestDue = data.accruedInterest ?? data.monthlyInterest;
+  const interestSettled = data.interestPaid ?? data.amountPaid;
+
+  doc.text("INTEREST DUE / ACCRUED:", margin + 6, y + 16);
   doc.setFont("helvetica", "bold");
-  doc.text(formatMoney(data.monthlyInterest, true), margin + 44, y + 16);
+  doc.text(formatMoney(interestDue, true), margin + 44, y + 16);
 
   doc.setFont("helvetica", "bold");
   doc.text("AMOUNT PAID:", margin + 6, y + 23);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10.5);
   doc.setTextColor(COLOR_GREEN_TEXT[0], COLOR_GREEN_TEXT[1], COLOR_GREEN_TEXT[2]);
-  doc.text(formatMoney(data.amountPaid, true), margin + 44, y + 23);
+  doc.text(formatMoney(interestSettled, true), margin + 44, y + 23);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
@@ -303,7 +308,7 @@ export async function generateLoanExtensionPdf(data: PayAndExtendResultPayload):
   doc.text("STATUS:", margin + 6, y + 36);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(COLOR_GREEN_TEXT[0], COLOR_GREEN_TEXT[1], COLOR_GREEN_TEXT[2]);
-  doc.text("CLEARED", margin + 44, y + 36);
+  doc.text(interestSettled > 0 ? "CLEARED" : "ACCRUED", margin + 44, y + 36);
 
   // CARD B: CURRENT LOAN POSITION (BALANCE SUMMARY)
   const cardBX = margin + halfW + 6;
@@ -319,23 +324,25 @@ export async function generateLoanExtensionPdf(data: PayAndExtendResultPayload):
   doc.setDrawColor(228, 220, 195);
   doc.line(cardBX + 6, y + 9, cardBX + halfW - 6, y + 9);
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
-  doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-  doc.text("PRINCIPAL OUTSTANDING", cardBX + 6, y + 16);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
-  doc.text(formatMoney(data.remainingPrincipal, true), cardBX + 6, y + 22);
+  const remainingBal = data.remainingBalance ?? data.remainingPrincipal;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
   doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
-  doc.text("TOTAL SETTLED TODAY", cardBX + 6, y + 29);
+  doc.text("REMAINING PRINCIPAL", cardBX + 6, y + 16);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(COLOR_NAVY[0], COLOR_NAVY[1], COLOR_NAVY[2]);
+  doc.text(formatMoney(remainingBal, true), cardBX + 6, y + 22);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(COLOR_MUTED[0], COLOR_MUTED[1], COLOR_MUTED[2]);
+  doc.text("EXTENSION / DURATION", cardBX + 6, y + 29);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(COLOR_GOLD[0], COLOR_GOLD[1], COLOR_GOLD[2]);
-  doc.text(`${formatMoney(data.amountPaid, true)} (Interest Only)`, cardBX + 6, y + 35);
+  doc.text(`${data.extensionDuration || "Extended"} (${formatMoney(interestSettled, true)})`, cardBX + 6, y + 35);
 
   y += 48;
 
@@ -478,9 +485,56 @@ export async function generateLoanExtensionPdf(data: PayAndExtendResultPayload):
     renderHeaderFooter(i, totalPages);
   }
 
-  // Trigger Client-Side Download
+  return doc;
+}
+
+// Triggers direct client-side download of Extension Receipt PDF
+export async function downloadLoanExtensionPdf(data: PayAndExtendResultPayload): Promise<void> {
+  const doc = await buildLoanExtensionJsPdfDoc(data);
   const words = (data.borrowerName || "").replace(/[().,_\-\/]/g, " ").replace(/[^\w\s]/gi, "").trim().split(/\s+/).filter(Boolean);
   const cleanBorrower = words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("_") || "Borrower";
-  const filename = `FINEXA_${cleanBorrower}_Loan_Extension_Statement.pdf`;
+  const filename = `FINEXA_${cleanBorrower}_Extension_Receipt_${data.documentId || data.loanId}.pdf`;
   doc.save(filename);
+}
+
+// Opens Extension Receipt PDF in new browser tab for viewing
+export async function viewLoanExtensionPdf(data: PayAndExtendResultPayload): Promise<void> {
+  const doc = await buildLoanExtensionJsPdfDoc(data);
+  const blob = doc.output("blob");
+  const blobUrl = URL.createObjectURL(blob);
+  window.open(blobUrl, "_blank");
+}
+
+// Aliases for seamless naming & backward compatibility
+export const generateLoanExtensionPdf = downloadLoanExtensionPdf;
+export const downloadExtensionPdf = downloadLoanExtensionPdf;
+export const viewExtensionPdf = viewLoanExtensionPdf;
+
+/**
+ * Standardized success toast & auto-receipt download trigger for Loan Extension
+ */
+export async function triggerExtensionReceiptSuccess(data: PayAndExtendResultPayload) {
+  try {
+    await downloadExtensionPdf(data);
+    toast.success("Loan cycle extended and Extension Receipt downloaded!", {
+      action: {
+        label: "📄 View Receipt",
+        onClick: async () => {
+          await viewExtensionPdf(data);
+        },
+      },
+      duration: 8000,
+    });
+  } catch (pdfErr) {
+    console.error("PDF generation/download error:", pdfErr);
+    toast.success(`Loan cycle extended! Next cycle due: ${data.newDueDate}`, {
+      action: {
+        label: "📄 View Receipt",
+        onClick: async () => {
+          await viewExtensionPdf(data);
+        },
+      },
+      duration: 8000,
+    });
+  }
 }

@@ -24,12 +24,14 @@ import {
   ClipboardList,
   Home,
   Coins,
+  Wallet,
 } from "lucide-react";
 
 const navItems = [
   { label: "Home",               href: "/home",             icon: Home },
   { label: "Loan Management",    href: "/loan-management",  icon: CreditCard },
   { label: "Capital Management", href: "/capital-management", icon: Coins },
+  { label: "Digital Envelope",   href: "/digital-envelope", icon: Wallet },
   { label: "Applications",       href: "/applications",     icon: ClipboardList },
   { label: "Reports",            href: "/reports",          icon: BarChart3 },
 ];

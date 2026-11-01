@@ -501,7 +501,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
         {/* Navigation Tabs */}
         <div className="flex items-center gap-1 bg-card/80 p-1.5 rounded-2xl border border-border/50 shadow-inner">
           <button
-            onClick={() => setActiveTab("funders")}
+            onClick={() => startTransition(() => setActiveTab("funders"))}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 fx-pressable ${
               activeTab === "funders"
                 ? "fx-brand-gradient text-white shadow-md"
@@ -511,7 +511,7 @@ export function CapitalManagementList({ initialData }: CapitalManagementListProp
             Capital Persons ({fundersList.length})
           </button>
           <button
-            onClick={() => setActiveTab("overview")}
+            onClick={() => startTransition(() => setActiveTab("overview"))}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 fx-pressable ${
               activeTab === "overview"
                 ? "fx-brand-gradient text-white shadow-md"

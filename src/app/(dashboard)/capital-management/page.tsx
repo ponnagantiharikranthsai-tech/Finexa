@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getCapitalDataAction } from "@/features/capital/actions/get-capital-data.action";
 import { CapitalManagementList } from "@/features/capital/components/capital-management-list";
 import { Coins, RefreshCw } from "lucide-react";
+import CapitalManagementLoading from "./loading";
 
 export default function CapitalManagementPage() {
   const { data, isLoading, isFetching } = useQuery({
@@ -16,9 +17,9 @@ export default function CapitalManagementPage() {
       }
       return res.data;
     },
-    staleTime: 1000 * 60 * 3,       // 3 min: no refetch while fresh
-    gcTime:    1000 * 60 * 5,       // 5 min: keep in memory after unmount
-    refetchOnWindowFocus: false,    // prevent refetch when user alt-tabs
+    staleTime: 1000 * 60 * 5,       // 5 min: keep fresh in memory
+    gcTime:    1000 * 60 * 60 * 24, // 24 hours: keep in memory
+    refetchOnWindowFocus: false,
   });
 
   const fallbackData = {
@@ -35,6 +36,10 @@ export default function CapitalManagementPage() {
       totalOutstandingLoansPrincipal: 0,
     },
   };
+
+  if (isLoading && !data) {
+    return <CapitalManagementLoading />;
+  }
 
   return (
     <div className="space-y-6">
@@ -60,14 +65,7 @@ export default function CapitalManagementPage() {
         )}
       </div>
 
-      {isLoading && !data ? (
-        <div className="py-20 flex flex-col items-center justify-center gap-3">
-          <div className="h-8 w-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
-          <p className="text-xs text-muted-foreground">Loading capital data...</p>
-        </div>
-      ) : (
-        <CapitalManagementList initialData={data || fallbackData} />
-      )}
+      <CapitalManagementList initialData={data || fallbackData} />
     </div>
   );
 }

@@ -241,3 +241,105 @@ export function NotificationCardSkeleton() {
     </div>
   );
 }
+
+// Envelope Card Skeleton (Matches 1:1 EnvelopeCard layout)
+export function EnvelopeCardSkeleton() {
+  return (
+    <SkeletonCard className="p-5 flex flex-col justify-between space-y-4 min-h-[220px]">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <SkeletonAvatar size="md" className="rounded-2xl" />
+          <div className="space-y-1.5">
+            <Skeleton className="h-4 w-32 rounded-md" />
+            <Skeleton className="h-3 w-20 rounded-md" />
+          </div>
+        </div>
+        <Skeleton className="h-8 w-8 rounded-lg" />
+      </div>
+
+      <div className="space-y-2 pt-1">
+        <Skeleton className="h-2.5 w-28 rounded" />
+        <Skeleton className="h-8 w-36 rounded-md" />
+        <Skeleton className="h-2 w-full rounded-full" />
+      </div>
+
+      <div className="pt-2 border-t border-border/40 grid grid-cols-2 gap-2">
+        <Skeleton className="h-9 rounded-xl" />
+        <Skeleton className="h-9 rounded-xl" />
+      </div>
+    </SkeletonCard>
+  );
+}
+
+// Digital Envelope Dashboard Skeleton
+export function DigitalEnvelopeSkeleton() {
+  return (
+    <div className="space-y-6 animate-in fade-in duration-150">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <SkeletonAvatar size="md" className="rounded-2xl h-11 w-11" />
+          <div className="space-y-1.5">
+            <Skeleton className="h-6 w-48 rounded-md" />
+            <Skeleton className="h-3 w-64 rounded-md" />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <SkeletonButton className="h-9 w-28" />
+          <SkeletonButton className="h-9 w-28" />
+          <SkeletonButton className="h-9 w-32" />
+        </div>
+      </div>
+
+      {/* 4 Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        {[1, 2, 3, 4].map((i) => (
+          <SkeletonCard key={i} className="p-4 md:p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-3 w-28 rounded" />
+              <Skeleton className="h-8 w-8 rounded-xl" />
+            </div>
+            <Skeleton className="h-8 w-32 rounded-md" />
+            <Skeleton className="h-3 w-full rounded" />
+          </SkeletonCard>
+        ))}
+      </div>
+
+      {/* Tabs & Search */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+        <div className="flex items-center gap-2">
+          <SkeletonButton className="h-9 w-24" />
+          <SkeletonButton className="h-9 w-28" />
+          <SkeletonButton className="h-9 w-28" />
+        </div>
+        <SkeletonInput className="h-9 w-64" />
+      </div>
+
+      {/* Section 1 */}
+      <div className="space-y-4 pt-1">
+        <div className="flex items-center justify-between border-b border-border/40 pb-2">
+          <Skeleton className="h-5 w-44 rounded-md" />
+          <Skeleton className="h-8 w-32 rounded-xl" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <EnvelopeCardSkeleton key={i} />
+          ))}
+        </div>
+      </div>
+
+      {/* Section 2 */}
+      <div className="space-y-4 pt-4">
+        <div className="flex items-center justify-between border-b border-border/40 pb-2">
+          <Skeleton className="h-5 w-44 rounded-md" />
+          <Skeleton className="h-8 w-32 rounded-xl" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2].map((i) => (
+            <EnvelopeCardSkeleton key={i} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

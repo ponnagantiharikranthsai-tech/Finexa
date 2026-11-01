@@ -14,7 +14,13 @@ import { getLoansAction } from "../actions/get-loans.action";
 import { recordPaymentAction } from "@/features/payments/actions/record-payment.action";
 import { extendLoanAction } from "../actions/extend-loan.action";
 import { payAndExtendAction } from "../actions/pay-and-extend.action";
-import { ExtendLoanModal, type ExtendLoanDurationParams, triggerExtensionReceiptSuccess } from "./modals/extend-loan-modal";
+import dynamic from "next/dynamic";
+import { type ExtendLoanDurationParams, triggerExtensionReceiptSuccess } from "./modals/extend-loan-modal";
+
+const ExtendLoanModal = dynamic(
+  () => import("./modals/extend-loan-modal").then((m) => m.ExtendLoanModal),
+  { ssr: false }
+);
 import { generateLoanExtensionPdf } from "../utils/generate-loan-extension-pdf";
 import { sendReminderAction } from "@/features/notifications/actions/send-reminder.action";
 import { deleteLoanAction } from "../actions/delete-loan.action";

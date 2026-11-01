@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useTransition } from "react";
+import dynamic from "next/dynamic";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Wallet,
@@ -29,17 +30,38 @@ import { getEnvelopesAction } from "../actions/get-envelopes.action";
 import { deleteEnvelopeAction } from "../actions/delete-envelope.action";
 import { TopSummaryCards } from "./top-summary-cards";
 import { EnvelopeSection } from "./envelope-section";
-import { CreateEnvelopeModal } from "./create-envelope-modal";
-import { AddMoneyModal } from "./add-money-modal";
-import { PayBillWithdrawModal } from "./pay-bill-withdraw-modal";
-import { EditEnvelopeModal } from "./edit-envelope-modal";
-import { ReconcileBankBalanceModal } from "./reconcile-bank-balance-modal";
-import { MovementHistoryModal } from "./movement-history-modal";
+import { DigitalEnvelopeSkeleton } from "@/components/ui/skeleton";
 import type {
   DigitalEnvelopeDashboardData,
   DigitalEnvelopeItem,
   EnvelopeType,
 } from "../types";
+
+// ── Lazy-loaded heavy modal dialogs (Bundle size & initial payload optimization)
+const CreateEnvelopeModal = dynamic(
+  () => import("./create-envelope-modal").then((m) => m.CreateEnvelopeModal),
+  { ssr: false }
+);
+const AddMoneyModal = dynamic(
+  () => import("./add-money-modal").then((m) => m.AddMoneyModal),
+  { ssr: false }
+);
+const PayBillWithdrawModal = dynamic(
+  () => import("./pay-bill-withdraw-modal").then((m) => m.PayBillWithdrawModal),
+  { ssr: false }
+);
+const EditEnvelopeModal = dynamic(
+  () => import("./edit-envelope-modal").then((m) => m.EditEnvelopeModal),
+  { ssr: false }
+);
+const ReconcileBankBalanceModal = dynamic(
+  () => import("./reconcile-bank-balance-modal").then((m) => m.ReconcileBankBalanceModal),
+  { ssr: false }
+);
+const MovementHistoryModal = dynamic(
+  () => import("./movement-history-modal").then((m) => m.MovementHistoryModal),
+  { ssr: false }
+);
 
 interface DigitalEnvelopeDashboardProps {
   initialData?: DigitalEnvelopeDashboardData;
@@ -50,8 +72,9 @@ const fmt = (val: number | string | undefined | null) =>
 
 export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboardProps) {
   const queryClient = useQueryClient();
+  const [isPending, startTransition] = useTransition();
 
-  // 1. TanStack Query
+  // 1. TanStack Query with Stale-While-Revalidate and client-side memory retention
   const { data, isLoading, isFetching, refetch } = useQuery<DigitalEnvelopeDashboardData>({
     queryKey: ["digital-envelopes-data"],
     queryFn: async () => {
@@ -62,7 +85,8 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
       return res.data;
     },
     initialData,
-    staleTime: 1000 * 60 * 2, // 2 mins
+    staleTime: 1000 * 60 * 5, // 5 mins fresh window
+    gcTime: 1000 * 60 * 60 * 24, // 24 hours memory retention
     refetchOnWindowFocus: false,
   });
 
@@ -149,12 +173,7 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
   };
 
   if (isLoading && !data) {
-    return (
-      <div className="py-20 flex flex-col items-center justify-center space-y-3">
-        <RefreshCw className="h-8 w-8 text-primary animate-spin" />
-        <p className="text-xs text-muted-foreground font-semibold">Loading Digital Envelopes...</p>
-      </div>
-    );
+    return <DigitalEnvelopeSkeleton />;
   }
 
   const summary = data?.summary || {
@@ -256,7 +275,7 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
         <div className="flex items-center gap-1.5 p-1 bg-secondary/50 rounded-xl w-full sm:w-auto border border-border/40">
           <button
             type="button"
-            onClick={() => setActiveTab("all")}
+            onClick={() => startTransition(() => setActiveTab("all"))}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
               activeTab === "all"
                 ? "bg-card text-foreground shadow-xs border border-border/50"
@@ -267,7 +286,7 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("personal")}
+            onClick={() => startTransition(() => setActiveTab("personal"))}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
               activeTab === "personal"
                 ? "bg-card text-emerald-600 dark:text-emerald-400 shadow-xs border border-emerald-500/20"
@@ -279,7 +298,7 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("third_party")}
+            onClick={() => startTransition(() => setActiveTab("third_party"))}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
               activeTab === "third_party"
                 ? "bg-card text-amber-600 dark:text-amber-400 shadow-xs border border-amber-500/20"

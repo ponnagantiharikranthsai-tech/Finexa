@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DataCacheProvider } from "@/components/providers/data-cache-provider";
+import { SlowNetworkIndicator } from "@/components/slow-network-indicator";
 import {
   CreditCard,
   BarChart3,
@@ -119,9 +120,7 @@ export default function DashboardLayout({
                 <Link
                   key={item.href}
                   href={item.href}
-                  prefetch={false}
-                  onMouseEnter={() => router.prefetch(item.href)}
-                  onTouchStart={() => router.prefetch(item.href)}
+                  prefetch={true}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                     isActive
                       ? "fx-nav-active"
@@ -139,7 +138,7 @@ export default function DashboardLayout({
 
           {/* New Loan CTA */}
           <div className="px-3 pb-3">
-            <Link href="/loans/new" prefetch={false}>
+            <Link href="/loans/new" prefetch={true}>
               <button className="w-full flex items-center justify-center gap-2 h-10 rounded-xl fx-brand-gradient text-white text-sm font-semibold fx-cta-glow fx-pressable">
                 <Plus className="h-4 w-4" />
                 New Loan
@@ -167,6 +166,7 @@ export default function DashboardLayout({
           {/* Compact Brand */}
           <Link
             href="/home"
+            prefetch={true}
             className="h-16 flex items-center justify-center border-b border-border/40 shrink-0 hover:opacity-90 transition-opacity"
           >
             <img
@@ -187,9 +187,7 @@ export default function DashboardLayout({
                 <Link
                   key={item.href}
                   href={item.href}
-                  prefetch={false}
-                  onMouseEnter={() => router.prefetch(item.href)}
-                  onTouchStart={() => router.prefetch(item.href)}
+                  prefetch={true}
                   title={item.label}
                   className={`flex items-center justify-center h-11 w-11 rounded-xl transition-all duration-200 ${
                     isActive
@@ -205,7 +203,7 @@ export default function DashboardLayout({
 
           {/* Compact New Loan */}
           <div className="px-2 pb-2">
-            <Link href="/loans/new" prefetch={false} title="New Loan">
+            <Link href="/loans/new" prefetch={true} title="New Loan">
               <button className="flex items-center justify-center h-11 w-11 rounded-xl fx-brand-gradient text-white fx-cta-glow fx-pressable">
                 <Plus className="h-5 w-5" />
               </button>
@@ -256,7 +254,7 @@ export default function DashboardLayout({
           {/* Top Header Bar — Logo, Search/Controls, Bell, Theme */}
           <header className="h-14 fx-glass-header flex items-center justify-between px-4 shrink-0 border-b border-border/40">
             <div className="flex items-center gap-2 md:hidden">
-              <Link href="/home" prefetch={false} className="flex items-center gap-2">
+              <Link href="/home" prefetch={true} className="flex items-center gap-2">
                 <img
                   src="/logo-icon.png"
                   alt="Finexa"
@@ -272,7 +270,7 @@ export default function DashboardLayout({
 
             {/* TOP RIGHT: + New Loan | 🔔 Notification Bell | ☀️/🌙 Theme */}
             <div className="flex items-center gap-2 ml-auto">
-              <Link href="/loans/new" prefetch={false}>
+              <Link href="/loans/new" prefetch={true}>
                 <button className="flex items-center gap-1.5 h-8 px-3 rounded-lg fx-brand-gradient text-white text-xs font-semibold fx-cta-glow fx-pressable">
                   <Plus className="h-3.5 w-3.5" />
                   New Loan
@@ -303,8 +301,7 @@ export default function DashboardLayout({
               <Link
                 key={item.href}
                 href={item.href}
-                prefetch={false}
-                onTouchStart={() => router.prefetch(item.href)}
+                prefetch={true}
                 className={`relative flex flex-col items-center justify-center gap-0.5 flex-1 px-1 py-2 transition-all duration-200 ${
                   isActive
                     ? "text-primary"
@@ -372,6 +369,7 @@ export default function DashboardLayout({
         </DialogContent>
       </Dialog>
       <PushSubscriptionListener />
+      <SlowNetworkIndicator />
     </div>
     </DataCacheProvider>
   );

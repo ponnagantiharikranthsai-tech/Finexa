@@ -4,10 +4,15 @@ import React from "react";
 import { useLoanManagementData } from "@/features/loans/hooks/use-loan-management-data";
 import { LoanManagementList } from "@/features/loans/components/loan-management-list";
 import { CreditCard, RefreshCw } from "lucide-react";
+import LoanManagementLoading from "./loading";
 
 export default function LoanManagementPage() {
   // 1. Instant 0 ms read from device IndexedDB, with background sync to Supabase
   const { loans, isLoading, isBackgroundSyncing, refreshLoans } = useLoanManagementData();
+
+  if (isLoading && loans.length === 0) {
+    return <LoanManagementLoading />;
+  }
 
   return (
     <div className="space-y-5">
@@ -37,14 +42,7 @@ export default function LoanManagementPage() {
       </div>
 
       {/* 2. Instant Render: renders cached loans immediately from IndexedDB */}
-      {isLoading && loans.length === 0 ? (
-        <div className="py-20 flex flex-col items-center justify-center gap-3">
-          <div className="h-8 w-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
-          <p className="text-xs text-muted-foreground">Loading loans...</p>
-        </div>
-      ) : (
-        <LoanManagementList initialLoans={loans} />
-      )}
+      <LoanManagementList initialLoans={loans} />
     </div>
   );
 }

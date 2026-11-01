@@ -244,13 +244,17 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
   }, []);
 
   const handleStatusFilterChange = useCallback((status: string) => {
-    setStatusFilter(status);
-    setCurrentPage(1);
+    startTransition(() => {
+      setStatusFilter(status);
+      setCurrentPage(1);
+    });
   }, []);
 
   const handleSortChange = useCallback((val: string) => {
-    setSortBy(val || "newest");
-    setCurrentPage(1);
+    startTransition(() => {
+      setSortBy(val || "newest");
+      setCurrentPage(1);
+    });
   }, []);
 
   const handlePageSizeChange = useCallback((val: string) => {
@@ -919,7 +923,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
         <div className="flex items-center gap-1 p-0.5 rounded-xl bg-[#18181b] border border-zinc-800">
           <button
             type="button"
-            onClick={() => setViewMode("virtualized")}
+            onClick={() => startTransition(() => setViewMode("virtualized"))}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 ${
               viewMode === "virtualized"
                 ? "bg-zinc-800/90 text-yellow-400 border border-yellow-500/30 shadow-sm shadow-yellow-500/10"
@@ -932,7 +936,7 @@ export function LoanManagementList({ initialLoans }: LoanManagementListProps) {
           </button>
           <button
             type="button"
-            onClick={() => setViewMode("grid")}
+            onClick={() => startTransition(() => setViewMode("grid"))}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 ${
               viewMode === "grid"
                 ? "bg-zinc-800/90 text-yellow-400 border border-yellow-500/30 shadow-sm shadow-yellow-500/10"

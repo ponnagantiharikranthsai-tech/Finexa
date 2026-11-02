@@ -46,3 +46,6 @@ CREATE TABLE IF NOT EXISTS "digital_envelope_settings" (
   "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
+GRANT ALL ON TABLE public.digital_envelopes TO postgres, service_role;
+GRANT ALL ON TABLE public.digital_envelope_transactions TO postgres, service_role;
+GRANT ALL ON TABLE public.digital_envelope_settings TO postgres, service_role;

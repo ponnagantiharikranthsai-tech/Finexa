@@ -363,6 +363,7 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
       {/* 1. Create Envelope Modal */}
       <CreateEnvelopeModal
         unallocatedCash={summary.unallocatedCash}
+        existingEnvelopes={[...(data?.personalEnvelopes || []), ...(data?.thirdPartyEnvelopes || [])]}
         open={createOpen}
         onOpenChange={setCreateOpen}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["digital-envelopes-data"] })}

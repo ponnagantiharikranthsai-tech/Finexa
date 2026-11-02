@@ -252,25 +252,65 @@ export class DigitalEnvelopeRepository {
     category?: string;
     type: EnvelopeType;
     initialAmount?: number;
-    targetAmount?: number;
+    targetAmount?: number | null;
     color?: string;
     icon?: string;
-    notes?: string;
+    notes?: string | null;
     fundSource?: "external" | "unallocated_cash";
+    allowDuplicate?: boolean;
   }): Promise<DigitalEnvelopeItem> {
+    const sanitizedName = params.name.trim();
+
+    // 1. Check if an active envelope with the same name already exists (case-insensitive)
+    const [existing] = await db
+      .select()
+      .from(digitalEnvelopesTable)
+      .where(
+        and(
+          sql`LOWER(TRIM(${digitalEnvelopesTable.name})) = LOWER(TRIM(${sanitizedName}))`,
+          eq(digitalEnvelopesTable.isArchived, false)
+        )
+      )
+      .limit(1);
+
+    if (existing && !params.allowDuplicate) {
+      const err: any = new Error(
+        `Envelope "${existing.name}" already exists with balance ₹${(Number(existing.balance) || 0).toLocaleString("en-IN")}.`
+      );
+      err.alreadyExists = true;
+      err.existingEnvelope = {
+        envelopeId: existing.envelopeId,
+        name: existing.name,
+        balance: Number(existing.balance) || 0,
+        type: existing.type,
+      };
+      throw err;
+    }
+
+    // 2. Strictly sanitize inputs to prevent any SQL insertion errors
     const initialAmount = Math.max(0, Number(params.initialAmount) || 0);
+    const sanitizedCategory = (params.category?.trim() || (params.type === "third_party" ? "Friend / Third Party" : "General")).trim();
+    const sanitizedType = params.type === "third_party" ? "third_party" : "personal";
+
+    // Strictly ensure targetAmount is a valid positive number string or null (NEVER empty string "")
+    const targetAmtNum = params.targetAmount !== undefined && params.targetAmount !== null ? Number(params.targetAmount) : NaN;
+    const sanitizedTargetAmount = (!isNaN(targetAmtNum) && targetAmtNum > 0) ? targetAmtNum.toFixed(2) : null;
+
+    const sanitizedColor = (params.color?.trim()) || (params.type === "third_party" ? "amber" : "blue");
+    const sanitizedIcon = (params.icon?.trim()) || (params.type === "third_party" ? "user" : "wallet");
+    const sanitizedNotes = (params.notes && typeof params.notes === "string" && params.notes.trim().length > 0) ? params.notes.trim() : null;
 
     const [inserted] = await db
       .insert(digitalEnvelopesTable)
       .values({
-        name: params.name.trim(),
-        category: (params.category || (params.type === "third_party" ? "Third Party" : "General")).trim(),
-        type: params.type,
+        name: sanitizedName,
+        category: sanitizedCategory,
+        type: sanitizedType,
         balance: initialAmount.toFixed(2),
-        targetAmount: params.targetAmount ? params.targetAmount.toFixed(2) : null,
-        color: params.color || (params.type === "third_party" ? "amber" : "blue"),
-        icon: params.icon || (params.type === "third_party" ? "user" : "wallet"),
-        notes: params.notes?.trim() || null,
+        targetAmount: sanitizedTargetAmount,
+        color: sanitizedColor,
+        icon: sanitizedIcon,
+        notes: sanitizedNotes,
       })
       .returning();
 
@@ -287,7 +327,7 @@ export class DigitalEnvelopeRepository {
         balanceBefore: "0.00",
         balanceAfter: initialAmount.toFixed(2),
         category: inserted.category,
-        description: "Initial envelope creation funding",
+        description: `Initial envelope setup: ₹${initialAmount.toLocaleString("en-IN")}`,
       });
 
       // If funded externally, increase stated bank balance so unallocated cash remains stable
@@ -349,6 +389,13 @@ export class DigitalEnvelopeRepository {
       .where(eq(digitalEnvelopesTable.envelopeId, params.envelopeId))
       .returning();
 
+    const formattedDate = new Date().toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    const defaultDesc = `Added on ${formattedDate}: ₹${amount.toLocaleString("en-IN")}`;
+
     // Insert movement audit record
     const [tx] = await db
       .insert(digitalEnvelopeTransactionsTable)
@@ -359,7 +406,7 @@ export class DigitalEnvelopeRepository {
         balanceBefore: currentBal.toFixed(2),
         balanceAfter: newBal.toFixed(2),
         category: envelope.category,
-        description: params.description?.trim() || "Added money to envelope",
+        description: params.description?.trim() || defaultDesc,
       })
       .returning();
 
@@ -571,11 +618,14 @@ export class DigitalEnvelopeRepository {
     if (params.name !== undefined) updates.name = params.name.trim();
     if (params.category !== undefined) updates.category = params.category.trim();
     if (params.targetAmount !== undefined) {
-      updates.targetAmount = params.targetAmount !== null ? params.targetAmount.toFixed(2) : null;
+      const num = Number(params.targetAmount);
+      updates.targetAmount = (!isNaN(num) && num > 0) ? num.toFixed(2) : null;
     }
     if (params.color !== undefined) updates.color = params.color;
     if (params.icon !== undefined) updates.icon = params.icon;
-    if (params.notes !== undefined) updates.notes = params.notes?.trim() || null;
+    if (params.notes !== undefined) {
+      updates.notes = (params.notes && typeof params.notes === "string" && params.notes.trim().length > 0) ? params.notes.trim() : null;
+    }
 
     const [updated] = await db
       .update(digitalEnvelopesTable)

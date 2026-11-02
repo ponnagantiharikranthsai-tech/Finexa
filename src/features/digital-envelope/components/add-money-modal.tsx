@@ -179,6 +179,28 @@ export function AddMoneyModal({
             />
           </div>
 
+          {/* Live Cumulative Calculation Preview */}
+          {Number(amount) > 0 && (
+            <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-between text-xs animate-in fade-in duration-150">
+              <div className="space-y-0.5">
+                <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                  Balance Progression
+                </span>
+                <p className="font-semibold text-foreground">
+                  ₹{fmt(envelope.balance)} + ₹{fmt(amount)}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] text-primary uppercase font-bold tracking-wider">
+                  New Total Balance
+                </span>
+                <p className="text-sm font-black text-primary">
+                  ₹{fmt(envelope.balance + Number(amount))}
+                </p>
+              </div>
+            </div>
+          )}
+
           <DialogFooter className="mt-4 flex flex-row items-center justify-end gap-2 pt-2">
             <button
               type="button"

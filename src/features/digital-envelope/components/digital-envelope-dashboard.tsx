@@ -15,6 +15,8 @@ import {
   Users,
   CheckCircle2,
   Trash2,
+  RotateCcw,
+  Sparkles,
 } from "lucide-react";
 import {
   Dialog,
@@ -27,13 +29,20 @@ import {
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { getEnvelopesAction } from "../actions/get-envelopes.action";
+import { createEnvelopeAction } from "../actions/create-envelope.action";
+import { addEnvelopeMoneyAction } from "../actions/add-envelope-money.action";
+import { payBillWithdrawAction } from "../actions/pay-bill-withdraw.action";
+import { reconcileBankBalanceAction } from "../actions/reconcile-bank-balance.action";
 import { deleteEnvelopeAction } from "../actions/delete-envelope.action";
+import { resetEnvelopesAction } from "../actions/reset-envelopes.action";
+import { initializeCoreEnvelopesAction } from "../actions/initialize-core-envelopes.action";
 import { TopSummaryCards } from "./top-summary-cards";
 import { EnvelopeSection } from "./envelope-section";
 import { DigitalEnvelopeSkeleton } from "@/components/ui/skeleton";
 import type {
   DigitalEnvelopeDashboardData,
   DigitalEnvelopeItem,
+  DigitalEnvelopeTransactionItem,
   EnvelopeType,
 } from "../types";
 
@@ -112,6 +121,11 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
 
   const [reconcileOpen, setReconcileOpen] = useState(false);
 
+  // Reset confirmation
+  const [resetOpen, setResetOpen] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [isInitializingCores, setIsInitializingCores] = useState(false);
+
   // Delete confirmation
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [envelopeToDelete, setEnvelopeToDelete] = useState<DigitalEnvelopeItem | null>(null);
@@ -152,23 +166,412 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
     setDeleteOpen(true);
   };
 
-  const handleConfirmDelete = async () => {
-    if (!envelopeToDelete) return;
-    setIsDeleting(true);
+  // ─── ⚡ INSTANT OPTIMISTIC MUTATIONS (Zero-Lag WhatsApp/Instagram Speed) ─────
+
+  // 1. Optimistic Add Money
+  const handleOptimisticAddMoney = async (params: {
+    envelopeId: string;
+    amount: number;
+    description?: string;
+    fundSource: "external" | "unallocated_cash";
+  }) => {
+    const previous = queryClient.getQueryData<DigitalEnvelopeDashboardData>(["digital-envelopes-data"]);
+
+    // Instant local state update
+    queryClient.setQueryData<DigitalEnvelopeDashboardData>(["digital-envelopes-data"], (old) => {
+      if (!old) return old;
+      const target = [...old.personalEnvelopes, ...old.thirdPartyEnvelopes].find(
+        (e) => e.envelopeId === params.envelopeId
+      );
+      if (!target) return old;
+
+      const isPersonal = target.type === "personal";
+      const updateList = (list: DigitalEnvelopeItem[]) =>
+        list.map((e) =>
+          e.envelopeId === params.envelopeId
+            ? { ...e, balance: e.balance + params.amount, updatedAt: new Date().toISOString() }
+            : e
+        );
+
+      const personalEnvelopes = isPersonal ? updateList(old.personalEnvelopes) : old.personalEnvelopes;
+      const thirdPartyEnvelopes = !isPersonal ? updateList(old.thirdPartyEnvelopes) : old.thirdPartyEnvelopes;
+
+      const myNet = personalEnvelopes.reduce((acc, e) => acc + e.balance, 0);
+      const thirdParty = thirdPartyEnvelopes.reduce((acc, e) => acc + e.balance, 0);
+      const totalEnvelopes = myNet + thirdParty;
+
+      let newStatedBank = old.summary.totalAccount2Balance;
+      if (params.fundSource === "external") {
+        newStatedBank += params.amount;
+      }
+      if (newStatedBank < totalEnvelopes) {
+        newStatedBank = totalEnvelopes;
+      }
+      const unallocated = Math.max(0, newStatedBank - totalEnvelopes);
+
+      const optTx: DigitalEnvelopeTransactionItem = {
+        transactionId: "opt-" + Date.now(),
+        envelopeId: params.envelopeId,
+        envelopeName: target.name,
+        envelopeType: target.type,
+        envelopeCategory: target.category || undefined,
+        transactionType: "deposit",
+        amount: params.amount,
+        balanceBefore: target.balance,
+        balanceAfter: target.balance + params.amount,
+        description: params.description || `Added ₹${fmt(params.amount)} to ${target.name}`,
+        createdAt: new Date().toISOString(),
+      };
+
+      return {
+        ...old,
+        summary: {
+          ...old.summary,
+          totalAccount2Balance: newStatedBank,
+          myNetEnvelopes: myNet,
+          thirdPartyFunds: thirdParty,
+          unallocatedCash: unallocated,
+          totalEnvelopesBalance: totalEnvelopes,
+        },
+        personalEnvelopes,
+        thirdPartyEnvelopes,
+        recentTransactions: [optTx, ...old.recentTransactions],
+      };
+    });
+
     try {
-      const res = await deleteEnvelopeAction({ envelopeId: envelopeToDelete.envelopeId });
+      const res = await addEnvelopeMoneyAction(params);
+      if (!res.success) {
+        if (previous) queryClient.setQueryData(["digital-envelopes-data"], previous);
+        toast.error(res.error || "Failed to add money. Changes rolled back.");
+      } else {
+        toast.success(res.message || "Money added successfully!");
+        queryClient.invalidateQueries({ queryKey: ["digital-envelopes-data"] });
+      }
+    } catch (err: any) {
+      if (previous) queryClient.setQueryData(["digital-envelopes-data"], previous);
+      toast.error(err?.message || "Failed to add money. Rolled back.");
+    }
+  };
+
+  // 2. Optimistic Pay Bill / Withdraw
+  const handleOptimisticPayBillWithdraw = async (params: {
+    envelopeId: string;
+    amount: number;
+    description: string;
+    referenceParty?: string;
+    isBillPayment: boolean;
+  }) => {
+    const previous = queryClient.getQueryData<DigitalEnvelopeDashboardData>(["digital-envelopes-data"]);
+
+    // Instant local state update
+    queryClient.setQueryData<DigitalEnvelopeDashboardData>(["digital-envelopes-data"], (old) => {
+      if (!old) return old;
+      const target = [...old.personalEnvelopes, ...old.thirdPartyEnvelopes].find(
+        (e) => e.envelopeId === params.envelopeId
+      );
+      if (!target) return old;
+
+      const isPersonal = target.type === "personal";
+      const updateList = (list: DigitalEnvelopeItem[]) =>
+        list.map((e) =>
+          e.envelopeId === params.envelopeId
+            ? { ...e, balance: Math.max(0, e.balance - params.amount), updatedAt: new Date().toISOString() }
+            : e
+        );
+
+      const personalEnvelopes = isPersonal ? updateList(old.personalEnvelopes) : old.personalEnvelopes;
+      const thirdPartyEnvelopes = !isPersonal ? updateList(old.thirdPartyEnvelopes) : old.thirdPartyEnvelopes;
+
+      const myNet = personalEnvelopes.reduce((acc, e) => acc + e.balance, 0);
+      const thirdParty = thirdPartyEnvelopes.reduce((acc, e) => acc + e.balance, 0);
+      const totalEnvelopes = myNet + thirdParty;
+      const newStatedBank = Math.max(totalEnvelopes, old.summary.totalAccount2Balance - params.amount);
+      const unallocated = Math.max(0, newStatedBank - totalEnvelopes);
+
+      const optTx: DigitalEnvelopeTransactionItem = {
+        transactionId: "opt-" + Date.now(),
+        envelopeId: params.envelopeId,
+        envelopeName: target.name,
+        envelopeType: target.type,
+        envelopeCategory: target.category || undefined,
+        transactionType: params.isBillPayment ? "pay_bill" : "withdrawal",
+        amount: params.amount,
+        balanceBefore: target.balance,
+        balanceAfter: Math.max(0, target.balance - params.amount),
+        description: params.description,
+        referenceParty: params.referenceParty,
+        createdAt: new Date().toISOString(),
+      };
+
+      return {
+        ...old,
+        summary: {
+          ...old.summary,
+          totalAccount2Balance: newStatedBank,
+          myNetEnvelopes: myNet,
+          thirdPartyFunds: thirdParty,
+          unallocatedCash: unallocated,
+          totalEnvelopesBalance: totalEnvelopes,
+        },
+        personalEnvelopes,
+        thirdPartyEnvelopes,
+        recentTransactions: [optTx, ...old.recentTransactions],
+      };
+    });
+
+    try {
+      const res = await payBillWithdrawAction(params);
+      if (!res.success) {
+        if (previous) queryClient.setQueryData(["digital-envelopes-data"], previous);
+        toast.error(res.error || "Payment failed. Changes rolled back.");
+      } else {
+        toast.success(res.message || "Processed successfully!");
+        queryClient.invalidateQueries({ queryKey: ["digital-envelopes-data"] });
+      }
+    } catch (err: any) {
+      if (previous) queryClient.setQueryData(["digital-envelopes-data"], previous);
+      toast.error(err?.message || "Failed to process withdrawal. Rolled back.");
+    }
+  };
+
+  // 3. Optimistic Create Envelope
+  const handleOptimisticCreateEnvelope = async (params: {
+    name: string;
+    category: string;
+    type: EnvelopeType;
+    initialAmount: number;
+    fundSource: "external" | "unallocated_cash";
+    targetAmount?: number | null;
+    color: string;
+    notes?: string | null;
+  }) => {
+    const previous = queryClient.getQueryData<DigitalEnvelopeDashboardData>(["digital-envelopes-data"]);
+
+    // Instant local state update
+    const optId = "opt-env-" + Date.now();
+    const newEnvelope: DigitalEnvelopeItem = {
+      envelopeId: optId,
+      name: params.name,
+      category: params.category,
+      type: params.type,
+      balance: params.initialAmount,
+      targetAmount: params.targetAmount || null,
+      color: params.color,
+      icon: params.type === "third_party" ? "user" : "wallet",
+      notes: params.notes || null,
+      isArchived: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    queryClient.setQueryData<DigitalEnvelopeDashboardData>(["digital-envelopes-data"], (old) => {
+      if (!old) return old;
+      const isPersonal = params.type === "personal";
+      const personalEnvelopes = isPersonal ? [...old.personalEnvelopes, newEnvelope] : old.personalEnvelopes;
+      const thirdPartyEnvelopes = !isPersonal ? [...old.thirdPartyEnvelopes, newEnvelope] : old.thirdPartyEnvelopes;
+
+      const myNet = personalEnvelopes.reduce((acc, e) => acc + e.balance, 0);
+      const thirdParty = thirdPartyEnvelopes.reduce((acc, e) => acc + e.balance, 0);
+      const totalEnvelopes = myNet + thirdParty;
+
+      let newStatedBank = old.summary.totalAccount2Balance;
+      if (params.fundSource === "external") {
+        newStatedBank += params.initialAmount;
+      }
+      if (newStatedBank < totalEnvelopes) {
+        newStatedBank = totalEnvelopes;
+      }
+      const unallocated = Math.max(0, newStatedBank - totalEnvelopes);
+
+      const recentTransactions = [...old.recentTransactions];
+      if (params.initialAmount > 0) {
+        recentTransactions.unshift({
+          transactionId: "opt-tx-" + Date.now(),
+          envelopeId: optId,
+          envelopeName: params.name,
+          envelopeType: params.type,
+          envelopeCategory: params.category,
+          transactionType: "deposit",
+          amount: params.initialAmount,
+          balanceBefore: 0,
+          balanceAfter: params.initialAmount,
+          description: `Initial allocation for ${params.name}`,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      return {
+        ...old,
+        summary: {
+          totalAccount2Balance: newStatedBank,
+          myNetEnvelopes: myNet,
+          thirdPartyFunds: thirdParty,
+          unallocatedCash: unallocated,
+          totalEnvelopesBalance: totalEnvelopes,
+          personalEnvelopesCount: personalEnvelopes.length,
+          thirdPartyEnvelopesCount: thirdPartyEnvelopes.length,
+        },
+        personalEnvelopes,
+        thirdPartyEnvelopes,
+        recentTransactions,
+      };
+    });
+
+    try {
+      const res = await createEnvelopeAction(params);
+      if (!res.success) {
+        if (previous) queryClient.setQueryData(["digital-envelopes-data"], previous);
+        toast.error(res.error || "Failed to create envelope. Rolled back.");
+      } else {
+        toast.success(res.message || `Created envelope "${params.name}"!`);
+        queryClient.invalidateQueries({ queryKey: ["digital-envelopes-data"] });
+      }
+    } catch (err: any) {
+      if (previous) queryClient.setQueryData(["digital-envelopes-data"], previous);
+      toast.error(err?.message || "Failed to create envelope. Rolled back.");
+    }
+  };
+
+  // 4. Optimistic Delete Envelope
+  const handleOptimisticDelete = async () => {
+    if (!envelopeToDelete) return;
+    const targetId = envelopeToDelete.envelopeId;
+    const targetName = envelopeToDelete.name;
+    const previous = queryClient.getQueryData<DigitalEnvelopeDashboardData>(["digital-envelopes-data"]);
+
+    setDeleteOpen(false);
+    setEnvelopeToDelete(null);
+
+    // Instant local state update
+    queryClient.setQueryData<DigitalEnvelopeDashboardData>(["digital-envelopes-data"], (old) => {
+      if (!old) return old;
+      const personalEnvelopes = old.personalEnvelopes.filter((e) => e.envelopeId !== targetId);
+      const thirdPartyEnvelopes = old.thirdPartyEnvelopes.filter((e) => e.envelopeId !== targetId);
+
+      const myNet = personalEnvelopes.reduce((acc, e) => acc + e.balance, 0);
+      const thirdParty = thirdPartyEnvelopes.reduce((acc, e) => acc + e.balance, 0);
+      const totalEnvelopes = myNet + thirdParty;
+      const unallocated = Math.max(0, old.summary.totalAccount2Balance - totalEnvelopes);
+
+      return {
+        ...old,
+        summary: {
+          ...old.summary,
+          myNetEnvelopes: myNet,
+          thirdPartyFunds: thirdParty,
+          unallocatedCash: unallocated,
+          totalEnvelopesBalance: totalEnvelopes,
+          personalEnvelopesCount: personalEnvelopes.length,
+          thirdPartyEnvelopesCount: thirdPartyEnvelopes.length,
+        },
+        personalEnvelopes,
+        thirdPartyEnvelopes,
+      };
+    });
+
+    try {
+      const res = await deleteEnvelopeAction({ envelopeId: targetId });
+      if (!res.success) {
+        if (previous) queryClient.setQueryData(["digital-envelopes-data"], previous);
+        toast.error(res.error || `Failed to remove "${targetName}". Rolled back.`);
+      } else {
+        toast.success(`Removed envelope "${targetName}".`);
+        queryClient.invalidateQueries({ queryKey: ["digital-envelopes-data"] });
+      }
+    } catch (err: any) {
+      if (previous) queryClient.setQueryData(["digital-envelopes-data"], previous);
+      toast.error(err?.message || "Failed to delete envelope. Rolled back.");
+    }
+  };
+
+  // 5. Optimistic Reconcile Bank Balance
+  const handleOptimisticReconcile = async (newBankBalance: number) => {
+    const previous = queryClient.getQueryData<DigitalEnvelopeDashboardData>(["digital-envelopes-data"]);
+
+    // Instant local state update
+    queryClient.setQueryData<DigitalEnvelopeDashboardData>(["digital-envelopes-data"], (old) => {
+      if (!old) return old;
+      const unallocated = Math.max(0, newBankBalance - old.summary.totalEnvelopesBalance);
+      return {
+        ...old,
+        summary: {
+          ...old.summary,
+          totalAccount2Balance: newBankBalance,
+          unallocatedCash: unallocated,
+        },
+      };
+    });
+
+    try {
+      const res = await reconcileBankBalanceAction({ newBankBalance });
+      if (!res.success) {
+        if (previous) queryClient.setQueryData(["digital-envelopes-data"], previous);
+        toast.error(res.error || "Failed to reconcile balance. Rolled back.");
+      } else {
+        toast.success(res.message || "Bank balance reconciled!");
+        queryClient.invalidateQueries({ queryKey: ["digital-envelopes-data"] });
+      }
+    } catch (err: any) {
+      if (previous) queryClient.setQueryData(["digital-envelopes-data"], previous);
+      toast.error(err?.message || "Failed to update balance. Rolled back.");
+    }
+  };
+
+  // 6. Reset All Envelopes & Transaction History (Clean Fresh Zero State)
+  const handleConfirmReset = async () => {
+    setIsResetting(true);
+    const previous = queryClient.getQueryData<DigitalEnvelopeDashboardData>(["digital-envelopes-data"]);
+
+    // Instant zero-state reset
+    queryClient.setQueryData<DigitalEnvelopeDashboardData>(["digital-envelopes-data"], {
+      summary: {
+        totalAccount2Balance: 0,
+        myNetEnvelopes: 0,
+        thirdPartyFunds: 0,
+        unallocatedCash: 0,
+        totalEnvelopesBalance: 0,
+        personalEnvelopesCount: 0,
+        thirdPartyEnvelopesCount: 0,
+      },
+      personalEnvelopes: [],
+      thirdPartyEnvelopes: [],
+      recentTransactions: [],
+    });
+
+    try {
+      const res = await resetEnvelopesAction();
       if (res.success) {
-        toast.success(`Removed envelope "${envelopeToDelete.name}".`);
-        setDeleteOpen(false);
-        setEnvelopeToDelete(null);
+        toast.success("All envelopes and audit records cleared! Fresh 0-state ready.");
+        setResetOpen(false);
+        queryClient.invalidateQueries({ queryKey: ["digital-envelopes-data"] });
+      } else {
+        if (previous) queryClient.setQueryData(["digital-envelopes-data"], previous);
+        toast.error(res.error || "Failed to reset envelopes.");
+      }
+    } catch (err: any) {
+      if (previous) queryClient.setQueryData(["digital-envelopes-data"], previous);
+      toast.error(err?.message || "Failed to reset.");
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  // 7. Quick Setup: Initialize Core Envelopes at ₹0 (EMI, Savings, Investment)
+  const handleInitializeCoreEnvelopes = async () => {
+    setIsInitializingCores(true);
+    try {
+      const res = await initializeCoreEnvelopesAction();
+      if (res.success) {
+        toast.success("Initialized 3 core personal envelopes at ₹0 (EMI, Savings, Investments)!");
         await queryClient.invalidateQueries({ queryKey: ["digital-envelopes-data"] });
       } else {
-        toast.error(res.error || "Failed to remove envelope.");
+        toast.error(res.error || "Failed to initialize core envelopes.");
       }
-    } catch (e: any) {
-      toast.error(e?.message || "Failed to delete.");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to initialize.");
     } finally {
-      setIsDeleting(false);
+      setIsInitializingCores(false);
     }
   };
 
@@ -231,7 +634,7 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
           </div>
         </div>
 
-        {/* Action Buttons: New Envelope, Movements History, Reconcile */}
+        {/* Action Buttons: Movements History, Reconcile, Reset Data, New Envelope */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
@@ -251,6 +654,16 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
           >
             <Scale className="h-3.5 w-3.5" />
             <span>Reconcile Cash</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setResetOpen(true)}
+            className="flex items-center gap-1.5 h-9 px-3 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs font-bold transition-all border border-destructive/20 fx-pressable"
+            title="Clear all envelopes & reset database"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Reset Data</span>
           </button>
 
           <button
@@ -322,42 +735,75 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
         </div>
       </div>
 
-      {/* ── Envelopes Sections ───────────────────────────────────────── */}
-      <div className="space-y-8 pt-1">
-        {/* Section 1: Personal Envelopes */}
-        {(activeTab === "all" || activeTab === "personal") && (
-          <EnvelopeSection
-            title="Personal Envelopes"
-            type="personal"
-            description="Dedicated personal buckets for loan EMI payments, savings, and investments."
-            envelopes={personalEnvelopes}
-            totalBalance={summary.myNetEnvelopes}
-            onAddEnvelope={() => handleOpenAddEnvelope("personal")}
-            onAddMoney={handleOpenAddMoney}
-            onPayBillWithdraw={handleOpenPayBillWithdraw}
-            onEdit={handleOpenEdit}
-            onDelete={handlePromptDelete}
-            onViewHistory={handleOpenHistory}
-          />
-        )}
+      {/* ── Envelopes Sections or Zero State ────────────────────────── */}
+      {personalEnvelopes.length === 0 && thirdPartyEnvelopes.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border/80 bg-card/40 p-8 sm:p-12 text-center space-y-4 animate-in fade-in duration-200">
+          <div className="h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center mx-auto shadow-inner">
+            <Wallet className="h-8 w-8 stroke-[1.75]" />
+          </div>
+          <div className="max-w-md mx-auto space-y-1.5">
+            <h2 className="text-lg font-bold text-foreground">Clean Zero State Ready</h2>
+            <p className="text-xs text-muted-foreground">
+              Your digital envelopes are completely fresh. You can create custom envelopes from scratch or initialize core personal envelopes at ₹0.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => handleOpenAddEnvelope("personal")}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 h-10 px-5 rounded-xl fx-brand-gradient text-white text-xs font-bold shadow-md fx-cta-glow fx-pressable"
+            >
+              <Plus className="h-4 w-4 stroke-[3]" />
+              Create Custom Envelope
+            </button>
+            <button
+              type="button"
+              disabled={isInitializingCores}
+              onClick={handleInitializeCoreEnvelopes}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-secondary hover:bg-accent/70 text-foreground text-xs font-bold border border-border/60 fx-pressable disabled:opacity-50"
+            >
+              <Sparkles className="h-4 w-4 text-primary" />
+              {isInitializingCores ? "Setting up..." : "Initialize Core Envelopes (₹0)"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-8 pt-1">
+          {/* Section 1: Personal Envelopes */}
+          {(activeTab === "all" || activeTab === "personal") && (
+            <EnvelopeSection
+              title="Personal Envelopes"
+              type="personal"
+              description="Dedicated personal buckets for loan EMI payments, savings, and investments."
+              envelopes={personalEnvelopes}
+              totalBalance={summary.myNetEnvelopes}
+              onAddEnvelope={() => handleOpenAddEnvelope("personal")}
+              onAddMoney={handleOpenAddMoney}
+              onPayBillWithdraw={handleOpenPayBillWithdraw}
+              onEdit={handleOpenEdit}
+              onDelete={handlePromptDelete}
+              onViewHistory={handleOpenHistory}
+            />
+          )}
 
-        {/* Section 2: Third-Party Envelopes */}
-        {(activeTab === "all" || activeTab === "third_party") && (
-          <EnvelopeSection
-            title="Third-Party Envelopes"
-            type="third_party"
-            description="External funds held on behalf of friends, partners, or temporary custodians."
-            envelopes={thirdPartyEnvelopes}
-            totalBalance={summary.thirdPartyFunds}
-            onAddEnvelope={() => handleOpenAddEnvelope("third_party")}
-            onAddMoney={handleOpenAddMoney}
-            onPayBillWithdraw={handleOpenPayBillWithdraw}
-            onEdit={handleOpenEdit}
-            onDelete={handlePromptDelete}
-            onViewHistory={handleOpenHistory}
-          />
-        )}
-      </div>
+          {/* Section 2: Third-Party Envelopes */}
+          {(activeTab === "all" || activeTab === "third_party") && (
+            <EnvelopeSection
+              title="Third-Party Envelopes"
+              type="third_party"
+              description="External funds held on behalf of friends, partners, or temporary custodians."
+              envelopes={thirdPartyEnvelopes}
+              totalBalance={summary.thirdPartyFunds}
+              onAddEnvelope={() => handleOpenAddEnvelope("third_party")}
+              onAddMoney={handleOpenAddMoney}
+              onPayBillWithdraw={handleOpenPayBillWithdraw}
+              onEdit={handleOpenEdit}
+              onDelete={handlePromptDelete}
+              onViewHistory={handleOpenHistory}
+            />
+          )}
+        </div>
+      )}
 
       {/* ── Modals ───────────────────────────────────────────────────── */}
       {/* 1. Create Envelope Modal */}
@@ -367,6 +813,8 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
         open={createOpen}
         onOpenChange={setCreateOpen}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["digital-envelopes-data"] })}
+        onOptimisticSubmit={handleOptimisticCreateEnvelope}
+        onOptimisticAddMoney={handleOptimisticAddMoney}
       />
 
       {/* 2. Add Money Modal */}
@@ -376,6 +824,7 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
         open={addMoneyOpen}
         onOpenChange={setAddMoneyOpen}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["digital-envelopes-data"] })}
+        onOptimisticSubmit={handleOptimisticAddMoney}
       />
 
       {/* 3. Pay Bill / Withdraw Modal */}
@@ -384,6 +833,7 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
         open={payBillOpen}
         onOpenChange={setPayBillOpen}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["digital-envelopes-data"] })}
+        onOptimisticSubmit={handleOptimisticPayBillWithdraw}
       />
 
       {/* 4. Edit Envelope Modal */}
@@ -409,6 +859,7 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
         open={reconcileOpen}
         onOpenChange={setReconcileOpen}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["digital-envelopes-data"] })}
+        onOptimisticSubmit={handleOptimisticReconcile}
       />
 
       {/* 7. Delete Confirmation Dialog */}
@@ -443,10 +894,48 @@ export function DigitalEnvelopeDashboard({ initialData }: DigitalEnvelopeDashboa
             <button
               type="button"
               disabled={isDeleting}
-              onClick={handleConfirmDelete}
+              onClick={handleOptimisticDelete}
               className="px-5 py-2 text-xs font-bold bg-destructive hover:bg-destructive/90 text-white rounded-xl fx-pressable shadow-md disabled:opacity-50 flex items-center gap-1.5"
             >
               {isDeleting ? "Deleting..." : "Delete Envelope"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 8. Reset All Envelopes & Transaction Logs Confirmation Dialog */}
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent className="sm:max-w-[420px] rounded-2xl border border-border/50 p-6 text-center bg-card">
+          <DialogHeader className="space-y-2">
+            <div className="h-11 w-11 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+              <RotateCcw className="h-5 w-5" />
+            </div>
+            <DialogTitle className="text-base font-bold text-foreground">
+              Reset Digital Envelopes?
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+              This will clear all envelope buckets, delete movement transaction audit logs, and reset Account 2 stated bank balance to ₹0.
+              <span className="block mt-2 font-semibold text-destructive">
+                This action is clean and permanent.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-5 flex flex-row items-center justify-end gap-2">
+            <button
+              type="button"
+              disabled={isResetting}
+              onClick={() => setResetOpen(false)}
+              className="px-4 py-2 text-xs font-bold bg-secondary hover:bg-accent/40 rounded-xl transition-colors border border-border/50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={isResetting}
+              onClick={handleConfirmReset}
+              className="px-5 py-2 text-xs font-bold bg-destructive hover:bg-destructive/90 text-white rounded-xl fx-pressable shadow-md disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {isResetting ? "Resetting..." : "Confirm & Reset All"}
             </button>
           </DialogFooter>
         </DialogContent>

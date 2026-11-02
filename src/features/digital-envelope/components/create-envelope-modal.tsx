@@ -24,6 +24,22 @@ interface CreateEnvelopeModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  onOptimisticSubmit?: (params: {
+    name: string;
+    category: string;
+    type: EnvelopeType;
+    initialAmount: number;
+    fundSource: "external" | "unallocated_cash";
+    targetAmount?: number | null;
+    color: string;
+    notes?: string | null;
+  }) => void;
+  onOptimisticAddMoney?: (params: {
+    envelopeId: string;
+    amount: number;
+    description?: string;
+    fundSource: "external" | "unallocated_cash";
+  }) => void;
 }
 
 const CATEGORY_SUGGESTIONS = [
@@ -54,6 +70,8 @@ export function CreateEnvelopeModal({
   open,
   onOpenChange,
   onSuccess,
+  onOptimisticSubmit,
+  onOptimisticAddMoney,
 }: CreateEnvelopeModalProps) {
   const [type, setType] = useState<EnvelopeType>("personal");
   const [name, setName] = useState("");
@@ -108,6 +126,23 @@ export function CreateEnvelopeModal({
       toast.error(
         `Amount ₹${fmt(initAmt)} exceeds unallocated cash ₹${fmt(unallocatedCash)}.`
       );
+      return;
+    }
+
+    // Zero-lag instant optimistic top-up
+    if (onOptimisticAddMoney) {
+      onOptimisticAddMoney({
+        envelopeId: duplicatePrompt.envelopeId,
+        amount: initAmt,
+        description: notes.trim() || undefined,
+        fundSource,
+      });
+      setName("");
+      setInitialAmount("");
+      setTargetAmount("");
+      setNotes("");
+      setDuplicatePrompt(null);
+      onOpenChange(false);
       return;
     }
 
@@ -180,6 +215,27 @@ export function CreateEnvelopeModal({
     const targetAmtNum = targetAmount.trim() ? Number(targetAmount) : NaN;
     const sanitizedTargetAmount = (!isNaN(targetAmtNum) && targetAmtNum > 0) ? targetAmtNum : null;
     const sanitizedNotes = notes.trim() ? notes.trim() : null;
+
+    // Zero-lag instant optimistic envelope creation
+    if (onOptimisticSubmit) {
+      onOptimisticSubmit({
+        name: trimmedName,
+        category: category.trim(),
+        type,
+        initialAmount: initAmt,
+        targetAmount: sanitizedTargetAmount,
+        color,
+        notes: sanitizedNotes,
+        fundSource,
+      });
+      setName("");
+      setInitialAmount("");
+      setTargetAmount("");
+      setNotes("");
+      setDuplicatePrompt(null);
+      onOpenChange(false);
+      return;
+    }
 
     setIsSubmitting(true);
     try {

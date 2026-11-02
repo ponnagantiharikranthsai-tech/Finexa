@@ -17,128 +17,126 @@ import type {
 
 export class DigitalEnvelopeRepository {
   /**
-   * Ensure default sample envelopes exist if the table is brand new / empty.
+   * Reset all digital envelopes and transaction audit logs for a completely clean zero state.
    */
-  async ensureInitialSeed(): Promise<void> {
-    const existing = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(digitalEnvelopesTable);
+  async resetAllEnvelopes(): Promise<void> {
+    // 1. Delete all transactions
+    await db.delete(digitalEnvelopeTransactionsTable);
+    // 2. Delete all envelopes
+    await db.delete(digitalEnvelopesTable);
+    // 3. Reset stated bank balance to 0.00
+    await db
+      .insert(digitalEnvelopeSettingsTable)
+      .values({
+        key: "account_2_bank_balance",
+        value: "0.00",
+      })
+      .onConflictDoUpdate({
+        target: digitalEnvelopeSettingsTable.key,
+        set: { value: "0.00", updatedAt: sql`now()` },
+      });
+  }
 
-    const count = Number(existing[0]?.count ?? 0);
-    if (count > 0) return;
-
-    // Default Seed Envelopes matching the exact prompt examples:
-    // Personal: EMI (400) + Savings (350) + Investments (250) = 1,000
-    // Third-Party: Friend 1 (600) + Friend 2 (400) = 1,000
-    // Total Account 2 = 2,000
-    const seeds: Array<InsertDigitalEnvelope & { initialTxNotes: string }> = [
+  /**
+   * Optional helper: Initialize default empty core personal envelopes at ₹0 (EMI, Savings, Investment).
+   */
+  async initializeCoreEnvelopes(): Promise<DigitalEnvelopeItem[]> {
+    const cores: Array<InsertDigitalEnvelope> = [
       {
         name: "EMI Reserve",
         category: "EMI",
         type: "personal",
-        balance: "400.00",
+        balance: "0.00",
         targetAmount: "1000.00",
         color: "blue",
         icon: "credit-card",
         notes: "Monthly loan and card EMIs reserve fund",
-        initialTxNotes: "Opening EMI bucket allocation",
       },
       {
         name: "Emergency Savings",
         category: "Savings",
         type: "personal",
-        balance: "350.00",
+        balance: "0.00",
         targetAmount: "2000.00",
         color: "emerald",
         icon: "piggy-bank",
         notes: "Dedicated emergency liquid buffer",
-        initialTxNotes: "Opening emergency savings allocation",
       },
       {
         name: "SIP & Investments",
         category: "Investment",
         type: "personal",
-        balance: "250.00",
+        balance: "0.00",
         targetAmount: "1500.00",
         color: "purple",
         icon: "trending-up",
         notes: "Monthly mutual funds and stocks investment pool",
-        initialTxNotes: "Opening investment allocation",
-      },
-      {
-        name: "Friend 1",
-        category: "Friend / Third Party",
-        type: "third_party",
-        balance: "600.00",
-        color: "amber",
-        icon: "user",
-        notes: "External funds held for Friend 1",
-        initialTxNotes: "Held amount for Friend 1",
-      },
-      {
-        name: "Friend 2",
-        category: "Friend / Third Party",
-        type: "third_party",
-        balance: "400.00",
-        color: "indigo",
-        icon: "user",
-        notes: "External funds held for Friend 2",
-        initialTxNotes: "Held amount for Friend 2",
       },
     ];
 
-    for (const seed of seeds) {
-      const { initialTxNotes, ...insertData } = seed;
-      const [inserted] = await db
-        .insert(digitalEnvelopesTable)
-        .values(insertData)
-        .returning();
-
-      if (inserted && Number(inserted.balance) > 0) {
-        await db.insert(digitalEnvelopeTransactionsTable).values({
+    const results: DigitalEnvelopeItem[] = [];
+    for (const core of cores) {
+      const [inserted] = await db.insert(digitalEnvelopesTable).values(core).returning();
+      if (inserted) {
+        results.push({
           envelopeId: inserted.envelopeId,
-          transactionType: "deposit",
-          amount: inserted.balance,
-          balanceBefore: "0.00",
-          balanceAfter: inserted.balance,
+          name: inserted.name,
           category: inserted.category,
-          description: initialTxNotes,
+          type: inserted.type as EnvelopeType,
+          balance: Number(inserted.balance) || 0,
+          targetAmount: inserted.targetAmount ? Number(inserted.targetAmount) : null,
+          color: inserted.color,
+          icon: inserted.icon,
+          notes: inserted.notes,
+          isArchived: inserted.isArchived,
+          createdAt: inserted.createdAt.toISOString(),
+          updatedAt: inserted.updatedAt.toISOString(),
         });
       }
     }
-
-    // Initialize stated bank balance to 2,000 (0 unallocated initially)
-    await db
-      .insert(digitalEnvelopeSettingsTable)
-      .values({
-        key: "account_2_bank_balance",
-        value: "2000.00",
-      })
-      .onConflictDoUpdate({
-        target: digitalEnvelopeSettingsTable.key,
-        set: { value: "2000.00", updatedAt: sql`now()` },
-      });
+    return results;
   }
 
   /**
    * Get entire dashboard data: summary, grouped envelopes, and recent movement audit trail.
+   * Performs concurrent parallel queries for ultra-fast response times.
    */
   async getDashboardData(): Promise<DigitalEnvelopeDashboardData> {
-    await this.ensureInitialSeed();
-
-    // 1. Fetch active envelopes
-    const envelopesRaw = await db
-      .select()
-      .from(digitalEnvelopesTable)
-      .where(eq(digitalEnvelopesTable.isArchived, false))
-      .orderBy(digitalEnvelopesTable.createdAt);
-
-    // 2. Fetch Stated Account 2 Bank Balance Setting
-    const settingRaw = await db
-      .select()
-      .from(digitalEnvelopeSettingsTable)
-      .where(eq(digitalEnvelopeSettingsTable.key, "account_2_bank_balance"))
-      .limit(1);
+    // Concurrently fetch active envelopes, account_2_bank_balance setting, and recent audit movements
+    const [envelopesRaw, settingRaw, txRaw] = await Promise.all([
+      db
+        .select()
+        .from(digitalEnvelopesTable)
+        .where(eq(digitalEnvelopesTable.isArchived, false))
+        .orderBy(digitalEnvelopesTable.createdAt),
+      db
+        .select()
+        .from(digitalEnvelopeSettingsTable)
+        .where(eq(digitalEnvelopeSettingsTable.key, "account_2_bank_balance"))
+        .limit(1),
+      db
+        .select({
+          transactionId: digitalEnvelopeTransactionsTable.transactionId,
+          envelopeId: digitalEnvelopeTransactionsTable.envelopeId,
+          transactionType: digitalEnvelopeTransactionsTable.transactionType,
+          amount: digitalEnvelopeTransactionsTable.amount,
+          balanceBefore: digitalEnvelopeTransactionsTable.balanceBefore,
+          balanceAfter: digitalEnvelopeTransactionsTable.balanceAfter,
+          category: digitalEnvelopeTransactionsTable.category,
+          description: digitalEnvelopeTransactionsTable.description,
+          referenceParty: digitalEnvelopeTransactionsTable.referenceParty,
+          createdAt: digitalEnvelopeTransactionsTable.createdAt,
+          envelopeName: digitalEnvelopesTable.name,
+          envelopeType: digitalEnvelopesTable.type,
+        })
+        .from(digitalEnvelopeTransactionsTable)
+        .leftJoin(
+          digitalEnvelopesTable,
+          eq(digitalEnvelopeTransactionsTable.envelopeId, digitalEnvelopesTable.envelopeId)
+        )
+        .orderBy(desc(digitalEnvelopeTransactionsTable.createdAt))
+        .limit(60),
+    ]);
 
     const personalEnvelopes: DigitalEnvelopeItem[] = [];
     const thirdPartyEnvelopes: DigitalEnvelopeItem[] = [];
@@ -195,30 +193,6 @@ export class DigitalEnvelopeRepository {
       personalEnvelopesCount: personalEnvelopes.length,
       thirdPartyEnvelopesCount: thirdPartyEnvelopes.length,
     };
-
-    // 3. Fetch Recent Movement Audit Trail
-    const txRaw = await db
-      .select({
-        transactionId: digitalEnvelopeTransactionsTable.transactionId,
-        envelopeId: digitalEnvelopeTransactionsTable.envelopeId,
-        transactionType: digitalEnvelopeTransactionsTable.transactionType,
-        amount: digitalEnvelopeTransactionsTable.amount,
-        balanceBefore: digitalEnvelopeTransactionsTable.balanceBefore,
-        balanceAfter: digitalEnvelopeTransactionsTable.balanceAfter,
-        category: digitalEnvelopeTransactionsTable.category,
-        description: digitalEnvelopeTransactionsTable.description,
-        referenceParty: digitalEnvelopeTransactionsTable.referenceParty,
-        createdAt: digitalEnvelopeTransactionsTable.createdAt,
-        envelopeName: digitalEnvelopesTable.name,
-        envelopeType: digitalEnvelopesTable.type,
-      })
-      .from(digitalEnvelopeTransactionsTable)
-      .leftJoin(
-        digitalEnvelopesTable,
-        eq(digitalEnvelopeTransactionsTable.envelopeId, digitalEnvelopesTable.envelopeId)
-      )
-      .orderBy(desc(digitalEnvelopeTransactionsTable.createdAt))
-      .limit(60);
 
     const recentTransactions: DigitalEnvelopeTransactionItem[] = txRaw.map((tx) => ({
       transactionId: tx.transactionId,

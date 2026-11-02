@@ -23,6 +23,12 @@ interface AddMoneyModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  onOptimisticSubmit?: (params: {
+    envelopeId: string;
+    amount: number;
+    description?: string;
+    fundSource: "external" | "unallocated_cash";
+  }) => void;
 }
 
 const fmt = (val: number | string | undefined | null) =>
@@ -34,6 +40,7 @@ export function AddMoneyModal({
   open,
   onOpenChange,
   onSuccess,
+  onOptimisticSubmit,
 }: AddMoneyModalProps) {
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
@@ -52,6 +59,20 @@ export function AddMoneyModal({
 
     if (fundSource === "unallocated_cash" && numAmount > unallocatedCash) {
       toast.error(`Insufficient unallocated cash. Available: ₹${fmt(unallocatedCash)}`);
+      return;
+    }
+
+    // Zero-lag instant optimistic UI update
+    if (onOptimisticSubmit) {
+      onOptimisticSubmit({
+        envelopeId: envelope.envelopeId,
+        amount: numAmount,
+        description: description.trim() || undefined,
+        fundSource,
+      });
+      setAmount("");
+      setDescription("");
+      onOpenChange(false);
       return;
     }
 

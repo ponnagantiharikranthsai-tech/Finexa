@@ -22,6 +22,13 @@ interface PayBillWithdrawModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  onOptimisticSubmit?: (params: {
+    envelopeId: string;
+    amount: number;
+    description: string;
+    referenceParty?: string;
+    isBillPayment: boolean;
+  }) => void;
 }
 
 const fmt = (val: number | string | undefined | null) =>
@@ -32,6 +39,7 @@ export function PayBillWithdrawModal({
   open,
   onOpenChange,
   onSuccess,
+  onOptimisticSubmit,
 }: PayBillWithdrawModalProps) {
   const [isBillPayment, setIsBillPayment] = useState(true);
   const [amount, setAmount] = useState("");
@@ -65,6 +73,22 @@ export function PayBillWithdrawModal({
           ? "Please specify the bill or service being paid."
           : "Please specify the withdrawal reason."
       );
+      return;
+    }
+
+    // Zero-lag instant optimistic UI update
+    if (onOptimisticSubmit) {
+      onOptimisticSubmit({
+        envelopeId: envelope.envelopeId,
+        amount: numAmount,
+        description: description.trim(),
+        referenceParty: referenceParty.trim() || undefined,
+        isBillPayment,
+      });
+      setAmount("");
+      setDescription("");
+      setReferenceParty("");
+      onOpenChange(false);
       return;
     }
 

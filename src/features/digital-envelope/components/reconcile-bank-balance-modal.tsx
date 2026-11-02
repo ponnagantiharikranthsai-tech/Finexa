@@ -21,6 +21,7 @@ interface ReconcileBankBalanceModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  onOptimisticSubmit?: (newBankBalance: number) => void;
 }
 
 const fmt = (val: number | string | undefined | null) =>
@@ -32,6 +33,7 @@ export function ReconcileBankBalanceModal({
   open,
   onOpenChange,
   onSuccess,
+  onOptimisticSubmit,
 }: ReconcileBankBalanceModalProps) {
   const [bankBalance, setBankBalance] = useState(String(currentTotalAccount2Balance));
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,6 +58,13 @@ export function ReconcileBankBalanceModal({
       toast.error(
         `Bank balance cannot be less than the total allocated envelopes (₹${fmt(totalEnvelopesAllocated)}).`
       );
+      return;
+    }
+
+    // Zero-lag instant optimistic balance update
+    if (onOptimisticSubmit) {
+      onOptimisticSubmit(numVal);
+      onOpenChange(false);
       return;
     }
 
